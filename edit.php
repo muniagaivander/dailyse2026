@@ -320,18 +320,24 @@ render_header('Edit Harian');
         <?php foreach ($opts['pencacah'] as $o): ?><option value="<?= e($o['value']) ?>" <?= $filters['pencacah_email']===$o['value']?'selected':'' ?>><?= e($o['label']) ?></option><?php endforeach; ?>
       </select>
     </div>
-    <div class="form-group col-md-2">
-      <label>Tanggal</label>
-      <select class="form-control" name="tanggal" <?= $dates ? '' : 'disabled' ?> required>
-        <?php if (!$dates): ?>
-          <option value="">Klik filter dulu</option>
-        <?php else: ?>
-          <?php foreach ($dates as $d): ?><option value="<?= e($d['tanggal']) ?>" <?= $date===$d['tanggal']?'selected':'' ?>><?= e($d['tanggal']) ?></option><?php endforeach; ?>
-        <?php endif; ?>
-      </select>
-    </div>
-    <div class="form-group col-md-2"><button class="btn btn-primary">Filter</button></div>
+    <div class="form-group col-md-2"><button class="btn btn-primary">Tampilkan Tanggal</button></div>
   </div>
+  <?php if (isset($_GET['filter'])): ?>
+    <hr class="mt-0">
+    <div class="form-row align-items-end">
+      <div class="form-group col-md-3">
+        <label>Tanggal yang Akan Diedit</label>
+        <select class="form-control" name="tanggal" <?= $dates ? '' : 'disabled' ?> required>
+          <?php if (!$dates): ?>
+            <option value="">Tidak ada tanggal pada filter ini</option>
+          <?php else: ?>
+            <?php foreach ($dates as $d): ?><option value="<?= e($d['tanggal']) ?>" <?= $date===$d['tanggal']?'selected':'' ?>><?= e($d['tanggal']) ?></option><?php endforeach; ?>
+          <?php endif; ?>
+        </select>
+      </div>
+      <div class="form-group col-md-3"><button class="btn btn-success" <?= $dates ? '' : 'disabled' ?>>Tampilkan Form Edit</button></div>
+    </div>
+  <?php endif; ?>
 </form>
 
 <?php if (isset($_GET['filter']) && !$dates): ?>
