@@ -45,7 +45,8 @@ $perPage = 100;
 $totalRows = 0;
 $totalPages = 0;
 
-if (isset($_GET['filter'])) {
+function status_view_build_filter(array $user, array $filters): array
+{
     $where = [];
     $params = [];
     if ($user['role'] === 'admin_kab') {
@@ -63,7 +64,152 @@ if (isset($_GET['filter'])) {
         $where[] = 'd.id=?';
         $params[] = $filters['desa_id'];
     }
-    $sqlWhere = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+    return [$where ? 'WHERE ' . implode(' AND ', $where) : '', $params];
+}
+
+function status_view_select_sql(string $sqlWhere, bool $paginate = false): string
+{
+    $limit = $paginate ? 'LIMIT ? OFFSET ?' : '';
+    return "SELECT k.id kab_id, k.nmkab, kc.kdkec, kc.nmkec, d.kddesa, d.nmdesa,
+                sl.kdsls, sl.nmsls, ms.kdsubsls, ms.nmsubsls,
+                ms.pengawas_email, ms.pencacah_email,
+                COALESCE(ss.target,0) target,
+                COALESCE(ss.open_count,0) open_count,
+                COALESCE(ss.draft_count,0) draft_count,
+                COALESCE(ss.submitted_by_pencacah,0) submitted_by_pencacah,
+                COALESCE(ss.approved_by_pengawas,0) approved_by_pengawas,
+                COALESCE(ss.rejected_by_pengawas,0) rejected_by_pengawas,
+                ss.last_update, ss.updated_by,
+                COALESCE(cs.status_selesai, 'Belum Selesai') status_selesai
+            FROM master_subsls ms
+            JOIN master_sls sl ON sl.id=ms.sls_id
+            JOIN master_desa d ON d.id=sl.desa_id
+            JOIN master_kec kc ON kc.id=d.kec_id
+            JOIN master_kab k ON k.id=kc.kab_id
+            LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
+            LEFT JOIN subsls_completion_status cs ON cs.subsls_id=ms.id
+            $sqlWhere
+            ORDER BY k.id, kc.kdkec, d.kddesa, sl.kdsls, ms.kdsubsls
+            $limit";
+}
+
+function status_view_xlsx_col(int $index): string
+{
+    $name = '';
+    while ($index > 0) {
+        $mod = ($index - 1) % 26;
+        $name = chr(65 + $mod) . $name;
+        $index = intdiv($index - $mod, 26);
+    }
+    return $name;
+}
+
+function status_view_xlsx_cell(string $value, int $row, int $col): string
+{
+    $ref = status_view_xlsx_col($col) . $row;
+    return '<c r="' . $ref . '" t="inlineStr"><is><t>' . htmlspecialchars($value, ENT_XML1 | ENT_COMPAT, 'UTF-8') . '</t></is></c>';
+}
+
+function status_view_export(array $headers, array $rows, string $format): void
+{
+    $filename = 'status_terupdate_' . date('Ymd');
+    if ($format === 'csv') {
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '.csv"');
+        $out = fopen('php://output', 'w');
+        fputcsv($out, $headers);
+        foreach ($rows as $row) {
+            fputcsv($out, $row);
+        }
+        fclose($out);
+        exit;
+    }
+
+    $tmp = tempnam(sys_get_temp_dir(), 'status_export_');
+    $zip = new ZipArchive();
+    if ($zip->open($tmp, ZipArchive::OVERWRITE) !== true) {
+        throw new RuntimeException('Gagal membuat file Excel.');
+    }
+    $zip->addFromString('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>');
+    $zip->addFromString('_rels/.rels', '<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>');
+    $zip->addFromString('xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets><sheet name="status_terupdate" sheetId="1" r:id="rId1"/></sheets>
+</workbook>');
+    $zip->addFromString('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+</Relationships>');
+    $sheet = '<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
+    $allRows = array_merge([$headers], $rows);
+    foreach ($allRows as $rIndex => $row) {
+        $rowNumber = $rIndex + 1;
+        $sheet .= '<row r="' . $rowNumber . '">';
+        foreach ($row as $cIndex => $value) {
+            $sheet .= status_view_xlsx_cell((string)$value, $rowNumber, $cIndex + 1);
+        }
+        $sheet .= '</row>';
+    }
+    $sheet .= '</sheetData></worksheet>';
+    $zip->addFromString('xl/worksheets/sheet1.xml', $sheet);
+    $zip->close();
+
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Disposition: attachment; filename="' . $filename . '.xlsx"');
+    readfile($tmp);
+    unlink($tmp);
+    exit;
+}
+
+if (($_GET['action'] ?? '') === 'export' && isset($_GET['filter'])) {
+    $format = ($_GET['format'] ?? 'csv') === 'xlsx' ? 'xlsx' : 'csv';
+    [$sqlWhere, $params] = status_view_build_filter($user, $filters);
+    $stmt = db()->prepare(status_view_select_sql($sqlWhere));
+    $stmt->execute($params);
+    $exportSource = $stmt->fetchAll();
+    $headers = ['Kabupaten', 'Kecamatan', 'Desa', 'Kode SubSLS', 'SLS', 'Nama SLS', 'SubSLS', 'Pengawas', 'Pencacah', 'Target'];
+    foreach ($fields as $label) {
+        $headers[] = $label;
+    }
+    $headers[] = 'Last Update';
+    $headers[] = 'Updated By';
+    $headers[] = 'Status Selesai';
+    $exportRows = [];
+    foreach ($exportSource as $r) {
+        $row = [
+            $r['kab_id'] . ' - ' . $r['nmkab'],
+            $r['kdkec'] . ' - ' . $r['nmkec'],
+            $r['kddesa'] . ' - ' . $r['nmdesa'],
+            $r['kdsls'] . $r['kdsubsls'],
+            $r['kdsls'],
+            $r['nmsls'],
+            $r['kdsubsls'] . ' - ' . $r['nmsubsls'],
+            $r['pengawas_email'],
+            $r['pencacah_email'],
+            (string)(int)$r['target'],
+        ];
+        foreach (array_keys($fields) as $field) {
+            $row[] = (string)(int)$r[$field];
+        }
+        $row[] = $r['last_update'] ?: '';
+        $row[] = $r['updated_by'] ?: '';
+        $row[] = $r['status_selesai'];
+        $exportRows[] = $row;
+    }
+    status_view_export($headers, $exportRows, $format);
+}
+
+if (isset($_GET['filter'])) {
+    [$sqlWhere, $params] = status_view_build_filter($user, $filters);
     $countStmt = db()->prepare("SELECT COUNT(*)
         FROM master_subsls ms
         JOIN master_sls sl ON sl.id=ms.sls_id
@@ -77,25 +223,8 @@ if (isset($_GET['filter'])) {
     $page = min($page, $totalPages);
     $offset = ($page - 1) * $perPage;
 
-    $stmt = db()->prepare("SELECT d.nmdesa, sl.kdsls, sl.nmsls, ms.kdsubsls, ms.nmsubsls,
-                ms.pengawas_email, ms.pencacah_email,
-                COALESCE(ss.target,0) target,
-                COALESCE(ss.open_count,0) open_count,
-                COALESCE(ss.draft_count,0) draft_count,
-                COALESCE(ss.submitted_by_pencacah,0) submitted_by_pencacah,
-                COALESCE(ss.approved_by_pengawas,0) approved_by_pengawas,
-                COALESCE(ss.rejected_by_pengawas,0) rejected_by_pengawas,
-                ss.last_update, ss.updated_by
-            FROM master_subsls ms
-            JOIN master_sls sl ON sl.id=ms.sls_id
-            JOIN master_desa d ON d.id=sl.desa_id
-            JOIN master_kec kc ON kc.id=d.kec_id
-            JOIN master_kab k ON k.id=kc.kab_id
-            LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
-            $sqlWhere
-            ORDER BY k.id, kc.kdkec, d.kddesa, sl.kdsls, ms.kdsubsls
-            LIMIT $perPage OFFSET $offset");
-    $stmt->execute($params);
+    $stmt = db()->prepare(status_view_select_sql($sqlWhere, true));
+    $stmt->execute(array_merge($params, [$perPage, $offset]));
     $rows = $stmt->fetchAll();
 }
 
@@ -134,8 +263,15 @@ render_header('Status Terupdate');
 </form>
 <?php if ($rows): ?>
 <div class="card">
-  <div class="card-header py-2">
+  <div class="card-header py-2 d-flex justify-content-between align-items-center">
     <span>Menampilkan <?= number_format(count($rows), 0, ',', '.') ?> dari <?= number_format($totalRows, 0, ',', '.') ?> SubSLS</span>
+    <div>
+      <?php
+        $exportQuery = ['filter' => 1, 'kab_id' => $filters['kab_id'], 'kec_id' => $filters['kec_id'], 'desa_id' => $filters['desa_id'], 'action' => 'export'];
+      ?>
+      <a class="btn btn-outline-success btn-sm mr-2" href="?<?= e(http_build_query($exportQuery + ['format' => 'csv'])) ?>"><i class="fas fa-file-csv mr-1"></i>Download CSV</a>
+      <a class="btn btn-outline-success btn-sm" href="?<?= e(http_build_query($exportQuery + ['format' => 'xlsx'])) ?>"><i class="fas fa-file-excel mr-1"></i>Download Excel</a>
+    </div>
   </div>
   <div class="card-body table-responsive p-0">
     <table class="table table-sm table-bordered table-striped mb-0">
@@ -143,7 +279,7 @@ render_header('Status Terupdate');
         <tr>
           <th>Kode SubSLS</th><th>Desa</th><th>SLS</th><th>SubSLS</th><th>Pengawas</th><th>Pencacah</th><th>Target</th>
           <?php foreach ($fields as $label): ?><th><?= e($label) ?></th><?php endforeach; ?>
-          <th>Last Update</th><th>Updated By</th>
+          <th>Last Update</th><th>Updated By</th><th>Status Selesai</th>
         </tr>
       </thead>
       <tbody>
@@ -159,6 +295,7 @@ render_header('Status Terupdate');
           <?php foreach (array_keys($fields) as $field): ?><td><?= number_format((int)$r[$field], 0, ',', '.') ?></td><?php endforeach; ?>
           <td><?= e($r['last_update'] ?: '-') ?></td>
           <td><?= e($r['updated_by'] ?: '-') ?></td>
+          <td><?= e($r['status_selesai']) ?></td>
         </tr>
       <?php endforeach; ?>
       </tbody>
