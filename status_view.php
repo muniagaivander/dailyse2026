@@ -67,9 +67,12 @@ function status_view_build_filter(array $user, array $filters): array
     return [$where ? 'WHERE ' . implode(' AND ', $where) : '', $params];
 }
 
-function status_view_select_sql(string $sqlWhere, bool $paginate = false): string
+function status_view_select_sql(string $sqlWhere, ?int $limitRows = null, ?int $offsetRows = null): string
 {
-    $limit = $paginate ? 'LIMIT ? OFFSET ?' : '';
+    $limit = '';
+    if ($limitRows !== null && $offsetRows !== null) {
+        $limit = 'LIMIT ' . max(1, $limitRows) . ' OFFSET ' . max(0, $offsetRows);
+    }
     return "SELECT k.id kab_id, k.nmkab, kc.kdkec, kc.nmkec, d.kddesa, d.nmdesa,
                 sl.kdsls, sl.nmsls, ms.kdsubsls, ms.nmsubsls,
                 ms.pengawas_email, ms.pencacah_email,
@@ -223,8 +226,8 @@ if (isset($_GET['filter'])) {
     $page = min($page, $totalPages);
     $offset = ($page - 1) * $perPage;
 
-    $stmt = db()->prepare(status_view_select_sql($sqlWhere, true));
-    $stmt->execute(array_merge($params, [$perPage, $offset]));
+    $stmt = db()->prepare(status_view_select_sql($sqlWhere, $perPage, $offset));
+    $stmt->execute($params);
     $rows = $stmt->fetchAll();
 }
 
