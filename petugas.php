@@ -208,7 +208,7 @@ if (isset($_GET['filter'])) {
     $page = min($page, $totalPages);
     $offset = ($page - 1) * $perPage;
 
-    $stmt = db()->prepare("SELECT p.nmprov, k.nmkab, kc.nmkec, d.nmdesa, sl.kdsls, sl.nmsls,
+    $stmt = db()->prepare("SELECT p.nmprov, k.id kab_id, k.nmkab, kc.kdkec, kc.nmkec, d.kddesa, d.nmdesa, sl.kdsls, sl.nmsls,
                 ms.kdsubsls, ms.nmsubsls, ms.pengawas_email, ms.pencacah_email
             FROM master_subsls ms
             JOIN master_sls sl ON sl.id=ms.sls_id
@@ -275,7 +275,7 @@ render_header('Daftar Petugas');
       <tbody>
       <?php foreach ($rows as $r): ?>
         <tr>
-          <td><?= e($r['kdsls'] . $r['kdsubsls']) ?></td>
+          <td><?= e($r['kab_id'] . $r['kdkec'] . $r['kddesa'] . $r['kdsls'] . $r['kdsubsls']) ?></td>
           <td><?= e($r['nmdesa']) ?></td>
           <td><?= e($r['kdsls'] . ' - ' . $r['nmsls']) ?></td>
           <td><?= e($r['nmsubsls']) ?></td>

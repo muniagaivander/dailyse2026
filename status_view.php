@@ -192,7 +192,7 @@ if (($_GET['action'] ?? '') === 'export' && isset($_GET['filter'])) {
             $r['kab_id'] . ' - ' . $r['nmkab'],
             $r['kdkec'] . ' - ' . $r['nmkec'],
             $r['kddesa'] . ' - ' . $r['nmdesa'],
-            $r['kdsls'] . $r['kdsubsls'],
+            $r['kab_id'] . $r['kdkec'] . $r['kddesa'] . $r['kdsls'] . $r['kdsubsls'],
             $r['kdsls'],
             $r['nmsls'],
             $r['kdsubsls'] . ' - ' . $r['nmsubsls'],
@@ -288,7 +288,7 @@ render_header('Status Terupdate');
       <tbody>
       <?php foreach ($rows as $r): ?>
         <tr>
-          <td><?= e($r['kdsls'] . $r['kdsubsls']) ?></td>
+          <td><?= e($r['kab_id'] . $r['kdkec'] . $r['kddesa'] . $r['kdsls'] . $r['kdsubsls']) ?></td>
           <td><?= e($r['nmdesa']) ?></td>
           <td><?= e($r['kdsls'] . ' - ' . $r['nmsls']) ?></td>
           <td><?= e($r['nmsubsls']) ?></td>
