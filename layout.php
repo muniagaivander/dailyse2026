@@ -127,13 +127,13 @@ function render_header(string $title): void {
             <li class="nav-item"><a class="nav-link<?= $isActive(['index.php', '']) ?>" href="index.php"><i class="nav-icon fas fa-chart-column"></i><p>Dashboard</p></a></li>
             <?php if (in_array($user['role'], ['superadmin','admin_kab','pengawas'], true)): ?>
               <li class="nav-item"><a class="nav-link important-input-menu<?= $isActive(['input.php']) ?>" href="input.php"><i class="nav-icon fas fa-pen"></i><p>Input Harian</p></a></li>
+              <li class="nav-item"><a class="nav-link<?= $isActive(['edit.php']) ?>" href="edit.php"><i class="nav-icon fas fa-edit"></i><p>Edit Harian</p></a></li>
             <?php endif; ?>
             <?php if (in_array($user['role'], ['pengawas','pencacah'], true)): ?>
               <li class="nav-item"><a class="nav-link<?= $isActive(['subsls_data.php']) ?>" href="subsls_data.php"><i class="nav-icon fas fa-table"></i><p>Data SubSLS</p></a></li>
             <?php endif; ?>
             <?php if ($user['role'] === 'pengawas'): ?>
               <li class="nav-item"><a class="nav-link<?= $isActive(['status_selesai.php']) ?>" href="status_selesai.php"><i class="nav-icon fas fa-circle-check"></i><p>Status Selesai SubSLS</p></a></li>
-              <li class="nav-item"><a class="nav-link<?= $isActive(['edit.php']) ?>" href="edit.php"><i class="nav-icon fas fa-edit"></i><p>Edit Harian</p></a></li>
             <?php endif; ?>
             <?php if (in_array($user['role'], ['admin_kab','superadmin','viewer_prov','viewer_kab'], true)): ?>
               <li class="nav-item"><a class="nav-link<?= $currentPage === 'progress.php' && ($_GET['type'] ?? 'pengawas') !== 'pencacah' ? ' active' : '' ?>" href="progress.php?type=pengawas"><i class="nav-icon fas fa-user-check"></i><p>Progress Pengawas</p></a></li>
