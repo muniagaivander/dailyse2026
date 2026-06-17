@@ -78,11 +78,29 @@ function dashboard_filter_options(array $user, array $filters): array
         $stmt->execute([$user['email']]);
         $out['pencacah'] = $stmt->fetchAll();
     } elseif (!empty($filters['pengawas_email'])) {
-        $stmt = db()->prepare("SELECT DISTINCT pencacah_email value, pencacah_email label
-            FROM master_subsls
-            WHERE pengawas_email=? AND pencacah_email IS NOT NULL AND pencacah_email <> ''
-            ORDER BY pencacah_email");
-        $stmt->execute([$filters['pengawas_email']]);
+        $where = ['ms.pengawas_email=?', "ms.pencacah_email IS NOT NULL", "ms.pencacah_email <> ''"];
+        $params = [$filters['pengawas_email']];
+        if (!empty($filters['kab_id'])) {
+            $where[] = 'k.id=?';
+            $params[] = $filters['kab_id'];
+        }
+        if (!empty($filters['kec_id'])) {
+            $where[] = 'kc.id=?';
+            $params[] = $filters['kec_id'];
+        }
+        if (!empty($filters['desa_id'])) {
+            $where[] = 'd.id=?';
+            $params[] = $filters['desa_id'];
+        }
+        $stmt = db()->prepare("SELECT DISTINCT ms.pencacah_email value, ms.pencacah_email label
+            FROM master_subsls ms
+            JOIN master_sls sl ON sl.id=ms.sls_id
+            JOIN master_desa d ON d.id=sl.desa_id
+            JOIN master_kec kc ON kc.id=d.kec_id
+            JOIN master_kab k ON k.id=kc.kab_id
+            WHERE " . implode(' AND ', $where) . "
+            ORDER BY ms.pencacah_email");
+        $stmt->execute($params);
         $out['pencacah'] = $stmt->fetchAll();
     }
     return $out;
