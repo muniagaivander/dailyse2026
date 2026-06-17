@@ -69,12 +69,13 @@ APP_TIMEZONE=Asia/Makassar
 http://localhost/dailyse2026
 ```
 
-5. Login superadmin awal:
+5. Akun superadmin awal:
 
 ```text
 username: 6400@bps.go.id
-password: 162534
 ```
+
+Password tidak ditulis di README publik. Gunakan password yang disepakati internal atau reset langsung dari database/admin internal jika diperlukan.
 
 6. Import master wilayah dari menu `Import Master`.
 
@@ -104,7 +105,7 @@ Import master akan mengisi:
 Superadmin adalah pengelola level provinsi. Akun awal:
 
 ```text
-6400@bps.go.id / 162534
+6400@bps.go.id
 ```
 
 Yang bisa dilakukan superadmin:
@@ -128,8 +129,8 @@ Admin kabupaten mengelola satu kabupaten sesuai `kab_id`.
 Contoh akun:
 
 ```text
-6401@bps.go.id / 123
-6402@bps.go.id / 123
+6401@bps.go.id
+6402@bps.go.id
 ...
 ```
 
@@ -180,7 +181,7 @@ Pencacah tidak melakukan input harian langsung di aplikasi.
 Akun:
 
 ```text
-viewer6400@bps.go.id / 123
+viewer6400@bps.go.id
 ```
 
 Yang bisa dilakukan viewer provinsi:
@@ -196,8 +197,8 @@ Viewer hanya melihat data, tidak mengubah data.
 Contoh akun:
 
 ```text
-viewer6401@bps.go.id / 123
-viewer6402@bps.go.id / 123
+viewer6401@bps.go.id
+viewer6402@bps.go.id
 ...
 ```
 
@@ -797,4 +798,3 @@ State aplikasi pernah ditandai sebagai:
 - versi 1.1
 
 Snapshot versi disimpan di luar folder aplikasi utama pada workspace lokal pengembangan. Snapshot tersebut adalah cadangan code dan struktur SQL, bukan cadangan data produksi.
-
