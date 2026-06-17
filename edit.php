@@ -87,7 +87,7 @@ function edit_area_options(array $user, array $filters): array
         JOIN master_kec kc ON kc.id=d.kec_id
         JOIN master_kab k ON k.id=kc.kab_id
         $whereKec
-        ORDER BY kc.kdkec, kc.nmkec");
+        ORDER BY label");
     $stmt->execute($paramsKec);
     $out['kecamatan'] = $stmt->fetchAll();
 
@@ -99,7 +99,7 @@ function edit_area_options(array $user, array $filters): array
         JOIN master_kec kc ON kc.id=d.kec_id
         JOIN master_kab k ON k.id=kc.kab_id
         $whereDesa
-        ORDER BY d.kddesa, d.nmdesa");
+        ORDER BY label");
     $stmt->execute($paramsDesa);
     $out['desa'] = $stmt->fetchAll();
 
