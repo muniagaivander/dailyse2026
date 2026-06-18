@@ -1,0 +1,3 @@
+RewriteEngine On
+RewriteRule ^6400/?$ public_dashboard.php?code=6400 [L,QSA]
+

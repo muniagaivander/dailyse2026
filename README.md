@@ -306,6 +306,50 @@ Tabel perlu perhatian bisa di-export CSV dan Excel.
 
 Sama seperti performa pengawas, tetapi agregasinya per pencacah.
 
+### Dashboard Publik
+
+Selain dashboard login, aplikasi menyediakan dashboard publik read-only.
+
+URL publik:
+
+```text
+/6400
+```
+
+Contoh jika domain deploy:
+
+```text
+https://dailyse2026.dataetam.com/6400
+```
+
+Dashboard publik tidak membutuhkan login dan tidak menampilkan filter, form, upload, export, atau aksi tulis apa pun.
+
+Isi dashboard publik:
+
+- card rekap provinsi
+- progress Submit+Approve per kabupaten
+- progress Selesai SubSLS per kabupaten
+- progress By Status per kabupaten
+
+File yang mengatur dashboard publik:
+
+```text
+public_dashboard.php
+.htaccess
+```
+
+`.htaccess` meroute:
+
+```text
+/6400 -> public_dashboard.php?code=6400
+```
+
+Jika server belum mengaktifkan rewrite/`.htaccess`, halaman masih bisa dicek langsung lewat:
+
+```text
+public_dashboard.php?code=6400
+```
+
 ### Input Harian
 
 Dipakai untuk mengisi progress harian 5 status.
