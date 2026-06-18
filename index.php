@@ -661,7 +661,7 @@ const config = activeTab === 'status'
           backgroundColor: statusColors[i]
         }))
       },
-      options: { responsive:true, scales:{ x:{stacked:true}, y:{stacked:true, min:0, max:100, ticks:{callback:v=>v+'%'}} } }
+      options: { animation:false, responsive:true, scales:{ x:{stacked:true}, y:{stacked:true, min:0, max:100, ticks:{callback:v=>v+'%'}} } }
     }
   : {
       type: 'bar',
@@ -673,7 +673,7 @@ const config = activeTab === 'status'
           backgroundColor: percentRows.map(r => pctColor(activeTab === 'selesai' ? r.selesai : r.submitApprove))
         }]
       },
-      options: { responsive:true, scales:{ y:{min:0,max:100,ticks:{callback:v=>v+'%'}} } }
+      options: { animation:false, responsive:true, scales:{ y:{min:0,max:100,ticks:{callback:v=>v+'%'}} } }
     };
 new Chart(document.getElementById('dashboardChart'), config);
 

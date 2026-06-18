@@ -218,7 +218,7 @@ new Chart(document.getElementById('submitApproveChart'), {
       backgroundColor: submitApprove.map(pctColor)
     }]
   },
-  options: { responsive: true, scales: { y: { min: 0, max: 100, ticks: { callback: value => value + '%' } } } }
+  options: { animation: false, responsive: true, scales: { y: { min: 0, max: 100, ticks: { callback: value => value + '%' } } } }
 });
 
 new Chart(document.getElementById('completionChart'), {
@@ -231,7 +231,7 @@ new Chart(document.getElementById('completionChart'), {
       backgroundColor: completion.map(pctColor)
     }]
   },
-  options: { responsive: true, scales: { y: { min: 0, max: 100, ticks: { callback: value => value + '%' } } } }
+  options: { animation: false, responsive: true, scales: { y: { min: 0, max: 100, ticks: { callback: value => value + '%' } } } }
 });
 
 new Chart(document.getElementById('statusChart'), {
@@ -245,6 +245,7 @@ new Chart(document.getElementById('statusChart'), {
     }))
   },
   options: {
+    animation: false,
     responsive: true,
     scales: {
       x: { stacked: true },
@@ -255,4 +256,3 @@ new Chart(document.getElementById('statusChart'), {
 </script>
 </body>
 </html>
-
