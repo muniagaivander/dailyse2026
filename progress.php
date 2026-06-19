@@ -86,6 +86,16 @@ if ($selected) {
 }
 render_header('Progress ' . ucfirst($type));
 ?>
+<style>
+  .progress-chart-wrap {
+    height: 380px;
+    position: relative;
+    width: 100%;
+  }
+  @media (max-width: 767.98px) {
+    .progress-chart-wrap { height: 320px; }
+  }
+</style>
 <form class="card card-body mb-3" method="get">
   <input type="hidden" name="type" value="<?= e($type) ?>">
   <div class="form-row align-items-end">
@@ -101,7 +111,7 @@ render_header('Progress ' . ucfirst($type));
 <?php endif; ?>
 <?php if ($selected): ?>
 <div class="row"><?php foreach (array_merge(['target'=>'Target'], status_fields()) as $field=>$label): ?><div class="col-md"><div class="small-box bg-light"><div class="inner"><h3><?= number_format((int)$cards[$field],0,',','.') ?></h3><p><?= e($label) ?></p></div></div></div><?php endforeach; ?></div>
-<div class="card"><div class="card-body"><canvas id="lineChart" height="120"></canvas></div></div>
+<div class="card"><div class="card-body"><div class="progress-chart-wrap"><canvas id="lineChart"></canvas></div></div></div>
 <script>
 const rows = <?= json_encode($trend) ?>;
 const fields = <?= json_encode(array_keys(status_fields())) ?>;
@@ -110,7 +120,7 @@ const colors = ['#2563eb','#16a34a','#dc2626','#f59e0b','#0f766e'];
 new Chart(document.getElementById('lineChart'), {
   type:'line',
   data:{ labels: rows.map(r=>r.tanggal), datasets: fields.map((f,i)=>({ label:labels[i], data:rows.map(r=>Number(r.target)?Math.round(Number(r[f])/Number(r.target)*10000)/100:0), borderColor:colors[i], backgroundColor:colors[i], tension:.2 })) },
-  options:{ responsive:true, scales:{ y:{min:0,max:100,ticks:{callback:v=>v+'%'}} } }
+  options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{min:0,max:100,ticks:{callback:v=>v+'%'}} } }
 });
 </script>
 <?php endif; ?>
