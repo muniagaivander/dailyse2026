@@ -22,6 +22,11 @@ function public_count_pct_text(int $count, float $pct): string
     return '<span class="d-block">' . number_format($count, 0, ',', '.') . '</span><span class="d-block">(' . number_format($pct, 2, ',', '.') . '%)</span>';
 }
 
+function public_count_only_text(int $count): string
+{
+    return '<span class="d-block">' . number_format($count, 0, ',', '.') . '</span><span class="d-block">&nbsp;</span>';
+}
+
 function public_dashboard_context(string $code): array
 {
     if ($code === '6400') {
@@ -100,7 +105,7 @@ $completionPct = (int)$totals['subsls_total'] > 0
     : 0;
 
 $cards = [
-    ['label' => 'Target', 'value' => number_format($targetTotal, 0, ',', '.')],
+    ['label' => 'Target', 'value' => public_count_only_text($targetTotal)],
     ['label' => 'Open', 'value' => public_count_pct_text((int)$totals['open_count'], $targetTotal ? (int)$totals['open_count'] / $targetTotal * 100 : 0)],
     ['label' => 'Submit', 'value' => public_count_pct_text((int)$totals['submitted_by_pencacah'], $targetTotal ? (int)$totals['submitted_by_pencacah'] / $targetTotal * 100 : 0)],
     ['label' => 'Reject', 'value' => public_count_pct_text((int)$totals['rejected_by_pengawas'], $targetTotal ? (int)$totals['rejected_by_pengawas'] / $targetTotal * 100 : 0)],
@@ -108,7 +113,7 @@ $cards = [
     ['label' => 'Approve', 'value' => public_count_pct_text((int)$totals['approved_by_pengawas'], $targetTotal ? (int)$totals['approved_by_pengawas'] / $targetTotal * 100 : 0)],
     ['label' => 'Submit+Approve', 'value' => public_count_pct_text((int)$totals['submitted_by_pencacah'] + (int)$totals['approved_by_pengawas'], $submitApprovePct)],
     ['label' => 'Selesai', 'value' => public_count_pct_text((int)$totals['selesai_count'], $completionPct)],
-    ['label' => 'Total SubSLS', 'value' => number_format((int)$totals['subsls_total'], 0, ',', '.')],
+    ['label' => 'Total SubSLS', 'value' => public_count_only_text((int)$totals['subsls_total'])],
 ];
 ?>
 <!doctype html>
