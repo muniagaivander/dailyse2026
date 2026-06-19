@@ -301,24 +301,24 @@ render_header('Edit Harian');
     </div>
     <div class="form-group col-md-2">
       <label>Desa</label>
-      <select class="form-control" name="desa_id" id="desa_id">
-        <option value="">Semua Desa</option>
+      <select class="form-control" name="desa_id" id="desa_id" <?= $filters['kec_id'] ? '' : 'disabled' ?>>
+        <option value=""><?= $filters['kec_id'] ? 'Semua Desa' : 'Pilih kecamatan dulu' ?></option>
         <?php foreach ($opts['desa'] as $o): ?><option value="<?= e($o['value']) ?>" <?= $filters['desa_id']===$o['value']?'selected':'' ?>><?= e($o['label']) ?></option><?php endforeach; ?>
       </select>
     </div>
     <?php if ($user['role'] !== 'pengawas'): ?>
       <div class="form-group col-md-2">
         <label>Pengawas</label>
-        <select class="form-control" name="pengawas_email" id="pengawas_email">
-          <option value="">Semua Pengawas</option>
+        <select class="form-control" name="pengawas_email" id="pengawas_email" <?= $filters['desa_id'] ? '' : 'disabled' ?>>
+          <option value=""><?= $filters['desa_id'] ? 'Semua Pengawas' : 'Pilih desa dulu' ?></option>
           <?php foreach ($opts['pengawas'] as $o): ?><option value="<?= e($o['value']) ?>" <?= $filters['pengawas_email']===$o['value']?'selected':'' ?>><?= e($o['label']) ?></option><?php endforeach; ?>
         </select>
       </div>
     <?php endif; ?>
     <div class="form-group col-md-2">
       <label>Pencacah</label>
-      <select class="form-control" name="pencacah_email" id="pencacah_email">
-        <option value="">Semua Pencacah</option>
+      <select class="form-control" name="pencacah_email" id="pencacah_email" <?= ($user['role'] === 'pengawas' || $filters['pengawas_email']) ? '' : 'disabled' ?>>
+        <option value=""><?= ($user['role'] === 'pengawas' || $filters['pengawas_email']) ? 'Semua Pencacah' : 'Pilih pengawas dulu' ?></option>
         <?php foreach ($opts['pencacah'] as $o): ?><option value="<?= e($o['value']) ?>" <?= $filters['pencacah_email']===$o['value']?'selected':'' ?>><?= e($o['label']) ?></option><?php endforeach; ?>
       </select>
     </div>
@@ -426,6 +426,10 @@ document.querySelectorAll('.status-input').forEach(input => input.addEventListen
   tr.querySelector('.target').value = Array.from(tr.querySelectorAll('.status-input')).reduce((s, el) => s + Number(el.value || 0), 0);
 }));
 const kabupaten = document.getElementById('kab_id');
+const kecamatanSelect = document.getElementById('kec_id');
+const desaSelect = document.getElementById('desa_id');
+const pengawasSelect = document.getElementById('pengawas_email');
+const pencacahSelect = document.getElementById('pencacah_email');
 function resetDateAndResult() {
   const dateSection = document.getElementById('dateSection');
   const editResult = document.getElementById('editResult');
@@ -436,36 +440,52 @@ function resetDateAndResult() {
   if (noDatesAlert) noDatesAlert.style.display = 'none';
   if (noRowsAlert) noRowsAlert.style.display = 'none';
 }
+function syncFilterState() {
+  if (desaSelect) {
+    desaSelect.disabled = !kecamatanSelect.value;
+    if (!kecamatanSelect.value) desaSelect.value = '';
+  }
+  if (pengawasSelect) {
+    pengawasSelect.disabled = !desaSelect.value;
+    if (!desaSelect.value) pengawasSelect.value = '';
+  }
+  if (pencacahSelect) {
+    const canUsePencacah = <?= $user['role'] === 'pengawas' ? 'true' : 'false' ?> || (pengawasSelect && pengawasSelect.value);
+    pencacahSelect.disabled = !canUsePencacah;
+    if (!canUsePencacah) pencacahSelect.value = '';
+  }
+}
 if (kabupaten) {
   kabupaten.addEventListener('change', function () {
-    document.getElementById('kec_id').value = '';
-    document.getElementById('desa_id').value = '';
-    const pengawas = document.getElementById('pengawas_email');
-    if (pengawas) pengawas.value = '';
-    document.getElementById('pencacah_email').value = '';
+    kecamatanSelect.value = '';
+    desaSelect.value = '';
+    if (pengawasSelect) pengawasSelect.value = '';
+    pencacahSelect.value = '';
+    syncFilterState();
     resetDateAndResult();
   });
 }
-document.getElementById('kec_id').addEventListener('change', function () {
-  document.getElementById('desa_id').value = '';
-  const pengawas = document.getElementById('pengawas_email');
-  if (pengawas) pengawas.value = '';
-  document.getElementById('pencacah_email').value = '';
+kecamatanSelect.addEventListener('change', function () {
+  desaSelect.value = '';
+  if (pengawasSelect) pengawasSelect.value = '';
+  pencacahSelect.value = '';
+  syncFilterState();
   resetDateAndResult();
 });
-document.getElementById('desa_id').addEventListener('change', function () {
-  const pengawas = document.getElementById('pengawas_email');
-  if (pengawas) pengawas.value = '';
-  document.getElementById('pencacah_email').value = '';
+desaSelect.addEventListener('change', function () {
+  if (pengawasSelect) pengawasSelect.value = '';
+  pencacahSelect.value = '';
+  syncFilterState();
   resetDateAndResult();
 });
-const pengawas = document.getElementById('pengawas_email');
-if (pengawas) {
-  pengawas.addEventListener('change', function () {
-    document.getElementById('pencacah_email').value = '';
+if (pengawasSelect) {
+  pengawasSelect.addEventListener('change', function () {
+    pencacahSelect.value = '';
+    syncFilterState();
     resetDateAndResult();
   });
 }
-document.getElementById('pencacah_email').addEventListener('change', resetDateAndResult);
+pencacahSelect.addEventListener('change', resetDateAndResult);
+syncFilterState();
 </script>
 <?php render_footer(); ?>
