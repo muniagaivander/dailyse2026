@@ -19,7 +19,7 @@ $rangeColors = [
 
 function public_count_pct_text(int $count, float $pct): string
 {
-    return number_format($count, 0, ',', '.') . ' (' . number_format($pct, 2, ',', '.') . '%)';
+    return '<span class="d-block">' . number_format($count, 0, ',', '.') . '</span><span class="d-block text-muted small">(' . number_format($pct, 2, ',', '.') . '%)</span>';
 }
 
 function public_dashboard_context(string $code): array
@@ -197,7 +197,7 @@ $cards = [
       <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6">
         <div class="small-box bg-white">
           <div class="inner">
-            <h4 class="mb-1"><?= e($card['value']) ?></h4>
+            <h4 class="mb-1"><?= $card['value'] ?></h4>
             <p><?= e($card['label']) ?></p>
           </div>
         </div>
