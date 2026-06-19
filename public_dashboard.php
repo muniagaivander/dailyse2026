@@ -19,7 +19,7 @@ $rangeColors = [
 
 function public_count_pct_text(int $count, float $pct): string
 {
-    return '<span class="d-block">' . number_format($count, 0, ',', '.') . '</span><span class="d-block text-muted small">(' . number_format($pct, 2, ',', '.') . '%)</span>';
+    return '<span class="d-block">' . number_format($count, 0, ',', '.') . '</span><span class="d-block">(' . number_format($pct, 2, ',', '.') . '%)</span>';
 }
 
 function public_dashboard_context(string $code): array
@@ -106,7 +106,7 @@ $cards = [
     ['label' => 'Reject', 'value' => public_count_pct_text((int)$totals['rejected_by_pengawas'], $targetTotal ? (int)$totals['rejected_by_pengawas'] / $targetTotal * 100 : 0)],
     ['label' => 'Pending', 'value' => public_count_pct_text((int)$totals['draft_count'], $targetTotal ? (int)$totals['draft_count'] / $targetTotal * 100 : 0)],
     ['label' => 'Approve', 'value' => public_count_pct_text((int)$totals['approved_by_pengawas'], $targetTotal ? (int)$totals['approved_by_pengawas'] / $targetTotal * 100 : 0)],
-    ['label' => 'Persen Submit+Approve', 'value' => number_format($submitApprovePct, 2, ',', '.') . '%'],
+    ['label' => 'Submit+Approve', 'value' => public_count_pct_text((int)$totals['submitted_by_pencacah'] + (int)$totals['approved_by_pengawas'], $submitApprovePct)],
     ['label' => 'Selesai', 'value' => public_count_pct_text((int)$totals['selesai_count'], $completionPct)],
     ['label' => 'Total SubSLS', 'value' => number_format((int)$totals['subsls_total'], 0, ',', '.')],
 ];
