@@ -440,18 +440,26 @@ function resetDateAndResult() {
   if (noDatesAlert) noDatesAlert.style.display = 'none';
   if (noRowsAlert) noRowsAlert.style.display = 'none';
 }
+function setFirstOptionLabel(select, label) {
+  if (select && select.options.length) {
+    select.options[0].textContent = label;
+  }
+}
 function syncFilterState() {
   if (desaSelect) {
     desaSelect.disabled = !kecamatanSelect.value;
+    setFirstOptionLabel(desaSelect, kecamatanSelect.value ? 'Semua Desa' : 'Pilih kecamatan dulu');
     if (!kecamatanSelect.value) desaSelect.value = '';
   }
   if (pengawasSelect) {
     pengawasSelect.disabled = !desaSelect.value;
+    setFirstOptionLabel(pengawasSelect, desaSelect.value ? 'Semua Pengawas' : 'Pilih desa dulu');
     if (!desaSelect.value) pengawasSelect.value = '';
   }
   if (pencacahSelect) {
     const canUsePencacah = <?= $user['role'] === 'pengawas' ? 'true' : 'false' ?> || (pengawasSelect && pengawasSelect.value);
     pencacahSelect.disabled = !canUsePencacah;
+    setFirstOptionLabel(pencacahSelect, canUsePencacah ? 'Semua Pencacah' : 'Pilih pengawas dulu');
     if (!canUsePencacah) pencacahSelect.value = '';
   }
 }
