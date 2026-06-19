@@ -87,6 +87,11 @@ function public_dashboard_cache_path(): string
     return __DIR__ . '/cache/public_dashboard.json';
 }
 
+function public_dashboard_cache_dir(): string
+{
+    return dirname(public_dashboard_cache_path());
+}
+
 function public_dashboard_wita_label(string $datetime): string
 {
     $months = [
@@ -139,15 +144,30 @@ function public_dashboard_generate_cache(string $email): array
         'dashboards' => $dashboards,
     ];
 
-    $cacheDir = dirname(public_dashboard_cache_path());
+    $cacheDir = public_dashboard_cache_dir();
     if (!is_dir($cacheDir)) {
-        mkdir($cacheDir, 0775, true);
+        if (!mkdir($cacheDir, 0775, true) && !is_dir($cacheDir)) {
+            throw new RuntimeException('Folder cache gagal dibuat: ' . $cacheDir);
+        }
     }
-    file_put_contents(
-        public_dashboard_cache_path(),
-        json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
-        LOCK_EX
-    );
+    if (!is_writable($cacheDir)) {
+        throw new RuntimeException('Folder cache tidak bisa ditulis oleh PHP/web server: ' . $cacheDir);
+    }
+
+    $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    if ($json === false) {
+        throw new RuntimeException('Gagal membuat JSON dashboard publik.');
+    }
+
+    $cachePath = public_dashboard_cache_path();
+    $tmpPath = $cachePath . '.tmp';
+    if (file_put_contents($tmpPath, $json, LOCK_EX) === false) {
+        throw new RuntimeException('File cache sementara gagal ditulis: ' . $tmpPath);
+    }
+    if (!rename($tmpPath, $cachePath)) {
+        @unlink($tmpPath);
+        throw new RuntimeException('File cache gagal dipindahkan ke: ' . $cachePath);
+    }
     return $payload;
 }
 
@@ -180,6 +200,13 @@ render_header('Update Dashboard Publik');
     <?php else: ?>
       <div class="alert alert-warning">Dashboard publik belum pernah dibuat. Klik tombol update untuk membuat snapshot pertama.</div>
     <?php endif; ?>
+    <table class="table table-sm table-bordered mb-3">
+      <tbody>
+        <tr><th style="width:220px">Path cache</th><td><?= e(public_dashboard_cache_path()) ?></td></tr>
+        <tr><th>Folder cache ada</th><td><?= is_dir(public_dashboard_cache_dir()) ? 'Ya' : 'Tidak' ?></td></tr>
+        <tr><th>Folder cache writable</th><td><?= is_dir(public_dashboard_cache_dir()) && is_writable(public_dashboard_cache_dir()) ? 'Ya' : 'Tidak' ?></td></tr>
+      </tbody>
+    </table>
     <form method="post" data-progress-submit data-progress-title="Mengupdate dashboard publik..." data-progress-text="Mohon tunggu, snapshot provinsi dan kabupaten sedang dibuat.">
       <button class="btn btn-primary"><i class="fas fa-rotate mr-1"></i>Update Dashboard Publik</button>
     </form>
