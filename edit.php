@@ -231,7 +231,7 @@ if ($user['role'] === 'pengawas') {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $date = $_POST['tanggal'] ?? '';
     $ids = $_POST['subsls_id'] ?? [];
-    $redirectQuery = ['filter' => 1, 'tanggal' => $date] + $filters;
+    $redirectQuery = ['action' => 'form', 'tanggal' => $date] + $filters;
     db()->beginTransaction();
     try {
         foreach ($ids as $i => $id) {
@@ -247,11 +247,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $opts = edit_area_options($user, $filters);
-$dates = isset($_GET['filter']) ? edit_daily_dates($user, $filters) : [];
+$action = $_GET['action'] ?? '';
+$showDates = in_array($action, ['dates', 'form'], true);
+$showForm = $action === 'form';
+$dates = $showDates ? edit_daily_dates($user, $filters) : [];
 $date = $_GET['tanggal'] ?? ($dates[0]['tanggal'] ?? '');
 $rows = [];
 $groups = [];
-if (isset($_GET['filter']) && $date) {
+if ($showForm && $date) {
     [$where, $params] = edit_filter_where($user, $filters);
     $where[] = 'ds.tanggal=?';
     $params[] = $date;
@@ -277,7 +280,6 @@ render_header('Edit Harian');
 <?php if ($msg = flash('error')): ?><div class="alert alert-danger"><?= e($msg) ?></div><?php endif; ?>
 
 <form class="card card-body mb-3" method="get">
-  <input type="hidden" name="filter" value="1">
   <div class="form-row align-items-end">
     <?php if ($user['role'] === 'superadmin'): ?>
       <div class="form-group col-md-2">
@@ -320,11 +322,11 @@ render_header('Edit Harian');
         <?php foreach ($opts['pencacah'] as $o): ?><option value="<?= e($o['value']) ?>" <?= $filters['pencacah_email']===$o['value']?'selected':'' ?>><?= e($o['label']) ?></option><?php endforeach; ?>
       </select>
     </div>
-    <div class="form-group col-md-2"><button class="btn btn-primary">Tampilkan Tanggal</button></div>
+    <div class="form-group col-md-2"><button class="btn btn-primary" name="action" value="dates">Tampilkan Tanggal</button></div>
   </div>
-  <?php if (isset($_GET['filter'])): ?>
+  <?php if ($showDates): ?>
     <hr class="mt-0">
-    <div class="form-row align-items-end">
+    <div class="form-row align-items-end" id="dateSection">
       <div class="form-group col-md-3">
         <label>Tanggal yang Akan Diedit</label>
         <select class="form-control" name="tanggal" <?= $dates ? '' : 'disabled' ?> required>
@@ -335,13 +337,13 @@ render_header('Edit Harian');
           <?php endif; ?>
         </select>
       </div>
-      <div class="form-group col-md-3"><button class="btn btn-success" <?= $dates ? '' : 'disabled' ?>>Tampilkan Form Edit</button></div>
+      <div class="form-group col-md-3"><button class="btn btn-success" name="action" value="form" <?= $dates ? '' : 'disabled' ?>>Tampilkan Form Edit</button></div>
     </div>
   <?php endif; ?>
 </form>
 
-<?php if (isset($_GET['filter']) && !$dates): ?>
-  <div class="alert alert-info">Tidak ada tanggal input harian pada filter ini.</div>
+<?php if ($showDates && !$dates): ?>
+  <div class="alert alert-info" id="noDatesAlert">Tidak ada tanggal input harian pada filter ini.</div>
 <?php endif; ?>
 
 <?php if ($rows): ?>
@@ -357,7 +359,7 @@ render_header('Edit Harian');
   color: #111827;
 }
 </style>
-<form method="post" data-progress-submit data-progress-title="Menyimpan edit harian..." data-progress-text="Mohon tunggu, perubahan sedang disimpan.">
+<form method="post" id="editResult" data-progress-submit data-progress-title="Menyimpan edit harian..." data-progress-text="Mohon tunggu, perubahan sedang disimpan.">
   <input type="hidden" name="kab_id" value="<?= e($filters['kab_id']) ?>">
   <input type="hidden" name="kec_id" value="<?= e($filters['kec_id']) ?>">
   <input type="hidden" name="desa_id" value="<?= e($filters['desa_id']) ?>">
@@ -414,8 +416,8 @@ render_header('Edit Harian');
   </div>
   <button class="btn btn-success mb-4 mt-3">Edit Data Tanggal Ini</button>
 </form>
-<?php elseif (isset($_GET['filter']) && $date): ?>
-  <div class="alert alert-info">Tidak ada data harian pada tanggal dan filter ini.</div>
+<?php elseif ($showForm && $date): ?>
+  <div class="alert alert-info" id="noRowsAlert">Tidak ada data harian pada tanggal dan filter ini.</div>
 <?php endif; ?>
 
 <script>
@@ -424,6 +426,16 @@ document.querySelectorAll('.status-input').forEach(input => input.addEventListen
   tr.querySelector('.target').value = Array.from(tr.querySelectorAll('.status-input')).reduce((s, el) => s + Number(el.value || 0), 0);
 }));
 const kabupaten = document.getElementById('kab_id');
+function resetDateAndResult() {
+  const dateSection = document.getElementById('dateSection');
+  const editResult = document.getElementById('editResult');
+  const noDatesAlert = document.getElementById('noDatesAlert');
+  const noRowsAlert = document.getElementById('noRowsAlert');
+  if (dateSection) dateSection.style.display = 'none';
+  if (editResult) editResult.style.display = 'none';
+  if (noDatesAlert) noDatesAlert.style.display = 'none';
+  if (noRowsAlert) noRowsAlert.style.display = 'none';
+}
 if (kabupaten) {
   kabupaten.addEventListener('change', function () {
     document.getElementById('kec_id').value = '';
@@ -431,7 +443,7 @@ if (kabupaten) {
     const pengawas = document.getElementById('pengawas_email');
     if (pengawas) pengawas.value = '';
     document.getElementById('pencacah_email').value = '';
-    this.form.submit();
+    resetDateAndResult();
   });
 }
 document.getElementById('kec_id').addEventListener('change', function () {
@@ -439,20 +451,21 @@ document.getElementById('kec_id').addEventListener('change', function () {
   const pengawas = document.getElementById('pengawas_email');
   if (pengawas) pengawas.value = '';
   document.getElementById('pencacah_email').value = '';
-  this.form.submit();
+  resetDateAndResult();
 });
 document.getElementById('desa_id').addEventListener('change', function () {
   const pengawas = document.getElementById('pengawas_email');
   if (pengawas) pengawas.value = '';
   document.getElementById('pencacah_email').value = '';
-  this.form.submit();
+  resetDateAndResult();
 });
 const pengawas = document.getElementById('pengawas_email');
 if (pengawas) {
   pengawas.addEventListener('change', function () {
     document.getElementById('pencacah_email').value = '';
-    this.form.submit();
+    resetDateAndResult();
   });
 }
+document.getElementById('pencacah_email').addEventListener('change', resetDateAndResult);
 </script>
 <?php render_footer(); ?>
