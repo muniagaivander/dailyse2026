@@ -1,3 +1,2 @@
 RewriteEngine On
-RewriteRule ^6400/?$ public_dashboard.php?code=6400 [L,QSA]
-
+RewriteRule ^(6400|6401|6402|6403|6404|6405|6409|6411|6471|6472|6474)/?$ public_dashboard.php?code=$1 [L,QSA]

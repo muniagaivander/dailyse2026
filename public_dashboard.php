@@ -3,7 +3,7 @@ require_once __DIR__ . '/bootstrap.php';
 ensure_completion_status_table();
 
 $code = $_GET['code'] ?? '';
-if ($code !== '6400') {
+if (!preg_match('/^64(00|01|02|03|04|05|09|11|71|72|74)$/', $code)) {
     http_response_code(404);
     exit('Dashboard publik tidak ditemukan.');
 }
@@ -22,13 +22,48 @@ function public_count_pct_text(int $count, float $pct): string
     return number_format($count, 0, ',', '.') . ' (' . number_format($pct, 2, ',', '.') . '%)';
 }
 
-function public_dashboard_rows(array $fields): array
+function public_dashboard_context(string $code): array
+{
+    if ($code === '6400') {
+        return [
+            'title' => 'Dashboard Publik SE 2026',
+            'subtitle' => 'Provinsi Kalimantan Timur',
+            'group_label' => 'Kabupaten',
+            'where' => '',
+            'params' => [],
+            'label_expr' => "CONCAT(k.id,' - ',k.nmkab)",
+            'group_expr' => 'k.id, k.nmkab',
+            'order_expr' => 'k.id',
+        ];
+    }
+
+    $stmt = db()->prepare("SELECT id, nmkab FROM master_kab WHERE id=?");
+    $stmt->execute([$code]);
+    $kab = $stmt->fetch();
+    if (!$kab) {
+        http_response_code(404);
+        exit('Dashboard publik tidak ditemukan.');
+    }
+
+    return [
+        'title' => 'Dashboard Publik SE 2026',
+        'subtitle' => $kab['id'] . ' - ' . $kab['nmkab'],
+        'group_label' => 'Kecamatan',
+        'where' => 'WHERE k.id=?',
+        'params' => [$code],
+        'label_expr' => "CONCAT(kc.kdkec,' - ',kc.nmkec)",
+        'group_expr' => 'kc.id, kc.kdkec, kc.nmkec',
+        'order_expr' => 'kc.kdkec, kc.nmkec',
+    ];
+}
+
+function public_dashboard_rows(array $fields, array $context): array
 {
     $selects = [];
     foreach (array_keys($fields) as $field) {
         $selects[] = "COALESCE(SUM(ss.$field),0) $field";
     }
-    $stmt = db()->query("SELECT CONCAT(k.id,' - ',k.nmkab) label,
+    $stmt = db()->prepare("SELECT {$context['label_expr']} label,
             COALESCE(SUM(ss.target),0) target,
             " . implode(',', $selects) . ",
             COUNT(ms.id) subsls_total,
@@ -40,12 +75,15 @@ function public_dashboard_rows(array $fields): array
         JOIN master_kab k ON k.id=kc.kab_id
         LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
         LEFT JOIN subsls_completion_status cs ON cs.subsls_id=ms.id
-        GROUP BY k.id, k.nmkab
-        ORDER BY k.id");
+        {$context['where']}
+        GROUP BY {$context['group_expr']}
+        ORDER BY {$context['order_expr']}");
+    $stmt->execute($context['params']);
     return $stmt->fetchAll();
 }
 
-$rows = public_dashboard_rows($fields);
+$context = public_dashboard_context($code);
+$rows = public_dashboard_rows($fields, $context);
 $totals = array_fill_keys(array_merge(['target', 'subsls_total', 'selesai_count'], array_keys($fields)), 0);
 foreach ($rows as $row) {
     foreach ($totals as $key => $_) {
@@ -78,7 +116,7 @@ $cards = [
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Dashboard Publik SE 2026</title>
+  <title><?= e($context['title']) ?> | <?= e($context['subtitle']) ?></title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -148,8 +186,8 @@ $cards = [
     <img class="public-logo-se" src="assets/img/logo_Sensus_Ekonomi_2026.png" alt="Sensus Ekonomi 2026">
   </div>
   <div class="public-title text-md-right">
-    <h1>Dashboard Publik SE 2026</h1>
-    <span>Provinsi Kalimantan Timur</span>
+    <h1><?= e($context['title']) ?></h1>
+    <span><?= e($context['subtitle']) ?></span>
   </div>
 </header>
 
@@ -174,20 +212,20 @@ $cards = [
   <div class="row">
     <div class="col-lg-6">
       <div class="card">
-        <div class="card-header"><strong>Progress Submit+Approve per Kabupaten</strong></div>
+        <div class="card-header"><strong>Progress Submit+Approve per <?= e($context['group_label']) ?></strong></div>
         <div class="card-body"><div class="public-chart-wrap"><canvas id="submitApproveChart"></canvas></div></div>
       </div>
     </div>
     <div class="col-lg-6">
       <div class="card">
-        <div class="card-header"><strong>Progress Selesai SubSLS per Kabupaten</strong></div>
+        <div class="card-header"><strong>Progress Selesai SubSLS per <?= e($context['group_label']) ?></strong></div>
         <div class="card-body"><div class="public-chart-wrap"><canvas id="completionChart"></canvas></div></div>
       </div>
     </div>
   </div>
 
   <div class="card">
-    <div class="card-header"><strong>Progress By Status per Kabupaten</strong></div>
+    <div class="card-header"><strong>Progress By Status per <?= e($context['group_label']) ?></strong></div>
     <div class="card-body"><div class="public-chart-wrap public-chart-wide"><canvas id="statusChart"></canvas></div></div>
   </div>
 </main>

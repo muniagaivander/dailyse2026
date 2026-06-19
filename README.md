@@ -310,26 +310,49 @@ Sama seperti performa pengawas, tetapi agregasinya per pencacah.
 
 Selain dashboard login, aplikasi menyediakan dashboard publik read-only.
 
-URL publik:
+URL publik provinsi:
 
 ```text
 /6400
+```
+
+URL publik kabupaten:
+
+```text
+/6401
+/6402
+/6403
+/6404
+/6405
+/6409
+/6411
+/6471
+/6472
+/6474
 ```
 
 Contoh jika domain deploy:
 
 ```text
 https://dailyse2026.dataetam.com/6400
+https://dailyse2026.dataetam.com/6401
 ```
 
 Dashboard publik tidak membutuhkan login dan tidak menampilkan filter, form, upload, export, atau aksi tulis apa pun.
 
-Isi dashboard publik:
+Isi dashboard publik provinsi:
 
 - card rekap provinsi
 - progress Submit+Approve per kabupaten
 - progress Selesai SubSLS per kabupaten
 - progress By Status per kabupaten
+
+Isi dashboard publik kabupaten:
+
+- card rekap kabupaten
+- progress Submit+Approve per kecamatan
+- progress Selesai SubSLS per kecamatan
+- progress By Status per kecamatan
 
 File yang mengatur dashboard publik:
 
@@ -342,12 +365,15 @@ public_dashboard.php
 
 ```text
 /6400 -> public_dashboard.php?code=6400
+/6401 -> public_dashboard.php?code=6401
+...
 ```
 
 Jika server belum mengaktifkan rewrite/`.htaccess`, halaman masih bisa dicek langsung lewat:
 
 ```text
 public_dashboard.php?code=6400
+public_dashboard.php?code=6401
 ```
 
 ### Input Harian
