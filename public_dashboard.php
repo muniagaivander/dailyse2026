@@ -209,6 +209,11 @@ $cards = [
     <?php foreach ($rangeColors as $item): ?><span><i style="background:<?= e($item['color']) ?>"></i><?= e($item['label']) ?></span><?php endforeach; ?>
   </div>
 
+  <div class="card">
+    <div class="card-header"><strong>Progress By Status per <?= e($context['group_label']) ?></strong></div>
+    <div class="card-body"><div class="public-chart-wrap public-chart-wide"><canvas id="statusChart"></canvas></div></div>
+  </div>
+
   <div class="row">
     <div class="col-lg-6">
       <div class="card">
@@ -222,11 +227,6 @@ $cards = [
         <div class="card-body"><div class="public-chart-wrap"><canvas id="completionChart"></canvas></div></div>
       </div>
     </div>
-  </div>
-
-  <div class="card">
-    <div class="card-header"><strong>Progress By Status per <?= e($context['group_label']) ?></strong></div>
-    <div class="card-body"><div class="public-chart-wrap public-chart-wide"><canvas id="statusChart"></canvas></div></div>
   </div>
 </main>
 
