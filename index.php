@@ -521,6 +521,13 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
   justify-content: flex-end;
   margin-top: 10px;
 }
+.dashboard-chart-wrap {
+  height: 420px;
+  position: relative;
+}
+@media (max-width: 767.98px) {
+  .dashboard-chart-wrap { height: 340px; }
+}
 </style>
 
 <div class="dashboard-tabs">
@@ -631,7 +638,7 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
   </div>
 <?php endif; ?>
 
-<div class="card"><div class="card-body"><canvas id="dashboardChart" height="120"></canvas></div></div>
+<div class="card"><div class="card-body"><div class="dashboard-chart-wrap"><canvas id="dashboardChart"></canvas></div></div></div>
 <script>
 const rows = <?= json_encode($chartRows) ?>;
 const fields = <?= json_encode(array_keys($fields)) ?>;
@@ -661,7 +668,7 @@ const config = activeTab === 'status'
           backgroundColor: statusColors[i]
         }))
       },
-      options: { animation:false, responsive:true, scales:{ x:{stacked:true}, y:{stacked:true, min:0, max:100, ticks:{callback:v=>v+'%'}} } }
+      options: { animation:false, maintainAspectRatio:false, responsive:true, scales:{ x:{stacked:true}, y:{stacked:true, min:0, max:100, ticks:{callback:v=>v+'%'}} } }
     }
   : {
       type: 'bar',
@@ -673,7 +680,7 @@ const config = activeTab === 'status'
           backgroundColor: percentRows.map(r => pctColor(activeTab === 'selesai' ? r.selesai : r.submitApprove))
         }]
       },
-      options: { animation:false, responsive:true, scales:{ y:{min:0,max:100,ticks:{callback:v=>v+'%'}} } }
+      options: { animation:false, maintainAspectRatio:false, responsive:true, scales:{ y:{min:0,max:100,ticks:{callback:v=>v+'%'}} } }
     };
 new Chart(document.getElementById('dashboardChart'), config);
 

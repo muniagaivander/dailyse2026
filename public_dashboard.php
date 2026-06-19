@@ -127,10 +127,17 @@ $cards = [
       height: 10px;
       width: 10px;
     }
+    .public-chart-wrap {
+      height: 380px;
+      position: relative;
+    }
+    .public-chart-wrap.public-chart-wide { height: 430px; }
     @media (max-width: 767.98px) {
       .public-logo-bps { max-width: 210px; }
       .public-logo-se { max-width: 125px; }
       .content-wrap { padding: 12px; }
+      .public-chart-wrap,
+      .public-chart-wrap.public-chart-wide { height: 330px; }
     }
   </style>
 </head>
@@ -168,20 +175,20 @@ $cards = [
     <div class="col-lg-6">
       <div class="card">
         <div class="card-header"><strong>Progress Submit+Approve per Kabupaten</strong></div>
-        <div class="card-body"><canvas id="submitApproveChart" height="180"></canvas></div>
+        <div class="card-body"><div class="public-chart-wrap"><canvas id="submitApproveChart"></canvas></div></div>
       </div>
     </div>
     <div class="col-lg-6">
       <div class="card">
         <div class="card-header"><strong>Progress Selesai SubSLS per Kabupaten</strong></div>
-        <div class="card-body"><canvas id="completionChart" height="180"></canvas></div>
+        <div class="card-body"><div class="public-chart-wrap"><canvas id="completionChart"></canvas></div></div>
       </div>
     </div>
   </div>
 
   <div class="card">
     <div class="card-header"><strong>Progress By Status per Kabupaten</strong></div>
-    <div class="card-body"><canvas id="statusChart" height="140"></canvas></div>
+    <div class="card-body"><div class="public-chart-wrap public-chart-wide"><canvas id="statusChart"></canvas></div></div>
   </div>
 </main>
 
@@ -218,7 +225,7 @@ new Chart(document.getElementById('submitApproveChart'), {
       backgroundColor: submitApprove.map(pctColor)
     }]
   },
-  options: { animation: false, responsive: true, scales: { y: { min: 0, max: 100, ticks: { callback: value => value + '%' } } } }
+  options: { animation: false, maintainAspectRatio: false, responsive: true, scales: { y: { min: 0, max: 100, ticks: { callback: value => value + '%' } } } }
 });
 
 new Chart(document.getElementById('completionChart'), {
@@ -231,7 +238,7 @@ new Chart(document.getElementById('completionChart'), {
       backgroundColor: completion.map(pctColor)
     }]
   },
-  options: { animation: false, responsive: true, scales: { y: { min: 0, max: 100, ticks: { callback: value => value + '%' } } } }
+  options: { animation: false, maintainAspectRatio: false, responsive: true, scales: { y: { min: 0, max: 100, ticks: { callback: value => value + '%' } } } }
 });
 
 new Chart(document.getElementById('statusChart'), {
@@ -246,6 +253,7 @@ new Chart(document.getElementById('statusChart'), {
   },
   options: {
     animation: false,
+    maintainAspectRatio: false,
     responsive: true,
     scales: {
       x: { stacked: true },
