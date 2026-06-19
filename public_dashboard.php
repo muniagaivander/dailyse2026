@@ -34,9 +34,11 @@ function public_dashboard_context(string $code): array
             'title' => 'Dashboard Publik SE 2026',
             'subtitle' => '6400 - Provinsi Kalimantan Timur',
             'group_label' => 'Kabupaten',
+            'table_label' => 'Kabupaten',
+            'total_label' => 'Total 6400 - Provinsi Kalimantan Timur',
             'where' => '',
             'params' => [],
-            'label_expr' => "CONCAT(k.id,' - ',k.nmkab)",
+            'label_expr' => "CONCAT(k.id,' - Kabupaten ',k.nmkab)",
             'group_expr' => 'k.id, k.nmkab',
             'order_expr' => 'k.id',
         ];
@@ -54,6 +56,8 @@ function public_dashboard_context(string $code): array
         'title' => 'Dashboard Publik SE 2026',
         'subtitle' => $kab['id'] . ' - ' . $kab['nmkab'],
         'group_label' => 'Kecamatan',
+        'table_label' => 'Kecamatan',
+        'total_label' => 'Total ' . $kab['id'] . ' - ' . $kab['nmkab'],
         'where' => 'WHERE k.id=?',
         'params' => [$code],
         'label_expr' => "CONCAT(kc.kdkec,' - ',kc.nmkec)",
@@ -189,6 +193,14 @@ $cards = [
       position: relative;
     }
     .public-chart-wrap.public-chart-wide { height: 430px; }
+    .public-summary-table th,
+    .public-summary-table td {
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    .public-summary-table tfoot td {
+      font-weight: 800;
+    }
     @media (max-width: 767.98px) {
       .public-header {
         grid-template-columns: 1fr;
@@ -253,6 +265,56 @@ $cards = [
         <div class="card-header"><strong>Progress Selesai SubSLS per <?= e($context['group_label']) ?></strong></div>
         <div class="card-body"><div class="public-chart-wrap"><canvas id="completionChart"></canvas></div></div>
       </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><strong>Tabel Ringkasan per <?= e($context['group_label']) ?></strong></div>
+    <div class="card-body table-responsive p-0">
+      <table class="table table-sm table-bordered table-striped mb-0 public-summary-table">
+        <thead>
+          <tr>
+            <th><?= e($context['table_label']) ?></th>
+            <th class="text-right">Target</th>
+            <th class="text-right">Open</th>
+            <th class="text-right">Submit</th>
+            <th class="text-right">Reject</th>
+            <th class="text-right">Pending</th>
+            <th class="text-right">Approve</th>
+            <th class="text-right">Submit+Approve</th>
+            <th class="text-right">Jumlah SubSLS Selesai</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php foreach ($rows as $row): ?>
+            <?php $submitApproveCount = (int)$row['submitted_by_pencacah'] + (int)$row['approved_by_pengawas']; ?>
+            <tr>
+              <td><?= e($row['label']) ?></td>
+              <td class="text-right"><?= number_format((int)$row['target'], 0, ',', '.') ?></td>
+              <td class="text-right"><?= number_format((int)$row['open_count'], 0, ',', '.') ?></td>
+              <td class="text-right"><?= number_format((int)$row['submitted_by_pencacah'], 0, ',', '.') ?></td>
+              <td class="text-right"><?= number_format((int)$row['rejected_by_pengawas'], 0, ',', '.') ?></td>
+              <td class="text-right"><?= number_format((int)$row['draft_count'], 0, ',', '.') ?></td>
+              <td class="text-right"><?= number_format((int)$row['approved_by_pengawas'], 0, ',', '.') ?></td>
+              <td class="text-right"><?= number_format($submitApproveCount, 0, ',', '.') ?></td>
+              <td class="text-right"><?= number_format((int)$row['selesai_count'], 0, ',', '.') ?></td>
+            </tr>
+          <?php endforeach; ?>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td><?= e($context['total_label']) ?></td>
+            <td class="text-right"><?= number_format((int)$totals['target'], 0, ',', '.') ?></td>
+            <td class="text-right"><?= number_format((int)$totals['open_count'], 0, ',', '.') ?></td>
+            <td class="text-right"><?= number_format((int)$totals['submitted_by_pencacah'], 0, ',', '.') ?></td>
+            <td class="text-right"><?= number_format((int)$totals['rejected_by_pengawas'], 0, ',', '.') ?></td>
+            <td class="text-right"><?= number_format((int)$totals['draft_count'], 0, ',', '.') ?></td>
+            <td class="text-right"><?= number_format((int)$totals['approved_by_pengawas'], 0, ',', '.') ?></td>
+            <td class="text-right"><?= number_format((int)$totals['submitted_by_pencacah'] + (int)$totals['approved_by_pengawas'], 0, ',', '.') ?></td>
+            <td class="text-right"><?= number_format((int)$totals['selesai_count'], 0, ',', '.') ?></td>
+          </tr>
+        </tfoot>
+      </table>
     </div>
   </div>
 </main>
