@@ -609,13 +609,13 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
   $targetTotal = (int)$totals['target'];
   $dashboardCards = [
       ['label' => 'Target', 'value' => number_format($targetTotal, 0, ',', '.')],
-      ['label' => 'Count Open', 'value' => dashboard_count_pct_text((int)$totals['open_count'], $targetTotal ? (int)$totals['open_count'] / $targetTotal * 100 : 0)],
-      ['label' => 'Count Submit', 'value' => dashboard_count_pct_text((int)$totals['submitted_by_pencacah'], $targetTotal ? (int)$totals['submitted_by_pencacah'] / $targetTotal * 100 : 0)],
-      ['label' => 'Count Reject', 'value' => dashboard_count_pct_text((int)$totals['rejected_by_pengawas'], $targetTotal ? (int)$totals['rejected_by_pengawas'] / $targetTotal * 100 : 0)],
-      ['label' => 'Count Pending', 'value' => dashboard_count_pct_text((int)$totals['draft_count'], $targetTotal ? (int)$totals['draft_count'] / $targetTotal * 100 : 0)],
-      ['label' => 'Count Approve', 'value' => dashboard_count_pct_text((int)$totals['approved_by_pengawas'], $targetTotal ? (int)$totals['approved_by_pengawas'] / $targetTotal * 100 : 0)],
+      ['label' => 'Open', 'value' => dashboard_count_pct_text((int)$totals['open_count'], $targetTotal ? (int)$totals['open_count'] / $targetTotal * 100 : 0)],
+      ['label' => 'Submit', 'value' => dashboard_count_pct_text((int)$totals['submitted_by_pencacah'], $targetTotal ? (int)$totals['submitted_by_pencacah'] / $targetTotal * 100 : 0)],
+      ['label' => 'Reject', 'value' => dashboard_count_pct_text((int)$totals['rejected_by_pengawas'], $targetTotal ? (int)$totals['rejected_by_pengawas'] / $targetTotal * 100 : 0)],
+      ['label' => 'Pending', 'value' => dashboard_count_pct_text((int)$totals['draft_count'], $targetTotal ? (int)$totals['draft_count'] / $targetTotal * 100 : 0)],
+      ['label' => 'Approve', 'value' => dashboard_count_pct_text((int)$totals['approved_by_pengawas'], $targetTotal ? (int)$totals['approved_by_pengawas'] / $targetTotal * 100 : 0)],
       ['label' => 'Persen Submit+Approve', 'value' => number_format($submitApprovePct, 2, ',', '.') . '%'],
-      ['label' => 'Count Selesai', 'value' => dashboard_count_pct_text((int)$totals['selesai_count'], $completionPct)],
+      ['label' => 'Selesai', 'value' => dashboard_count_pct_text((int)$totals['selesai_count'], $completionPct)],
       ['label' => 'Total SubSLS', 'value' => number_format((int)$totals['subsls_total'], 0, ',', '.')],
   ];
 ?>

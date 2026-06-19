@@ -101,13 +101,13 @@ $completionPct = (int)$totals['subsls_total'] > 0
 
 $cards = [
     ['label' => 'Target', 'value' => number_format($targetTotal, 0, ',', '.')],
-    ['label' => 'Count Open', 'value' => public_count_pct_text((int)$totals['open_count'], $targetTotal ? (int)$totals['open_count'] / $targetTotal * 100 : 0)],
-    ['label' => 'Count Submit', 'value' => public_count_pct_text((int)$totals['submitted_by_pencacah'], $targetTotal ? (int)$totals['submitted_by_pencacah'] / $targetTotal * 100 : 0)],
-    ['label' => 'Count Reject', 'value' => public_count_pct_text((int)$totals['rejected_by_pengawas'], $targetTotal ? (int)$totals['rejected_by_pengawas'] / $targetTotal * 100 : 0)],
-    ['label' => 'Count Pending', 'value' => public_count_pct_text((int)$totals['draft_count'], $targetTotal ? (int)$totals['draft_count'] / $targetTotal * 100 : 0)],
-    ['label' => 'Count Approve', 'value' => public_count_pct_text((int)$totals['approved_by_pengawas'], $targetTotal ? (int)$totals['approved_by_pengawas'] / $targetTotal * 100 : 0)],
+    ['label' => 'Open', 'value' => public_count_pct_text((int)$totals['open_count'], $targetTotal ? (int)$totals['open_count'] / $targetTotal * 100 : 0)],
+    ['label' => 'Submit', 'value' => public_count_pct_text((int)$totals['submitted_by_pencacah'], $targetTotal ? (int)$totals['submitted_by_pencacah'] / $targetTotal * 100 : 0)],
+    ['label' => 'Reject', 'value' => public_count_pct_text((int)$totals['rejected_by_pengawas'], $targetTotal ? (int)$totals['rejected_by_pengawas'] / $targetTotal * 100 : 0)],
+    ['label' => 'Pending', 'value' => public_count_pct_text((int)$totals['draft_count'], $targetTotal ? (int)$totals['draft_count'] / $targetTotal * 100 : 0)],
+    ['label' => 'Approve', 'value' => public_count_pct_text((int)$totals['approved_by_pengawas'], $targetTotal ? (int)$totals['approved_by_pengawas'] / $targetTotal * 100 : 0)],
     ['label' => 'Persen Submit+Approve', 'value' => number_format($submitApprovePct, 2, ',', '.') . '%'],
-    ['label' => 'Count Selesai', 'value' => public_count_pct_text((int)$totals['selesai_count'], $completionPct)],
+    ['label' => 'Selesai', 'value' => public_count_pct_text((int)$totals['selesai_count'], $completionPct)],
     ['label' => 'Total SubSLS', 'value' => number_format((int)$totals['subsls_total'], 0, ',', '.')],
 ];
 ?>
