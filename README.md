@@ -340,6 +340,26 @@ https://dailyse2026.dataetam.com/6401
 
 Dashboard publik tidak membutuhkan login dan tidak menampilkan filter, form, upload, export, atau aksi tulis apa pun.
 
+Dashboard publik membaca snapshot dari:
+
+```text
+cache/public_dashboard.json
+```
+
+File snapshot ini dibuat dari menu superadmin:
+
+```text
+Update Dashboard Publik
+```
+
+Jadi halaman publik tidak query database setiap kali diakses. Data publik hanya berubah setelah superadmin menekan tombol update.
+
+Di header dashboard publik ditampilkan keterangan:
+
+```text
+Update terakhir: 17 Juni 2026 14:00 WITA
+```
+
 Isi dashboard publik provinsi:
 
 - card rekap provinsi
@@ -358,6 +378,7 @@ File yang mengatur dashboard publik:
 
 ```text
 public_dashboard.php
+public_dashboard_update.php
 .htaccess
 ```
 

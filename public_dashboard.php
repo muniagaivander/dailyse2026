@@ -1,21 +1,19 @@
 <?php
-require_once __DIR__ . '/bootstrap.php';
-ensure_completion_status_table();
-
 $code = $_GET['code'] ?? '';
 if (!preg_match('/^64(00|01|02|03|04|05|09|11|71|72|74)$/', $code)) {
     http_response_code(404);
     exit('Dashboard publik tidak ditemukan.');
 }
 
-$fields = status_fields();
-$statusColors = ['#2563eb', '#16a34a', '#dc2626', '#f59e0b', '#0f766e'];
-$rangeColors = [
-    ['label' => '< 20%', 'color' => '#dc2626'],
-    ['label' => '20% - < 40%', 'color' => '#f59e0b'],
-    ['label' => '40% - < 75%', 'color' => '#2563eb'],
-    ['label' => '75% - 100%', 'color' => '#16a34a'],
-];
+function e($value): string
+{
+    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
+}
+
+function public_dashboard_cache_path(): string
+{
+    return __DIR__ . '/cache/public_dashboard.json';
+}
 
 function public_count_pct_text(int $count, float $pct): string
 {
@@ -27,97 +25,54 @@ function public_count_only_text(int $count): string
     return '<span class="d-block">' . number_format($count, 0, ',', '.') . '</span><span class="d-block">&nbsp;</span>';
 }
 
-function public_dashboard_context(string $code): array
-{
-    if ($code === '6400') {
-        return [
-            'title' => 'Dashboard Publik SE 2026',
-            'subtitle' => '6400 - Provinsi Kalimantan Timur',
-            'group_label' => 'Kabupaten',
-            'table_label' => 'Kabupaten',
-            'total_label' => 'Total 6400 - Provinsi Kalimantan Timur',
-            'where' => '',
-            'params' => [],
-            'label_expr' => "CONCAT(k.id,' - Kabupaten ',k.nmkab)",
-            'group_expr' => 'k.id, k.nmkab',
-            'order_expr' => 'k.id',
-        ];
-    }
+$cache = is_file(public_dashboard_cache_path())
+    ? json_decode((string)file_get_contents(public_dashboard_cache_path()), true)
+    : null;
 
-    $stmt = db()->prepare("SELECT id, nmkab FROM master_kab WHERE id=?");
-    $stmt->execute([$code]);
-    $kab = $stmt->fetch();
-    if (!$kab) {
-        http_response_code(404);
-        exit('Dashboard publik tidak ditemukan.');
-    }
-
-    return [
+if (!$cache || empty($cache['dashboards'][$code])) {
+    http_response_code(503);
+    $context = [
         'title' => 'Dashboard Publik SE 2026',
-        'subtitle' => $kab['id'] . ' - ' . $kab['nmkab'],
-        'group_label' => 'Kecamatan',
-        'table_label' => 'Kecamatan',
-        'total_label' => 'Total ' . $kab['id'] . ' - ' . $kab['nmkab'],
-        'where' => 'WHERE k.id=?',
-        'params' => [$code],
-        'label_expr' => "CONCAT(kc.kdkec,' - ',kc.nmkec)",
-        'group_expr' => 'kc.id, kc.kdkec, kc.nmkec',
-        'order_expr' => 'kc.kdkec, kc.nmkec',
+        'subtitle' => $code === '6400' ? '6400 - Provinsi Kalimantan Timur' : $code,
+        'group_label' => $code === '6400' ? 'Kabupaten' : 'Kecamatan',
+        'table_label' => $code === '6400' ? 'Kabupaten' : 'Kecamatan',
+        'total_label' => 'Total',
     ];
+    $cacheMissing = true;
+    $fields = [];
+    $statusColors = [];
+    $rangeColors = [];
+    $rows = [];
+    $totals = [];
+} else {
+    $cacheMissing = false;
+    $dashboard = $cache['dashboards'][$code];
+    $context = $dashboard['context'];
+    $rows = $dashboard['rows'];
+    $totals = $dashboard['totals'];
+    $fields = $cache['fields'];
+    $statusColors = $cache['status_colors'];
+    $rangeColors = $cache['range_colors'];
 }
 
-function public_dashboard_rows(array $fields, array $context): array
-{
-    $selects = [];
-    foreach (array_keys($fields) as $field) {
-        $selects[] = "COALESCE(SUM(ss.$field),0) $field";
-    }
-    $stmt = db()->prepare("SELECT {$context['label_expr']} label,
-            COALESCE(SUM(ss.target),0) target,
-            " . implode(',', $selects) . ",
-            COUNT(ms.id) subsls_total,
-            COALESCE(SUM(CASE WHEN cs.status_selesai='Selesai' THEN 1 ELSE 0 END),0) selesai_count
-        FROM master_subsls ms
-        JOIN master_sls sl ON sl.id=ms.sls_id
-        JOIN master_desa d ON d.id=sl.desa_id
-        JOIN master_kec kc ON kc.id=d.kec_id
-        JOIN master_kab k ON k.id=kc.kab_id
-        LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
-        LEFT JOIN subsls_completion_status cs ON cs.subsls_id=ms.id
-        {$context['where']}
-        GROUP BY {$context['group_expr']}
-        ORDER BY {$context['order_expr']}");
-    $stmt->execute($context['params']);
-    return $stmt->fetchAll();
-}
-
-$context = public_dashboard_context($code);
-$rows = public_dashboard_rows($fields, $context);
-$totals = array_fill_keys(array_merge(['target', 'subsls_total', 'selesai_count'], array_keys($fields)), 0);
-foreach ($rows as $row) {
-    foreach ($totals as $key => $_) {
-        $totals[$key] += (int)($row[$key] ?? 0);
-    }
-}
-
-$targetTotal = (int)$totals['target'];
+$targetTotal = (int)($totals['target'] ?? 0);
 $submitApprovePct = $targetTotal > 0
-    ? round(((int)$totals['submitted_by_pencacah'] + (int)$totals['approved_by_pengawas']) / $targetTotal * 100, 2)
+    ? round(((int)($totals['submitted_by_pencacah'] ?? 0) + (int)($totals['approved_by_pengawas'] ?? 0)) / $targetTotal * 100, 2)
     : 0;
-$completionPct = (int)$totals['subsls_total'] > 0
-    ? round((int)$totals['selesai_count'] / (int)$totals['subsls_total'] * 100, 2)
+$completionPct = (int)($totals['subsls_total'] ?? 0) > 0
+    ? round((int)($totals['selesai_count'] ?? 0) / (int)$totals['subsls_total'] * 100, 2)
     : 0;
 
 $cards = [
     ['label' => 'Target', 'value' => public_count_only_text($targetTotal)],
-    ['label' => 'Open', 'value' => public_count_pct_text((int)$totals['open_count'], $targetTotal ? (int)$totals['open_count'] / $targetTotal * 100 : 0)],
-    ['label' => 'Submit', 'value' => public_count_pct_text((int)$totals['submitted_by_pencacah'], $targetTotal ? (int)$totals['submitted_by_pencacah'] / $targetTotal * 100 : 0)],
-    ['label' => 'Reject', 'value' => public_count_pct_text((int)$totals['rejected_by_pengawas'], $targetTotal ? (int)$totals['rejected_by_pengawas'] / $targetTotal * 100 : 0)],
-    ['label' => 'Pending', 'value' => public_count_pct_text((int)$totals['draft_count'], $targetTotal ? (int)$totals['draft_count'] / $targetTotal * 100 : 0)],
-    ['label' => 'Approve', 'value' => public_count_pct_text((int)$totals['approved_by_pengawas'], $targetTotal ? (int)$totals['approved_by_pengawas'] / $targetTotal * 100 : 0)],
-    ['label' => 'Submit+Approve', 'value' => public_count_pct_text((int)$totals['submitted_by_pencacah'] + (int)$totals['approved_by_pengawas'], $submitApprovePct)],
-    ['label' => 'Selesai', 'value' => public_count_pct_text((int)$totals['selesai_count'], $completionPct)],
-    ['label' => 'Total SubSLS', 'value' => public_count_only_text((int)$totals['subsls_total'])],
+    ['label' => 'Open', 'value' => public_count_pct_text((int)($totals['open_count'] ?? 0), $targetTotal ? (int)($totals['open_count'] ?? 0) / $targetTotal * 100 : 0)],
+    ['label' => 'Submit', 'value' => public_count_pct_text((int)($totals['submitted_by_pencacah'] ?? 0), $targetTotal ? (int)($totals['submitted_by_pencacah'] ?? 0) / $targetTotal * 100 : 0)],
+    ['label' => 'Reject', 'value' => public_count_pct_text((int)($totals['rejected_by_pengawas'] ?? 0), $targetTotal ? (int)($totals['rejected_by_pengawas'] ?? 0) / $targetTotal * 100 : 0)],
+    ['label' => 'Pending', 'value' => public_count_pct_text((int)($totals['draft_count'] ?? 0), $targetTotal ? (int)($totals['draft_count'] ?? 0) / $targetTotal * 100 : 0)],
+    ['label' => 'Approve', 'value' => public_count_pct_text((int)($totals['approved_by_pengawas'] ?? 0), $targetTotal ? (int)($totals['approved_by_pengawas'] ?? 0) / $targetTotal * 100 : 0)],
+    ['label' => 'Submit+Approve', 'value' => public_count_pct_text((int)($totals['submitted_by_pencacah'] ?? 0) + (int)($totals['approved_by_pengawas'] ?? 0), $submitApprovePct)],
+    ['label' => 'Selesai', 'value' => public_count_pct_text((int)($totals['selesai_count'] ?? 0), $completionPct)],
+    ['label' => 'Total SubSLS', 'value' => public_count_only_text((int)($totals['subsls_total'] ?? 0))],
 ];
 ?>
 <!doctype html>
@@ -167,6 +122,12 @@ $cards = [
       font-size: 1.45rem;
       font-weight: 800;
       line-height: 1.15;
+    }
+    .public-updated-at {
+      color: #4b5563;
+      font-size: .86rem;
+      font-weight: 600;
+      margin-top: 2px;
     }
     .content-wrap { margin: 0 auto; max-width: 1380px; padding: 18px; }
     .small-box .inner h4 { font-weight: 700; }
@@ -223,6 +184,9 @@ $cards = [
   <h1><?= e($context['title']) ?></h1>
   <div class="public-title">
     <span><?= e($context['subtitle']) ?></span>
+    <div class="public-updated-at">
+      Update terakhir: <?= e($cache['generated_at_label'] ?? 'belum tersedia') ?>
+    </div>
   </div>
   <div class="public-logo-group">
     <img class="public-logo-bps" src="assets/img/logo-bps-kaltim.png" alt="BPS Provinsi Kalimantan Timur">
@@ -231,6 +195,11 @@ $cards = [
 </header>
 
 <main class="content-wrap">
+<?php if ($cacheMissing): ?>
+  <div class="alert alert-warning mb-0">
+    Dashboard publik belum tersedia. Superadmin perlu membuka menu <strong>Update Dashboard Publik</strong> dan menekan tombol update terlebih dahulu.
+  </div>
+<?php else: ?>
   <div class="row">
     <?php foreach ($cards as $card): ?>
       <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6">
@@ -317,6 +286,7 @@ $cards = [
       </table>
     </div>
   </div>
+<?php endif; ?>
 </main>
 
 <script>
