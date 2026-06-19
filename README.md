@@ -354,20 +354,6 @@ Update Dashboard Publik
 
 Jadi halaman publik tidak query database setiap kali diakses. Data publik hanya berubah setelah superadmin menekan tombol update.
 
-Selain tombol manual, snapshot juga bisa dibuat otomatis lewat cron server dengan menjalankan:
-
-```bash
-php /path/to/dailyse2026/public_dashboard_update.php
-```
-
-Contoh jadwal cron untuk update otomatis jam 06:00, 09:00, 12:00, dan 18:00 WITA:
-
-```cron
-0 6,9,12,18 * * * php /path/to/dailyse2026/public_dashboard_update.php
-```
-
-Sesuaikan `/path/to/dailyse2026` dengan lokasi aplikasi di server. Pastikan timezone server/cron sudah WITA atau jadwal cron dikonversi sesuai timezone server.
-
 Di header dashboard publik ditampilkan keterangan:
 
 ```text

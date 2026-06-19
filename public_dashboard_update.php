@@ -1,5 +1,6 @@
 <?php
-require_once __DIR__ . '/bootstrap.php';
+require __DIR__ . '/layout.php';
+$user = require_role(['superadmin']);
 ensure_completion_status_table();
 
 function public_dashboard_codes(): array
@@ -149,20 +150,6 @@ function public_dashboard_generate_cache(string $email): array
     );
     return $payload;
 }
-
-if (PHP_SAPI === 'cli') {
-    try {
-        $payload = public_dashboard_generate_cache('cron');
-        echo 'Dashboard publik berhasil di-update: ' . ($payload['generated_at_label'] ?? '-') . PHP_EOL;
-        exit(0);
-    } catch (Throwable $e) {
-        fwrite(STDERR, 'Gagal update dashboard publik: ' . $e->getMessage() . PHP_EOL);
-        exit(1);
-    }
-}
-
-require __DIR__ . '/layout.php';
-$user = require_role(['superadmin']);
 
 $cacheExists = is_file(public_dashboard_cache_path());
 $cacheInfo = null;
