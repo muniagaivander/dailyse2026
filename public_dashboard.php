@@ -128,31 +128,39 @@ $cards = [
   <style>
     body { background: #f3f4f6; }
     .public-header {
+      align-items: center;
       background: #fff;
       border-bottom: 1px solid #e5e7eb;
+      display: grid;
+      gap: 12px;
+      grid-template-columns: minmax(190px, 1fr) auto minmax(220px, 1fr);
       padding: 14px 18px;
-      text-align: center;
     }
     .public-logo-group {
       align-items: center;
       display: flex;
       flex-wrap: wrap;
-      gap: 14px;
-      justify-content: center;
-      margin-bottom: 8px;
+      gap: 10px;
+      justify-content: flex-end;
     }
-    .public-logo-bps { max-height: 48px; max-width: 300px; object-fit: contain; }
-    .public-logo-se { max-height: 54px; max-width: 180px; object-fit: contain; }
-    .public-title h1 {
+    .public-logo-bps { max-height: 34px; max-width: 220px; object-fit: contain; }
+    .public-logo-se { max-height: 38px; max-width: 125px; object-fit: contain; }
+    .public-title {
+      min-width: 260px;
+      text-align: center;
+    }
+    .public-header > h1 {
       color: #111827;
-      font-size: 1.15rem;
+      font-size: 1rem;
       font-weight: 700;
-      margin: 0 0 2px;
+      justify-self: start;
+      margin: 0;
+      text-align: left;
     }
     .public-title span {
       color: #111827;
       display: block;
-      font-size: 1.85rem;
+      font-size: 1.45rem;
       font-weight: 800;
       line-height: 1.15;
     }
@@ -182,8 +190,15 @@ $cards = [
     }
     .public-chart-wrap.public-chart-wide { height: 430px; }
     @media (max-width: 767.98px) {
+      .public-header {
+        grid-template-columns: 1fr;
+        text-align: center;
+      }
       .public-logo-bps { max-width: 210px; }
       .public-logo-se { max-width: 125px; }
+      .public-logo-group { justify-content: center; }
+      .public-title { min-width: 0; }
+      .public-header > h1 { justify-self: center; text-align: center; }
       .content-wrap { padding: 12px; }
       .public-title span { font-size: 1.35rem; }
       .public-chart-wrap,
@@ -193,13 +208,13 @@ $cards = [
 </head>
 <body>
 <header class="public-header">
+  <h1><?= e($context['title']) ?></h1>
+  <div class="public-title">
+    <span><?= e($context['subtitle']) ?></span>
+  </div>
   <div class="public-logo-group">
     <img class="public-logo-bps" src="assets/img/logo-bps-kaltim.png" alt="BPS Provinsi Kalimantan Timur">
     <img class="public-logo-se" src="assets/img/logo_Sensus_Ekonomi_2026.png" alt="Sensus Ekonomi 2026">
-  </div>
-  <div class="public-title">
-    <h1><?= e($context['title']) ?></h1>
-    <span><?= e($context['subtitle']) ?></span>
   </div>
 </header>
 
