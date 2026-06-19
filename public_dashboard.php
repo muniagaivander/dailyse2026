@@ -32,7 +32,7 @@ function public_dashboard_context(string $code): array
     if ($code === '6400') {
         return [
             'title' => 'Dashboard Publik SE 2026',
-            'subtitle' => 'Provinsi Kalimantan Timur',
+            'subtitle' => '6400 - Provinsi Kalimantan Timur',
             'group_label' => 'Kabupaten',
             'where' => '',
             'params' => [],
@@ -128,28 +128,34 @@ $cards = [
   <style>
     body { background: #f3f4f6; }
     .public-header {
-      align-items: center;
       background: #fff;
       border-bottom: 1px solid #e5e7eb;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 14px;
-      justify-content: space-between;
       padding: 14px 18px;
+      text-align: center;
     }
     .public-logo-group {
       align-items: center;
       display: flex;
       flex-wrap: wrap;
       gap: 14px;
+      justify-content: center;
+      margin-bottom: 8px;
     }
     .public-logo-bps { max-height: 48px; max-width: 300px; object-fit: contain; }
     .public-logo-se { max-height: 54px; max-width: 180px; object-fit: contain; }
     .public-title h1 {
-      font-size: 1.25rem;
-      margin: 0;
+      color: #111827;
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin: 0 0 2px;
     }
-    .public-title span { color: #6b7280; font-size: .9rem; }
+    .public-title span {
+      color: #111827;
+      display: block;
+      font-size: 1.85rem;
+      font-weight: 800;
+      line-height: 1.15;
+    }
     .content-wrap { margin: 0 auto; max-width: 1380px; padding: 18px; }
     .small-box .inner h4 { font-weight: 700; }
     .range-legend {
@@ -179,6 +185,7 @@ $cards = [
       .public-logo-bps { max-width: 210px; }
       .public-logo-se { max-width: 125px; }
       .content-wrap { padding: 12px; }
+      .public-title span { font-size: 1.35rem; }
       .public-chart-wrap,
       .public-chart-wrap.public-chart-wide { height: 330px; }
     }
@@ -190,7 +197,7 @@ $cards = [
     <img class="public-logo-bps" src="assets/img/logo-bps-kaltim.png" alt="BPS Provinsi Kalimantan Timur">
     <img class="public-logo-se" src="assets/img/logo_Sensus_Ekonomi_2026.png" alt="Sensus Ekonomi 2026">
   </div>
-  <div class="public-title text-md-right">
+  <div class="public-title">
     <h1><?= e($context['title']) ?></h1>
     <span><?= e($context['subtitle']) ?></span>
   </div>
