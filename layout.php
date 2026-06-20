@@ -147,12 +147,15 @@ function render_header(string $title): void {
               <li class="nav-item"><a class="nav-link<?= $currentPage === 'progress.php' && ($_GET['type'] ?? 'pengawas') !== 'pencacah' ? ' active' : '' ?>" href="progress.php?type=pengawas"><i class="nav-icon fas fa-user-check"></i><p>Progress Pengawas</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $currentPage === 'progress.php' && ($_GET['type'] ?? '') === 'pencacah' ? ' active' : '' ?>" href="progress.php?type=pencacah"><i class="nav-icon fas fa-users"></i><p>Progress Pencacah</p></a></li>
             <?php endif; ?>
-            <?php if (in_array($user['role'], ['admin_kab','superadmin'], true)): ?>
+            <?php if ($user['role'] === 'admin_kab'): ?>
               <li class="nav-item"><a class="nav-link<?= $isActive(['petugas.php']) ?>" href="petugas.php"><i class="nav-icon fas fa-address-book"></i><p>Daftar Petugas</p></a></li>
+            <?php endif; ?>
+            <?php if (in_array($user['role'], ['admin_kab','superadmin'], true)): ?>
               <li class="nav-item"><a class="nav-link<?= $isActive(['status_view.php']) ?>" href="status_view.php"><i class="nav-icon fas fa-table-list"></i><p>Status Terupdate</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['status_selesai.php']) ?>" href="status_selesai.php"><i class="nav-icon fas fa-circle-check"></i><p>Status Selesai SubSLS</p></a></li>
             <?php endif; ?>
             <?php if ($user['role'] === 'superadmin'): ?>
+              <li class="nav-item"><a class="nav-link<?= $isActive(['petugas.php']) ?>" href="petugas.php"><i class="nav-icon fas fa-address-book"></i><p>Daftar Petugas</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['assignment.php']) ?>" href="assignment.php"><i class="nav-icon fas fa-user-gear"></i><p>Ganti Petugas</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['snapshot.php']) ?>" href="snapshot.php"><i class="nav-icon fas fa-calendar-check"></i><p>Isi Snapshot Tanggal</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['public_dashboard_update.php']) ?>" href="public_dashboard_update.php"><i class="nav-icon fas fa-globe"></i><p>Update Dashboard Publik</p></a></li>

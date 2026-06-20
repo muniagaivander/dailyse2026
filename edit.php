@@ -220,12 +220,168 @@ function save_edit_daily(string $date, string $subslsId, array $user, array $pos
     edit_refresh_subsls_status($subslsId);
 }
 
+function edit_daily_rows(array $user, array $filters, string $date): array
+{
+    [$where, $params] = edit_filter_where($user, $filters);
+    $where[] = 'ds.tanggal=?';
+    $params[] = $date;
+    $stmt = db()->prepare("SELECT ds.*, p.id prov_id, p.nmprov, k.id kab_id, k.nmkab,
+            kc.id kec_id, kc.kdkec, kc.nmkec, d.id desa_id, d.kddesa, d.nmdesa,
+            sl.id sls_id, sl.kdsls, sl.nmsls, ms.kdsubsls, ms.nmsubsls
+        FROM daily_status ds
+        JOIN master_subsls ms ON ms.id=ds.subsls_id
+        JOIN master_sls sl ON sl.id=ms.sls_id
+        JOIN master_desa d ON d.id=sl.desa_id
+        JOIN master_kec kc ON kc.id=d.kec_id
+        JOIN master_kab k ON k.id=kc.kab_id
+        JOIN master_prov p ON p.id=k.prov_id
+        WHERE " . implode(' AND ', $where) . "
+        ORDER BY ds.pencacah_email, d.nmdesa, sl.kdsls, ms.kdsubsls");
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
+function edit_xlsx_col(int $index): string
+{
+    $name = '';
+    while ($index > 0) {
+        $index--;
+        $name = chr(65 + ($index % 26)) . $name;
+        $index = intdiv($index, 26);
+    }
+    return $name;
+}
+
+function edit_xlsx_cell(string $value, int $row, int $col): string
+{
+    $ref = edit_xlsx_col($col) . $row;
+    return '<c r="' . $ref . '" t="inlineStr"><is><t>' . htmlspecialchars($value, ENT_XML1) . '</t></is></c>';
+}
+
+function edit_export_rows(array $headers, array $rows, string $filename, string $format): void
+{
+    if ($format === 'csv') {
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '.csv"');
+        $out = fopen('php://output', 'w');
+        fputcsv($out, $headers);
+        foreach ($rows as $row) {
+            fputcsv($out, $row);
+        }
+        fclose($out);
+        exit;
+    }
+
+    $sheetRows = array_merge([$headers], $rows);
+    $tmp = tempnam(sys_get_temp_dir(), 'edit_export_');
+    $zip = new ZipArchive();
+    $zip->open($tmp, ZipArchive::OVERWRITE);
+    $zip->addFromString('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>');
+    $zip->addFromString('_rels/.rels', '<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>');
+    $zip->addFromString('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>');
+    $zip->addFromString('xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets><sheet name="edit_harian" sheetId="1" r:id="rId1"/></sheets>
+</workbook>');
+    $zip->addFromString('xl/styles.xml', '<?xml version="1.0" encoding="UTF-8"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
+  <fills count="1"><fill><patternFill patternType="none"/></fill></fills>
+  <borders count="1"><border/></borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
+</styleSheet>');
+    $sheet = '<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
+    foreach ($sheetRows as $rIndex => $values) {
+        $rowNumber = $rIndex + 1;
+        $sheet .= '<row r="' . $rowNumber . '">';
+        foreach ($values as $cIndex => $value) {
+            $sheet .= edit_xlsx_cell((string)$value, $rowNumber, $cIndex + 1);
+        }
+        $sheet .= '</row>';
+    }
+    $sheet .= '</sheetData></worksheet>';
+    $zip->addFromString('xl/worksheets/sheet1.xml', $sheet);
+    $zip->close();
+
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Disposition: attachment; filename="' . $filename . '.xlsx"');
+    header('Content-Length: ' . filesize($tmp));
+    readfile($tmp);
+    unlink($tmp);
+    exit;
+}
+
+function edit_export_payload(array $rows): array
+{
+    $headers = ['tanggal', 'prov_id', 'kab_id', 'kabupaten', 'kec_id', 'kecamatan', 'desa_id', 'desa', 'sls_id', 'kode_sls', 'nama_sls', 'subsls_id', 'kode_subsls', 'nama_subsls', 'pengawas_email', 'pencacah_email', 'target', 'open', 'submit', 'reject', 'pending', 'approved', 'updated_at', 'updated_by'];
+    $out = [];
+    foreach ($rows as $row) {
+        $out[] = [
+            $row['tanggal'],
+            $row['prov_id'],
+            $row['kab_id'],
+            $row['nmkab'],
+            $row['kec_id'],
+            $row['kdkec'] . ' - ' . $row['nmkec'],
+            $row['desa_id'],
+            $row['kddesa'] . ' - ' . $row['nmdesa'],
+            $row['sls_id'],
+            $row['kdsls'],
+            $row['nmsls'],
+            $row['subsls_id'],
+            $row['kdsls'] . $row['kdsubsls'],
+            $row['nmsubsls'],
+            $row['pengawas_email'],
+            $row['pencacah_email'],
+            $row['target'],
+            $row['open_count'],
+            $row['submitted_by_pencacah'],
+            $row['rejected_by_pengawas'],
+            $row['draft_count'],
+            $row['approved_by_pengawas'],
+            $row['updated_at'],
+            $row['updated_by'],
+        ];
+    }
+    return [$headers, $out];
+}
+
 $filters = edit_filters_from_request();
 if ($user['role'] === 'admin_kab') {
     $filters['kab_id'] = $user['kab_id'];
 }
 if ($user['role'] === 'pengawas') {
     $filters['pengawas_email'] = $user['email'];
+}
+
+if (($_GET['action'] ?? '') === 'export') {
+    $date = $_GET['tanggal'] ?? '';
+    $format = ($_GET['format'] ?? 'csv') === 'xlsx' ? 'xlsx' : 'csv';
+    if (!$date || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+        http_response_code(400);
+        exit('Tanggal export tidak valid.');
+    }
+    [$headers, $exportRows] = edit_export_payload(edit_daily_rows($user, $filters, $date));
+    $nameParts = ['data_harian', $date];
+    if (!empty($filters['pengawas_email'])) {
+        $nameParts[] = preg_replace('/[^a-zA-Z0-9]+/', '_', $filters['pengawas_email']);
+    }
+    edit_export_rows($headers, $exportRows, implode('_', $nameParts), $format);
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -257,20 +413,7 @@ $date = $_GET['tanggal'] ?? ($dates[0]['tanggal'] ?? '');
 $rows = [];
 $groups = [];
 if ($showForm && $date) {
-    [$where, $params] = edit_filter_where($user, $filters);
-    $where[] = 'ds.tanggal=?';
-    $params[] = $date;
-    $stmt = db()->prepare("SELECT ds.*, ms.kdsubsls, ms.nmsubsls, sl.kdsls, sl.nmsls, d.nmdesa
-        FROM daily_status ds
-        JOIN master_subsls ms ON ms.id=ds.subsls_id
-        JOIN master_sls sl ON sl.id=ms.sls_id
-        JOIN master_desa d ON d.id=sl.desa_id
-        JOIN master_kec kc ON kc.id=d.kec_id
-        JOIN master_kab k ON k.id=kc.kab_id
-        WHERE " . implode(' AND ', $where) . "
-        ORDER BY ds.pencacah_email, d.nmdesa, sl.kdsls, ms.kdsubsls");
-    $stmt->execute($params);
-    $rows = $stmt->fetchAll();
+    $rows = edit_daily_rows($user, $filters, $date);
     foreach ($rows as $row) {
         $groups[$row['pencacah_email'] ?: 'Tanpa Pencacah'][] = $row;
     }
@@ -332,6 +475,11 @@ render_header('Edit Harian');
 <?php endif; ?>
 
 <?php if ($rows): ?>
+<?php
+  $exportBaseQuery = array_merge($filters, ['action' => 'export', 'tanggal' => $date]);
+  $exportCsvQuery = array_merge($exportBaseQuery, ['format' => 'csv']);
+  $exportXlsxQuery = array_merge($exportBaseQuery, ['format' => 'xlsx']);
+?>
 <style>
 .edit-pencacah-tabs .nav-link {
   border: 1px solid #86efac;
@@ -399,7 +547,13 @@ render_header('Edit Harian');
       </div>
     </div>
   </div>
-  <button class="btn btn-success mb-4 mt-3">Edit Data Tanggal Ini</button>
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 mt-3">
+    <button class="btn btn-success mb-2" type="submit">Edit Data Tanggal Ini</button>
+    <div class="mb-2">
+      <a class="btn btn-outline-success mr-2" href="?<?= e(http_build_query($exportXlsxQuery)) ?>"><i class="fas fa-file-excel mr-1"></i>Export XLSX</a>
+      <a class="btn btn-outline-success" href="?<?= e(http_build_query($exportCsvQuery)) ?>"><i class="fas fa-file-csv mr-1"></i>Export CSV</a>
+    </div>
+  </div>
 </form>
 <?php elseif ($showForm && $date): ?>
   <div class="alert alert-info" id="noRowsAlert">Tidak ada data harian pada tanggal dan filter ini.</div>
