@@ -154,6 +154,7 @@ function render_header(string $title): void {
             <?php endif; ?>
             <?php if ($user['role'] === 'superadmin'): ?>
               <li class="nav-item"><a class="nav-link<?= $isActive(['assignment.php']) ?>" href="assignment.php"><i class="nav-icon fas fa-user-gear"></i><p>Ganti Petugas</p></a></li>
+              <li class="nav-item"><a class="nav-link<?= $isActive(['snapshot.php']) ?>" href="snapshot.php"><i class="nav-icon fas fa-calendar-check"></i><p>Isi Snapshot Tanggal</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['public_dashboard_update.php']) ?>" href="public_dashboard_update.php"><i class="nav-icon fas fa-globe"></i><p>Update Dashboard Publik</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['user_passwords.php']) ?>" href="user_passwords.php"><i class="nav-icon fas fa-key"></i><p>Ganti Password User</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['backup_database.php']) ?>" href="backup_database.php"><i class="nav-icon fas fa-database"></i><p>Backup Database</p></a></li>

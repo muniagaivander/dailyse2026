@@ -188,6 +188,54 @@ function progress_trend_where(array $user, string $type, array $filters): array
     return [$where, $params];
 }
 
+function progress_current_cards(array $user, string $type, array $filters): array
+{
+    $field = progress_email_field($type);
+    $where = ['k.id=?'];
+    $params = [$filters['kab_id']];
+    if (!empty($filters['email'])) {
+        $where[] = "{$field}=?";
+        $params[] = $filters['email'];
+    }
+    if (in_array($user['role'], ['admin_kab', 'viewer_kab'], true)) {
+        $params[0] = $user['kab_id'];
+    }
+    if ($user['role'] === 'pengawas') {
+        $where[] = 'ms.pengawas_email=?';
+        $params[] = $user['email'];
+    }
+    if ($user['role'] === 'pencacah') {
+        $where[] = 'ms.pencacah_email=?';
+        $params[] = $user['email'];
+    }
+    foreach (['kec_id' => 'kc.id', 'desa_id' => 'd.id', 'subsls_id' => 'ms.id'] as $key => $col) {
+        if (!empty($filters[$key])) {
+            $where[] = "{$col}=?";
+            $params[] = $filters[$key];
+        }
+    }
+    $stmt = db()->prepare("SELECT COALESCE(SUM(ss.target),0) target,
+            COALESCE(SUM(ss.open_count),0) open_count,
+            COALESCE(SUM(ss.draft_count),0) draft_count,
+            COALESCE(SUM(ss.submitted_by_pencacah),0) submitted_by_pencacah,
+            COALESCE(SUM(ss.approved_by_pengawas),0) approved_by_pengawas,
+            COALESCE(SUM(ss.rejected_by_pengawas),0) rejected_by_pengawas
+        FROM master_subsls ms
+        JOIN master_sls sl ON sl.id=ms.sls_id
+        JOIN master_desa d ON d.id=sl.desa_id
+        JOIN master_kec kc ON kc.id=d.kec_id
+        JOIN master_kab k ON k.id=kc.kab_id
+        LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
+        WHERE " . implode(' AND ', $where));
+    $stmt->execute($params);
+    $row = $stmt->fetch() ?: [];
+    $cards = array_fill_keys(array_merge(['target'], array_keys(status_fields())), 0);
+    foreach ($cards as $key => $_) {
+        $cards[$key] = (int)($row[$key] ?? 0);
+    }
+    return $cards;
+}
+
 $kabupatenOptions = progress_kabupaten_options($user);
 $emails = progress_email_options($user, $type, $filters);
 if ($filters['email'] && !in_array($filters['email'], $emails, true)) {
@@ -231,11 +279,7 @@ if ($showProgress) {
         ORDER BY ds.tanggal");
     $stmt->execute($trendParams);
     $trend = $stmt->fetchAll();
-    foreach ($trend as $row) {
-        foreach ($cards as $key => $_) {
-            $cards[$key] += (int)$row[$key];
-        }
-    }
+    $cards = progress_current_cards($user, $type, $filters);
 }
 
 $EXTRA_HEAD = '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css">' . "\n"

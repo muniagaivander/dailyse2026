@@ -87,6 +87,46 @@ function progress_area_where(array $user, array $filters): array
     return [$where, $params];
 }
 
+function progress_area_current_cards(array $user, array $filters): array
+{
+    $where = [];
+    $params = [];
+    if (in_array($user['role'], ['admin_kab', 'viewer_kab'], true)) {
+        $where[] = 'k.id=?';
+        $params[] = $user['kab_id'];
+    } elseif (!empty($filters['kab_id'])) {
+        $where[] = 'k.id=?';
+        $params[] = $filters['kab_id'];
+    }
+    foreach (['kec_id' => 'kc.id', 'desa_id' => 'd.id', 'subsls_id' => 'ms.id'] as $key => $col) {
+        if (!empty($filters[$key])) {
+            $where[] = "{$col}=?";
+            $params[] = $filters[$key];
+        }
+    }
+    $sqlWhere = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+    $stmt = db()->prepare("SELECT COALESCE(SUM(ss.target),0) target,
+            COALESCE(SUM(ss.open_count),0) open_count,
+            COALESCE(SUM(ss.draft_count),0) draft_count,
+            COALESCE(SUM(ss.submitted_by_pencacah),0) submitted_by_pencacah,
+            COALESCE(SUM(ss.approved_by_pengawas),0) approved_by_pengawas,
+            COALESCE(SUM(ss.rejected_by_pengawas),0) rejected_by_pengawas
+        FROM master_subsls ms
+        JOIN master_sls sl ON sl.id=ms.sls_id
+        JOIN master_desa d ON d.id=sl.desa_id
+        JOIN master_kec kc ON kc.id=d.kec_id
+        JOIN master_kab k ON k.id=kc.kab_id
+        LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
+        {$sqlWhere}");
+    $stmt->execute($params);
+    $row = $stmt->fetch() ?: [];
+    $cards = array_fill_keys(array_merge(['target'], array_keys(status_fields())), 0);
+    foreach ($cards as $key => $_) {
+        $cards[$key] = (int)($row[$key] ?? 0);
+    }
+    return $cards;
+}
+
 $options = progress_area_filter_options($user, $filters);
 if ($filters['kec_id'] && !in_array($filters['kec_id'], array_column($options['kecamatan'], 'value'), true)) {
     $filters['kec_id'] = '';
@@ -121,11 +161,7 @@ if ($showProgress) {
         ORDER BY ds.tanggal");
     $stmt->execute($params);
     $trend = $stmt->fetchAll();
-    foreach ($trend as $row) {
-        foreach ($cards as $key => $_) {
-            $cards[$key] += (int)$row[$key];
-        }
-    }
+    $cards = progress_area_current_cards($user, $filters);
 }
 
 render_header('Progress By Daerah');
