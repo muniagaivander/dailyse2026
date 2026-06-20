@@ -463,6 +463,12 @@ function dashboard_count_only_text(int $count): string
     return '<span class="d-block">' . number_format($count, 0, ',', '.') . '</span><span class="d-block">&nbsp;</span>';
 }
 
+function dashboard_table_count_pct_text(int $count, int $target): string
+{
+    $pct = $target > 0 ? $count / $target * 100 : 0;
+    return e(number_format($count, 0, ',', '.')) . ' <span class="dashboard-table-pct">(' . e(number_format($pct, 2, ',', '.')) . '%)</span>';
+}
+
 render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role'] === 'pencacah' ? 'Dashboard Pencacah' : 'Dashboard'));
 ?>
 <style>
@@ -529,6 +535,18 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
 .dashboard-chart-wrap {
   height: 420px;
   position: relative;
+}
+.dashboard-summary-table th,
+.dashboard-summary-table td {
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.dashboard-summary-table tfoot td {
+  font-weight: 800;
+}
+.dashboard-table-pct {
+  color: #2563eb;
+  font-weight: 700;
 }
 @media (max-width: 767.98px) {
   .dashboard-chart-wrap { height: 340px; }
@@ -644,6 +662,64 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
 <?php endif; ?>
 
 <div class="card"><div class="card-body"><div class="dashboard-chart-wrap"><canvas id="dashboardChart"></canvas></div></div></div>
+
+<div class="card">
+  <div class="card-header"><strong>Tabel Ringkasan Sesuai Filter</strong></div>
+  <div class="card-body table-responsive p-0">
+    <table class="table table-sm table-bordered table-striped mb-0 dashboard-summary-table">
+      <thead>
+        <tr>
+          <th>Kelompok</th>
+          <th class="text-right">Target</th>
+          <th class="text-right">Open</th>
+          <th class="text-right">Submit</th>
+          <th class="text-right">Reject</th>
+          <th class="text-right">Pending</th>
+          <th class="text-right">Approve</th>
+          <th class="text-right">Submit+Approve</th>
+          <th class="text-right">Jumlah SubSLS Selesai</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php foreach ($chartRows as $row): ?>
+          <?php
+            $rowTarget = (int)$row['target'];
+            $submitApproveCount = (int)$row['submitted_by_pencacah'] + (int)$row['approved_by_pengawas'];
+          ?>
+          <tr>
+            <td><?= e($row['label']) ?></td>
+            <td class="text-right"><?= number_format($rowTarget, 0, ',', '.') ?></td>
+            <td class="text-right"><?= number_format((int)$row['open_count'], 0, ',', '.') ?></td>
+            <td class="text-right"><?= dashboard_table_count_pct_text((int)$row['submitted_by_pencacah'], $rowTarget) ?></td>
+            <td class="text-right"><?= number_format((int)$row['rejected_by_pengawas'], 0, ',', '.') ?></td>
+            <td class="text-right"><?= number_format((int)$row['draft_count'], 0, ',', '.') ?></td>
+            <td class="text-right"><?= dashboard_table_count_pct_text((int)$row['approved_by_pengawas'], $rowTarget) ?></td>
+            <td class="text-right"><?= dashboard_table_count_pct_text($submitApproveCount, $rowTarget) ?></td>
+            <td class="text-right"><?= number_format((int)$row['selesai_count'], 0, ',', '.') ?></td>
+          </tr>
+        <?php endforeach; ?>
+      </tbody>
+      <tfoot>
+        <?php
+          $totalTarget = (int)$totals['target'];
+          $totalSubmitApprove = (int)$totals['submitted_by_pencacah'] + (int)$totals['approved_by_pengawas'];
+        ?>
+        <tr>
+          <td>Total</td>
+          <td class="text-right"><?= number_format($totalTarget, 0, ',', '.') ?></td>
+          <td class="text-right"><?= number_format((int)$totals['open_count'], 0, ',', '.') ?></td>
+          <td class="text-right"><?= dashboard_table_count_pct_text((int)$totals['submitted_by_pencacah'], $totalTarget) ?></td>
+          <td class="text-right"><?= number_format((int)$totals['rejected_by_pengawas'], 0, ',', '.') ?></td>
+          <td class="text-right"><?= number_format((int)$totals['draft_count'], 0, ',', '.') ?></td>
+          <td class="text-right"><?= dashboard_table_count_pct_text((int)$totals['approved_by_pengawas'], $totalTarget) ?></td>
+          <td class="text-right"><?= dashboard_table_count_pct_text($totalSubmitApprove, $totalTarget) ?></td>
+          <td class="text-right"><?= number_format((int)$totals['selesai_count'], 0, ',', '.') ?></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+
 <script>
 const rows = <?= json_encode($chartRows) ?>;
 const fields = <?= json_encode(array_keys($fields)) ?>;

@@ -225,6 +225,19 @@ function ct_can_update(array $user, string $subslsId): bool
     return (int)$stmt->fetchColumn() > 0;
 }
 
+function ct_can_mark_done(string $subslsId): bool
+{
+    $stmt = db()->prepare("SELECT target, approved_by_pengawas
+        FROM subsls_status
+        WHERE subsls_id=?");
+    $stmt->execute([$subslsId]);
+    $status = $stmt->fetch();
+    if (!$status) {
+        return false;
+    }
+    return (int)$status['target'] === (int)$status['approved_by_pengawas'];
+}
+
 function ct_import_template(string $path, array $user): array
 {
     $rows = ct_read_xlsx_rows($path);
@@ -241,24 +254,39 @@ function ct_import_template(string $path, array $user): array
 
     $processed = 0;
     $skipped = 0;
+    $updates = [];
+    $validationErrors = [];
+    for ($i = 1; $i < count($rows); $i++) {
+        $row = $rows[$i];
+        $rowNumber = $i + 1;
+        $subslsId = trim((string)($row[$idx['subsls_id']] ?? ''));
+        $statusValue = trim((string)($row[$idx['status selesai']] ?? ''));
+        if ($subslsId === '' || $statusValue === '') {
+            $skipped++;
+            continue;
+        }
+        if (!ct_can_update($user, $subslsId)) {
+            $skipped++;
+            continue;
+        }
+        $normalizedStatus = ct_normalize_status($statusValue);
+        if ($normalizedStatus === 'Selesai' && !ct_can_mark_done($subslsId)) {
+            $validationErrors[] = 'Row ' . $rowNumber . ' idsubsls ' . $subslsId . ', "Masih ada pekerjaan belum selesai (Approve kurang/tidak sama dengan nilai target)"';
+            continue;
+        }
+        $updates[] = [$subslsId, $normalizedStatus, $user['email']];
+    }
+    if ($validationErrors) {
+        throw new RuntimeException(implode("\n", $validationErrors));
+    }
+
     db()->beginTransaction();
     try {
         $stmt = db()->prepare("INSERT INTO subsls_completion_status (subsls_id,status_selesai,updated_by)
             VALUES (?,?,?)
             ON DUPLICATE KEY UPDATE status_selesai=VALUES(status_selesai), updated_by=VALUES(updated_by), updated_at=CURRENT_TIMESTAMP");
-        for ($i = 1; $i < count($rows); $i++) {
-            $row = $rows[$i];
-            $subslsId = trim((string)($row[$idx['subsls_id']] ?? ''));
-            $statusValue = trim((string)($row[$idx['status selesai']] ?? ''));
-            if ($subslsId === '' || $statusValue === '') {
-                $skipped++;
-                continue;
-            }
-            if (!ct_can_update($user, $subslsId)) {
-                $skipped++;
-                continue;
-            }
-            $stmt->execute([$subslsId, ct_normalize_status($statusValue), $user['email']]);
+        foreach ($updates as $update) {
+            $stmt->execute($update);
             $processed++;
         }
         db()->commit();

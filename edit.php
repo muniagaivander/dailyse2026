@@ -248,7 +248,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $opts = edit_area_options($user, $filters);
 $action = $_GET['action'] ?? '';
-$showDates = in_array($action, ['dates', 'form'], true);
+$filterReady = $user['role'] === 'pengawas'
+    || ((bool)$filters['pengawas_email'] && ($user['role'] !== 'superadmin' || (bool)$filters['kab_id']));
+$showDates = $filterReady && in_array($action, ['dates', 'form'], true);
 $showForm = $action === 'form';
 $dates = $showDates ? edit_daily_dates($user, $filters) : [];
 $date = $_GET['tanggal'] ?? ($dates[0]['tanggal'] ?? '');
@@ -274,55 +276,38 @@ if ($showForm && $date) {
     }
 }
 
+$EXTRA_HEAD = '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css">' . "\n"
+    . '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@ttskch/select2-bootstrap4-theme@1.5.2/dist/select2-bootstrap4.min.css">';
+$EXTRA_FOOTER_SCRIPTS = '<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>';
+
 render_header('Edit Harian');
 ?>
 <?php if ($msg = flash('success')): ?><div class="alert alert-success"><?= e($msg) ?></div><?php endif; ?>
 <?php if ($msg = flash('error')): ?><div class="alert alert-danger"><?= e($msg) ?></div><?php endif; ?>
 
-<form class="card card-body mb-3" method="get">
+<form class="card card-body mb-3" method="get" id="editFilterForm">
   <div class="form-row align-items-end">
     <?php if ($user['role'] === 'superadmin'): ?>
-      <div class="form-group col-md-2">
+      <div class="form-group col-md-4">
         <label>Kabupaten</label>
         <select class="form-control" name="kab_id" id="kab_id">
-          <option value="">Semua Kabupaten</option>
+          <option value="">Pilih Kabupaten</option>
           <?php foreach ($opts['kabupaten'] as $o): ?><option value="<?= e($o['value']) ?>" <?= $filters['kab_id']===$o['value']?'selected':'' ?>><?= e($o['label']) ?></option><?php endforeach; ?>
         </select>
       </div>
     <?php else: ?>
       <input type="hidden" name="kab_id" value="<?= e($filters['kab_id']) ?>">
     <?php endif; ?>
-    <div class="form-group col-md-2">
-      <label>Kecamatan</label>
-      <select class="form-control" name="kec_id" id="kec_id">
-        <option value="">Semua Kecamatan</option>
-        <?php foreach ($opts['kecamatan'] as $o): ?><option value="<?= e($o['value']) ?>" <?= $filters['kec_id']===$o['value']?'selected':'' ?>><?= e($o['label']) ?></option><?php endforeach; ?>
-      </select>
-    </div>
-    <div class="form-group col-md-2">
-      <label>Desa</label>
-      <select class="form-control" name="desa_id" id="desa_id" <?= $filters['kec_id'] ? '' : 'disabled' ?>>
-        <option value=""><?= $filters['kec_id'] ? 'Semua Desa' : 'Pilih kecamatan dulu' ?></option>
-        <?php foreach ($opts['desa'] as $o): ?><option value="<?= e($o['value']) ?>" <?= $filters['desa_id']===$o['value']?'selected':'' ?>><?= e($o['label']) ?></option><?php endforeach; ?>
-      </select>
-    </div>
     <?php if ($user['role'] !== 'pengawas'): ?>
-      <div class="form-group col-md-2">
+      <div class="form-group col-md-5">
         <label>Pengawas</label>
-        <select class="form-control" name="pengawas_email" id="pengawas_email" <?= $filters['desa_id'] ? '' : 'disabled' ?>>
-          <option value=""><?= $filters['desa_id'] ? 'Semua Pengawas' : 'Pilih desa dulu' ?></option>
+        <select class="form-control select2-pengawas" name="pengawas_email" id="pengawas_email" <?= ($user['role'] === 'superadmin' && !$filters['kab_id']) ? 'disabled' : '' ?>>
+          <option value=""><?= ($user['role'] === 'superadmin' && !$filters['kab_id']) ? 'Pilih kabupaten dulu' : 'Pilih Pengawas' ?></option>
           <?php foreach ($opts['pengawas'] as $o): ?><option value="<?= e($o['value']) ?>" <?= $filters['pengawas_email']===$o['value']?'selected':'' ?>><?= e($o['label']) ?></option><?php endforeach; ?>
         </select>
       </div>
     <?php endif; ?>
-    <div class="form-group col-md-2">
-      <label>Pencacah</label>
-      <select class="form-control" name="pencacah_email" id="pencacah_email" <?= ($user['role'] === 'pengawas' || $filters['pengawas_email']) ? '' : 'disabled' ?>>
-        <option value=""><?= ($user['role'] === 'pengawas' || $filters['pengawas_email']) ? 'Semua Pencacah' : 'Pilih pengawas dulu' ?></option>
-        <?php foreach ($opts['pencacah'] as $o): ?><option value="<?= e($o['value']) ?>" <?= $filters['pencacah_email']===$o['value']?'selected':'' ?>><?= e($o['label']) ?></option><?php endforeach; ?>
-      </select>
-    </div>
-    <div class="form-group col-md-2"><button class="btn btn-primary" name="action" value="dates">Tampilkan Tanggal</button></div>
+    <div class="form-group col-md-3"><button class="btn btn-primary" id="showDatesButton" name="action" value="dates" <?= $filterReady ? '' : 'disabled' ?>>Tampilkan Tanggal</button></div>
   </div>
   <?php if ($showDates): ?>
     <hr class="mt-0">
@@ -426,10 +411,9 @@ document.querySelectorAll('.status-input').forEach(input => input.addEventListen
   tr.querySelector('.target').value = Array.from(tr.querySelectorAll('.status-input')).reduce((s, el) => s + Number(el.value || 0), 0);
 }));
 const kabupaten = document.getElementById('kab_id');
-const kecamatanSelect = document.getElementById('kec_id');
-const desaSelect = document.getElementById('desa_id');
 const pengawasSelect = document.getElementById('pengawas_email');
-const pencacahSelect = document.getElementById('pencacah_email');
+const editFilterForm = document.getElementById('editFilterForm');
+const showDatesButton = document.getElementById('showDatesButton');
 function resetDateAndResult() {
   const dateSection = document.getElementById('dateSection');
   const editResult = document.getElementById('editResult');
@@ -445,55 +429,48 @@ function setFirstOptionLabel(select, label) {
     select.options[0].textContent = label;
   }
 }
+function reloadFilterOptions() {
+  resetDateAndResult();
+  editFilterForm.submit();
+}
 function syncFilterState() {
-  if (desaSelect) {
-    desaSelect.disabled = !kecamatanSelect.value;
-    setFirstOptionLabel(desaSelect, kecamatanSelect.value ? 'Semua Desa' : 'Pilih kecamatan dulu');
-    if (!kecamatanSelect.value) desaSelect.value = '';
-  }
+  const canUsePengawas = !kabupaten || Boolean(kabupaten.value);
+  const canShowDates = <?= $user['role'] === 'pengawas' ? 'true' : 'false' ?> || (canUsePengawas && pengawasSelect && Boolean(pengawasSelect.value));
   if (pengawasSelect) {
-    pengawasSelect.disabled = !desaSelect.value;
-    setFirstOptionLabel(pengawasSelect, desaSelect.value ? 'Semua Pengawas' : 'Pilih desa dulu');
-    if (!desaSelect.value) pengawasSelect.value = '';
+    pengawasSelect.disabled = !canUsePengawas;
+    setFirstOptionLabel(pengawasSelect, canUsePengawas ? 'Pilih Pengawas' : 'Pilih kabupaten dulu');
+    if (!canUsePengawas) pengawasSelect.value = '';
+    if (window.jQuery && jQuery.fn.select2) {
+      jQuery(pengawasSelect).trigger('change.select2');
+    }
   }
-  if (pencacahSelect) {
-    const canUsePencacah = <?= $user['role'] === 'pengawas' ? 'true' : 'false' ?> || (pengawasSelect && pengawasSelect.value);
-    pencacahSelect.disabled = !canUsePencacah;
-    setFirstOptionLabel(pencacahSelect, canUsePencacah ? 'Semua Pencacah' : 'Pilih pengawas dulu');
-    if (!canUsePencacah) pencacahSelect.value = '';
+  if (showDatesButton) {
+    showDatesButton.disabled = !canShowDates;
   }
 }
 if (kabupaten) {
   kabupaten.addEventListener('change', function () {
-    kecamatanSelect.value = '';
-    desaSelect.value = '';
     if (pengawasSelect) pengawasSelect.value = '';
-    pencacahSelect.value = '';
     syncFilterState();
-    resetDateAndResult();
+    reloadFilterOptions();
   });
 }
-kecamatanSelect.addEventListener('change', function () {
-  desaSelect.value = '';
-  if (pengawasSelect) pengawasSelect.value = '';
-  pencacahSelect.value = '';
-  syncFilterState();
-  resetDateAndResult();
-});
-desaSelect.addEventListener('change', function () {
-  if (pengawasSelect) pengawasSelect.value = '';
-  pencacahSelect.value = '';
-  syncFilterState();
-  resetDateAndResult();
-});
 if (pengawasSelect) {
   pengawasSelect.addEventListener('change', function () {
-    pencacahSelect.value = '';
     syncFilterState();
     resetDateAndResult();
   });
 }
-pencacahSelect.addEventListener('change', resetDateAndResult);
 syncFilterState();
+window.addEventListener('load', function () {
+  if (window.jQuery && jQuery.fn.select2 && pengawasSelect) {
+    jQuery(pengawasSelect).select2({
+      theme: 'bootstrap4',
+      width: '100%',
+      placeholder: 'Pilih Pengawas'
+    });
+    jQuery(pengawasSelect).on('change', syncFilterState);
+  }
+});
 </script>
 <?php render_footer(); ?>

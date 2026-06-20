@@ -25,6 +25,12 @@ function public_count_only_text(int $count): string
     return '<span class="d-block">' . number_format($count, 0, ',', '.') . '</span><span class="d-block">&nbsp;</span>';
 }
 
+function public_table_count_pct_text(int $count, int $target): string
+{
+    $pct = $target > 0 ? $count / $target * 100 : 0;
+    return e(number_format($count, 0, ',', '.')) . ' <span class="public-table-pct">(' . e(number_format($pct, 2, ',', '.')) . '%)</span>';
+}
+
 $cache = is_file(public_dashboard_cache_path())
     ? json_decode((string)file_get_contents(public_dashboard_cache_path()), true)
     : null;
@@ -162,6 +168,10 @@ $cards = [
     .public-summary-table tfoot td {
       font-weight: 800;
     }
+    .public-table-pct {
+      color: #2563eb;
+      font-weight: 700;
+    }
     @media (max-width: 767.98px) {
       .public-header {
         grid-template-columns: 1fr;
@@ -256,30 +266,37 @@ $cards = [
         </thead>
         <tbody>
           <?php foreach ($rows as $row): ?>
-            <?php $submitApproveCount = (int)$row['submitted_by_pencacah'] + (int)$row['approved_by_pengawas']; ?>
+            <?php
+              $rowTarget = (int)$row['target'];
+              $submitApproveCount = (int)$row['submitted_by_pencacah'] + (int)$row['approved_by_pengawas'];
+            ?>
             <tr>
               <td><?= e($row['label']) ?></td>
               <td class="text-right"><?= number_format((int)$row['target'], 0, ',', '.') ?></td>
               <td class="text-right"><?= number_format((int)$row['open_count'], 0, ',', '.') ?></td>
-              <td class="text-right"><?= number_format((int)$row['submitted_by_pencacah'], 0, ',', '.') ?></td>
+              <td class="text-right"><?= public_table_count_pct_text((int)$row['submitted_by_pencacah'], $rowTarget) ?></td>
               <td class="text-right"><?= number_format((int)$row['rejected_by_pengawas'], 0, ',', '.') ?></td>
               <td class="text-right"><?= number_format((int)$row['draft_count'], 0, ',', '.') ?></td>
-              <td class="text-right"><?= number_format((int)$row['approved_by_pengawas'], 0, ',', '.') ?></td>
-              <td class="text-right"><?= number_format($submitApproveCount, 0, ',', '.') ?></td>
+              <td class="text-right"><?= public_table_count_pct_text((int)$row['approved_by_pengawas'], $rowTarget) ?></td>
+              <td class="text-right"><?= public_table_count_pct_text($submitApproveCount, $rowTarget) ?></td>
               <td class="text-right"><?= number_format((int)$row['selesai_count'], 0, ',', '.') ?></td>
             </tr>
           <?php endforeach; ?>
         </tbody>
         <tfoot>
+          <?php
+            $totalTarget = (int)$totals['target'];
+            $totalSubmitApprove = (int)$totals['submitted_by_pencacah'] + (int)$totals['approved_by_pengawas'];
+          ?>
           <tr>
             <td><?= e($context['total_label']) ?></td>
             <td class="text-right"><?= number_format((int)$totals['target'], 0, ',', '.') ?></td>
             <td class="text-right"><?= number_format((int)$totals['open_count'], 0, ',', '.') ?></td>
-            <td class="text-right"><?= number_format((int)$totals['submitted_by_pencacah'], 0, ',', '.') ?></td>
+            <td class="text-right"><?= public_table_count_pct_text((int)$totals['submitted_by_pencacah'], $totalTarget) ?></td>
             <td class="text-right"><?= number_format((int)$totals['rejected_by_pengawas'], 0, ',', '.') ?></td>
             <td class="text-right"><?= number_format((int)$totals['draft_count'], 0, ',', '.') ?></td>
-            <td class="text-right"><?= number_format((int)$totals['approved_by_pengawas'], 0, ',', '.') ?></td>
-            <td class="text-right"><?= number_format((int)$totals['submitted_by_pencacah'] + (int)$totals['approved_by_pengawas'], 0, ',', '.') ?></td>
+            <td class="text-right"><?= public_table_count_pct_text((int)$totals['approved_by_pengawas'], $totalTarget) ?></td>
+            <td class="text-right"><?= public_table_count_pct_text($totalSubmitApprove, $totalTarget) ?></td>
             <td class="text-right"><?= number_format((int)$totals['selesai_count'], 0, ',', '.') ?></td>
           </tr>
         </tfoot>

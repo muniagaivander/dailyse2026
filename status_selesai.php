@@ -83,6 +83,19 @@ function completion_can_update(array $user, string $subslsId): bool
     return (int)$stmt->fetchColumn() > 0;
 }
 
+function completion_can_mark_done(string $subslsId): bool
+{
+    $stmt = db()->prepare("SELECT target, approved_by_pengawas
+        FROM subsls_status
+        WHERE subsls_id=?");
+    $stmt->execute([$subslsId]);
+    $status = $stmt->fetch();
+    if (!$status) {
+        return false;
+    }
+    return (int)$status['target'] === (int)$status['approved_by_pengawas'];
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $subslsId = (string)($_POST['subsls_id'] ?? '');
     $status = (string)($_POST['status_selesai'] ?? '');
@@ -99,6 +112,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         if (!completion_can_update($user, $subslsId)) {
             throw new RuntimeException('SubSLS tidak ditemukan atau bukan wilayah akses user.');
+        }
+        if ($status === 'Selesai' && !completion_can_mark_done($subslsId)) {
+            throw new RuntimeException('Masih ada pekerjaan belum selesai (Approve kurang/tidak sama dengan nilai target)');
         }
         db()->prepare("INSERT INTO subsls_completion_status (subsls_id,status_selesai,updated_by)
             VALUES (?,?,?)

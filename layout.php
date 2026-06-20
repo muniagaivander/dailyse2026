@@ -2,7 +2,7 @@
 require_once __DIR__ . '/bootstrap.php';
 
 function render_header(string $title): void {
-    global $APP_NAME;
+    global $APP_NAME, $EXTRA_HEAD;
     $user = current_user();
     $isActiveUser = $user ? user_active_status($user['email']) : false;
     $currentPage = basename(parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '');
@@ -19,6 +19,7 @@ function render_header(string $title): void {
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <?= $EXTRA_HEAD ?? '' ?>
   <style>
     .content-wrapper { min-height: 100vh; }
     .table-sm input { min-width: 82px; }
@@ -125,9 +126,15 @@ function render_header(string $title): void {
         <ul class="nav nav-pills nav-sidebar flex-column">
           <?php if ($user): ?>
             <li class="nav-item"><a class="nav-link<?= $isActive(['index.php', '']) ?>" href="index.php"><i class="nav-icon fas fa-chart-column"></i><p>Dashboard</p></a></li>
+            <?php if ($user['role'] === 'pencacah'): ?>
+              <li class="nav-item"><a class="nav-link<?= $currentPage === 'progress.php' && ($_GET['type'] ?? '') === 'pencacah' ? ' active' : '' ?>" href="progress.php?type=pencacah"><i class="nav-icon fas fa-chart-line"></i><p>Progress Pencacah</p></a></li>
+            <?php endif; ?>
             <?php if (in_array($user['role'], ['superadmin','admin_kab','pengawas'], true)): ?>
               <li class="nav-item"><a class="nav-link important-input-menu<?= $isActive(['input.php']) ?>" href="input.php"><i class="nav-icon fas fa-pen"></i><p>Input Harian</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['edit.php']) ?>" href="edit.php"><i class="nav-icon fas fa-edit"></i><p>Edit Harian</p></a></li>
+              <?php if ($user['role'] === 'pengawas'): ?>
+                <li class="nav-item"><a class="nav-link<?= $currentPage === 'progress.php' && ($_GET['type'] ?? '') === 'pencacah' ? ' active' : '' ?>" href="progress.php?type=pencacah"><i class="nav-icon fas fa-users"></i><p>Progress Pencacah</p></a></li>
+              <?php endif; ?>
             <?php endif; ?>
             <?php if (in_array($user['role'], ['pengawas','pencacah'], true)): ?>
               <li class="nav-item"><a class="nav-link<?= $isActive(['subsls_data.php']) ?>" href="subsls_data.php"><i class="nav-icon fas fa-table"></i><p>Data SubSLS</p></a></li>
@@ -136,6 +143,7 @@ function render_header(string $title): void {
               <li class="nav-item"><a class="nav-link<?= $isActive(['status_selesai.php']) ?>" href="status_selesai.php"><i class="nav-icon fas fa-circle-check"></i><p>Status Selesai SubSLS</p></a></li>
             <?php endif; ?>
             <?php if (in_array($user['role'], ['admin_kab','superadmin','viewer_prov','viewer_kab'], true)): ?>
+              <li class="nav-item"><a class="nav-link<?= $isActive(['progress_area.php']) ?>" href="progress_area.php"><i class="nav-icon fas fa-map-location-dot"></i><p>Progress By Daerah</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $currentPage === 'progress.php' && ($_GET['type'] ?? 'pengawas') !== 'pencacah' ? ' active' : '' ?>" href="progress.php?type=pengawas"><i class="nav-icon fas fa-user-check"></i><p>Progress Pengawas</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $currentPage === 'progress.php' && ($_GET['type'] ?? '') === 'pencacah' ? ' active' : '' ?>" href="progress.php?type=pencacah"><i class="nav-icon fas fa-users"></i><p>Progress Pencacah</p></a></li>
             <?php endif; ?>
@@ -159,12 +167,13 @@ function render_header(string $title): void {
   <div class="content-wrapper">
     <section class="content-header"><div class="container-fluid"><h1><?= e($title) ?></h1></div></section>
     <section class="content"><div class="container-fluid">
-      <?php if ($msg = flash('success')): ?><div class="alert alert-success"><?= e($msg) ?></div><?php endif; ?>
-      <?php if ($msg = flash('error')): ?><div class="alert alert-danger"><?= e($msg) ?></div><?php endif; ?>
+      <?php if ($msg = flash('success')): ?><div class="alert alert-success"><?= nl2br(e($msg)) ?></div><?php endif; ?>
+      <?php if ($msg = flash('error')): ?><div class="alert alert-danger"><?= nl2br(e($msg)) ?></div><?php endif; ?>
 <?php
 }
 
 function render_footer(): void {
+global $EXTRA_FOOTER_SCRIPTS;
 ?>
     </div></section>
   </div>
@@ -225,6 +234,7 @@ function render_footer(): void {
 <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+<?= $EXTRA_FOOTER_SCRIPTS ?? '' ?>
 <script>
 (function () {
   const overlay = document.getElementById('submitProgressOverlay');
