@@ -183,6 +183,9 @@ function wr_build_html(array $user, string $referenceDate): string
     }
     $topRows = wr_rank_rows($rows, 'desc');
     $attentionRows = wr_rank_rows($rows, 'asc');
+    $submitApprovePcts = array_map(fn($row) => (float)$row['submit_approve_pct'], $rows);
+    $maxSubmitApprovePct = $submitApprovePcts ? max($submitApprovePcts) : null;
+    $minSubmitApprovePct = $submitApprovePcts ? min($submitApprovePcts) : null;
 
     ob_start();
 ?>
@@ -214,6 +217,8 @@ function wr_build_html(array $user, string $referenceDate): string
     th { background:#f9fafb; text-align:left; }
     .right { text-align:right; }
     .summary { line-height:1.55; margin:0; }
+    .best-progress { color:#2563eb; font-weight:800; }
+    .low-progress { color:#dc2626; font-weight:800; }
     @page {
       size: A4 landscape;
       margin: 10mm;
@@ -276,7 +281,15 @@ function wr_build_html(array $user, string $referenceDate): string
   <div class="card">
     <h2>Ringkasan Per <?= e($scope['group_label']) ?></h2>
     <table><thead><tr><th><?= e($scope['group_label']) ?></th><th class="right">Target</th><th class="right">Open</th><th class="right">Submit</th><th class="right">Reject</th><th class="right">Pending</th><th class="right">Approved</th><th class="right">Submit+Approve</th><th class="right">Kenaikan</th><th class="right">SubSLS Selesai</th></tr></thead><tbody>
-    <?php foreach ($rows as $row): ?><tr><td><?= e($row['label']) ?></td><td class="right"><?= number_format((int)$row['target'], 0, ',', '.') ?></td><td class="right"><?= number_format((int)$row['open_count'], 0, ',', '.') ?></td><td class="right"><?= number_format((int)$row['submitted_by_pencacah'], 0, ',', '.') ?></td><td class="right"><?= number_format((int)$row['rejected_by_pengawas'], 0, ',', '.') ?></td><td class="right"><?= number_format((int)$row['draft_count'], 0, ',', '.') ?></td><td class="right"><?= number_format((int)$row['approved_by_pengawas'], 0, ',', '.') ?></td><td class="right"><?= number_format((int)$row['submit_approve_count'], 0, ',', '.') ?> (<?= number_format((float)$row['submit_approve_pct'], 2, ',', '.') ?>%)</td><td class="right"><?= number_format((float)$row['weekly_delta_pct'], 2, ',', '.') ?> poin</td><td class="right"><?= number_format((int)$row['selesai_count'], 0, ',', '.') ?> (<?= number_format((float)$row['selesai_pct'], 2, ',', '.') ?>%)</td></tr><?php endforeach; ?>
+    <?php foreach ($rows as $row): ?><?php
+      $submitClass = '';
+      if ($maxSubmitApprovePct !== null && abs((float)$row['submit_approve_pct'] - $maxSubmitApprovePct) < 0.001) {
+          $submitClass = ' best-progress';
+      }
+      if ($minSubmitApprovePct !== null && abs((float)$row['submit_approve_pct'] - $minSubmitApprovePct) < 0.001) {
+          $submitClass = ' low-progress';
+      }
+    ?><tr><td><?= e($row['label']) ?></td><td class="right"><?= number_format((int)$row['target'], 0, ',', '.') ?></td><td class="right"><?= number_format((int)$row['open_count'], 0, ',', '.') ?></td><td class="right"><?= number_format((int)$row['submitted_by_pencacah'], 0, ',', '.') ?></td><td class="right"><?= number_format((int)$row['rejected_by_pengawas'], 0, ',', '.') ?></td><td class="right"><?= number_format((int)$row['draft_count'], 0, ',', '.') ?></td><td class="right"><?= number_format((int)$row['approved_by_pengawas'], 0, ',', '.') ?></td><td class="right<?= e($submitClass) ?>"><?= number_format((int)$row['submit_approve_count'], 0, ',', '.') ?> (<?= number_format((float)$row['submit_approve_pct'], 2, ',', '.') ?>%)</td><td class="right"><?= number_format((float)$row['weekly_delta_pct'], 2, ',', '.') ?> poin</td><td class="right"><?= number_format((int)$row['selesai_count'], 0, ',', '.') ?> (<?= number_format((float)$row['selesai_pct'], 2, ',', '.') ?>%)</td></tr><?php endforeach; ?>
     </tbody></table>
   </div>
 </div>
