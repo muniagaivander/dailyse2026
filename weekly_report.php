@@ -260,10 +260,6 @@ function wr_build_html(array $user, string $referenceDate): string
       Wilayah dengan progress terendah perlu diprioritaskan untuk percepatan dan evaluasi hambatan lapangan.
     </p>
   </div>
-  <div class="card">
-    <h2>Progress Submit+Approve Harian per <?= e($scope['group_label']) ?></h2>
-    <div class="chart"><canvas id="trendChart"></canvas></div>
-  </div>
   <div class="grid2">
     <div class="card">
       <h2>5 <?= e($scope['group_label']) ?> Tertinggi</h2>
@@ -277,6 +273,10 @@ function wr_build_html(array $user, string $referenceDate): string
       <?php foreach ($attentionRows as $row): ?><tr><td><?= e($row['label']) ?></td><td class="right"><?= number_format((float)$row['submit_approve_pct'], 2, ',', '.') ?>%</td><td class="right"><?= number_format((float)$row['weekly_delta_pct'], 2, ',', '.') ?> poin</td><td class="right"><?= number_format((float)$row['selesai_pct'], 2, ',', '.') ?>%</td></tr><?php endforeach; ?>
       </tbody></table>
     </div>
+  </div>
+  <div class="card">
+    <h2>Progress Submit+Approve Harian per <?= e($scope['group_label']) ?></h2>
+    <div class="chart"><canvas id="trendChart"></canvas></div>
   </div>
   <div class="card">
     <h2>Ringkasan Per <?= e($scope['group_label']) ?></h2>
