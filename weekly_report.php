@@ -175,7 +175,7 @@ function wr_email_html(string $email): string
         return e($email);
     }
     [$name, $domain] = explode('@', $email, 2);
-    return e($name) . '&#64;' . e($domain);
+    return e($name) . '<span class="email-at"></span>' . e($domain);
 }
 
 function wr_rank_table_html(string $title, string $labelHeader, array $rows): string
@@ -307,6 +307,7 @@ function wr_build_html(array $user, string $referenceDate): string
     .summary { line-height:1.55; margin:0; }
     .best-progress { color:#2563eb; font-weight:800; }
     .low-progress { color:#dc2626; font-weight:800; }
+    .email-at::before { content:"\0040"; }
     @page {
       size: A4 landscape;
       margin: 10mm;
