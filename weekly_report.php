@@ -169,12 +169,21 @@ function wr_card_html(string $label, string $value, string $sub = ''): string
     return '<div class="wr-card"><strong>' . e($value) . '</strong><span>' . e($sub) . '</span><p>' . e($label) . '</p></div>';
 }
 
+function wr_email_html(string $email): string
+{
+    if (!str_contains($email, '@')) {
+        return e($email);
+    }
+    [$name, $domain] = explode('@', $email, 2);
+    return e($name) . '&#64;' . e($domain);
+}
+
 function wr_rank_table_html(string $title, string $labelHeader, array $rows): string
 {
     $html = '<div class="card"><h2>' . e($title) . '</h2>';
     $html .= '<table><thead><tr><th>' . e($labelHeader) . '</th><th class="right">Progress Pendataan</th><th class="right">Kenaikan</th><th class="right">Selesai</th></tr></thead><tbody>';
     foreach ($rows as $row) {
-        $html .= '<tr><td>' . e($row['label']) . '</td>'
+        $html .= '<tr><td>' . wr_email_html((string)$row['label']) . '</td>'
             . '<td class="right">' . number_format((float)$row['submit_approve_pct'], 2, ',', '.') . '%</td>'
             . '<td class="right">' . number_format((float)$row['weekly_delta_pct'], 2, ',', '.') . ' poin</td>'
             . '<td class="right">' . number_format((float)$row['selesai_pct'], 2, ',', '.') . '%</td></tr>';
