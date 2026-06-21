@@ -214,6 +214,10 @@ function wr_build_html(array $user, string $referenceDate): string
     th { background:#f9fafb; text-align:left; }
     .right { text-align:right; }
     .summary { line-height:1.55; margin:0; }
+    @page {
+      size: A4 landscape;
+      margin: 10mm;
+    }
     @media print {
       body { background:#fff; }
       .toolbar { display:none; }
@@ -228,7 +232,7 @@ function wr_build_html(array $user, string $referenceDate): string
   <div class="cover">
     <h1><?= e($scope['title']) ?></h1>
     <div><strong><?= e($scope['subtitle']) ?></strong></div>
-    <div class="muted">Periode <?= e(wr_date_label($periodStart)) ?> - <?= e(wr_date_label($periodEnd)) ?>. Tanggal acuan <?= e(wr_date_label($referenceDate)) ?>.</div>
+    <div class="muted">Periode <?= e(wr_date_label($periodStart)) ?> - <?= e(wr_date_label($periodEnd)) ?></div>
   </div>
   <div class="cards">
     <?= wr_card_html('Target', number_format((int)$totals['target'], 0, ',', '.')) ?>
@@ -320,7 +324,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $prefix = $user['role'] === 'admin_kab' ? $user['kab_id'] : 'provinsi';
     $filename = 'weekly_report_' . $prefix . '_' . $periodStart . '_' . $periodEnd . '_' . date('YmdHis') . '.html';
     file_put_contents($dir . '/' . $filename, wr_build_html($user, $referenceDate), LOCK_EX);
-    flash('success', 'Weekly report berhasil dibuat. Buka file report lalu klik Simpan sebagai PDF.');
+    flash('success', 'Weekly report berhasil dibuat.');
     redirect('weekly_report.php?tanggal=' . urlencode($referenceDate) . '&file=' . urlencode($filename));
 }
 
@@ -346,8 +350,8 @@ render_header('Weekly Report');
 <?php if ($generatedFile && preg_match('/^weekly_report_[a-zA-Z0-9_-]+_\d{4}-\d{2}-\d{2}_\d{4}-\d{2}-\d{2}_\d{14}\.html$/', $generatedFile) && is_file(wr_report_dir() . '/' . $generatedFile)): ?>
   <div class="card card-body">
     <h5 class="mb-2">Report Siap</h5>
-    <p class="text-muted mb-3">File report sudah disimpan. Klik tombol di bawah, lalu gunakan tombol <strong>Simpan sebagai PDF</strong> di halaman report.</p>
-    <a class="btn btn-success" target="_blank" href="<?= e(wr_report_url($generatedFile)) ?>"><i class="fas fa-download mr-1"></i>Buka / Download PDF</a>
+    <p class="text-muted mb-3">File report sudah disimpan dengan layout cetak A4 landscape.</p>
+    <a class="btn btn-success" download href="<?= e(wr_report_url($generatedFile)) ?>"><i class="fas fa-download mr-1"></i>Download Weekly Report</a>
   </div>
 <?php endif; ?>
 <?php render_footer(); ?>
