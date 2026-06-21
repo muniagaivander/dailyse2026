@@ -147,6 +147,9 @@ function render_header(string $title): void {
               <li class="nav-item"><a class="nav-link<?= $currentPage === 'progress.php' && ($_GET['type'] ?? 'pengawas') !== 'pencacah' ? ' active' : '' ?>" href="progress.php?type=pengawas"><i class="nav-icon fas fa-user-check"></i><p>Progress Pengawas</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $currentPage === 'progress.php' && ($_GET['type'] ?? '') === 'pencacah' ? ' active' : '' ?>" href="progress.php?type=pencacah"><i class="nav-icon fas fa-users"></i><p>Progress Pencacah</p></a></li>
             <?php endif; ?>
+            <?php if (in_array($user['role'], ['admin_kab','superadmin'], true)): ?>
+              <li class="nav-item"><a class="nav-link<?= $isActive(['weekly_report.php']) ?>" href="weekly_report.php"><i class="nav-icon fas fa-file-lines"></i><p>Weekly Report</p></a></li>
+            <?php endif; ?>
             <?php if ($user['role'] === 'admin_kab'): ?>
               <li class="nav-item"><a class="nav-link<?= $isActive(['petugas.php']) ?>" href="petugas.php"><i class="nav-icon fas fa-address-book"></i><p>Daftar Petugas</p></a></li>
             <?php endif; ?>
