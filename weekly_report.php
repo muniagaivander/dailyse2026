@@ -280,8 +280,21 @@ function wr_build_html(array $user, string $referenceDate): string
 new Chart(document.getElementById('trendChart'), {
   type: 'line',
   data: { labels: <?= json_encode($trendLabels) ?>, datasets: <?= json_encode($datasets) ?> },
-  options: { animation:false, maintainAspectRatio:false, responsive:true, plugins:{legend:{position:'bottom'}}, scales:{y:{min:0,max:100,ticks:{callback:v=>v+'%'}}} }
+  options: {
+    animation:false,
+    maintainAspectRatio:false,
+    responsive:true,
+    plugins:{legend:{position:'bottom'}},
+    scales:{y:{min:0,suggestedMax:chartYMax(<?= json_encode($datasets) ?>),ticks:{callback:v=>v+'%'}}}
+  }
 });
+function chartYMax(datasets) {
+  const maxValue = Math.max(0, ...datasets.flatMap(dataset => dataset.data.map(Number)));
+  if (maxValue <= 10) return 10;
+  if (maxValue <= 25) return 25;
+  if (maxValue <= 50) return 50;
+  return 100;
+}
 </script>
 </body>
 </html>
