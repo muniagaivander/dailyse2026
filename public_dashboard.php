@@ -244,7 +244,7 @@ $cards = [
   <div class="row">
     <div class="col-lg-6">
       <div class="card">
-        <div class="card-header"><strong>Progress Pendataan per <?= e($context['group_label']) ?></strong></div>
+        <div class="card-header"><strong>Progress Pendataan per <?= e($context['group_label']) ?> (submit+reject+pending+approve)</strong></div>
         <div class="card-body"><div class="public-chart-wrap"><canvas id="submitApproveChart"></canvas></div></div>
       </div>
     </div>

@@ -647,6 +647,12 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
   </div>
 </form>
 
+<?php if ($activeTab === 'submit_approve'): ?>
+  <div class="card card-body py-2 mb-3">
+    <div><strong><em>Progress Pendataan = Submit+Reject+Pending+Approve</em></strong></div>
+  </div>
+<?php endif; ?>
+
 <?php
   $targetTotal = (int)$totals['target'];
   $dashboardCards = [
@@ -829,6 +835,9 @@ if (pengawas) {
 <?php if (in_array($activeTab, ['performa_pengawas', 'performa_pencacah'], true) && $canSeePerformance): ?>
 <?php $roleField = $activeTab === 'performa_pengawas' ? 'pengawas_email' : 'pencacah_email'; $labelRole = $activeTab === 'performa_pengawas' ? 'Pengawas' : 'Pencacah'; ?>
 <?php $attentionThreshold = performance_attention_threshold(); $attentionType = $activeTab === 'performa_pengawas' ? 'pengawas' : 'pencacah'; ?>
+<div class="card card-body py-2 mb-3">
+  <div><strong><em>Progress Pendataan = Submit+Reject+Pending+Approve</em></strong></div>
+</div>
 <div class="card">
   <div class="card-header p-2">
     <ul class="nav nav-pills performance-tabs" role="tablist">
