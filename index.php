@@ -202,6 +202,14 @@ function dashboard_totals(array $rows, array $fields): array
     return $totals;
 }
 
+function dashboard_pendataan_count(array $row): int
+{
+    return (int)($row['submitted_by_pencacah'] ?? 0)
+        + (int)($row['rejected_by_pengawas'] ?? 0)
+        + (int)($row['draft_count'] ?? 0)
+        + (int)($row['approved_by_pengawas'] ?? 0);
+}
+
 function performance_rows(string $roleField, string $kabId, string $direction): array
 {
     $order = $direction === 'desc' ? 'DESC' : 'ASC';
@@ -209,11 +217,13 @@ function performance_rows(string $roleField, string $kabId, string $direction): 
     $stmt = db()->prepare("SELECT ms.$roleField email,
             COALESCE(SUM(ss.target),0) target,
             COALESCE(SUM(ss.submitted_by_pencacah),0) submitted_by_pencacah,
+            COALESCE(SUM(ss.rejected_by_pengawas),0) rejected_by_pengawas,
+            COALESCE(SUM(ss.draft_count),0) draft_count,
             COALESCE(SUM(ss.approved_by_pengawas),0) approved_by_pengawas,
             COUNT(ms.id) subsls_total,
             COALESCE(SUM(CASE WHEN cs.status_selesai='Selesai' THEN 1 ELSE 0 END),0) selesai_count,
             CASE WHEN COALESCE(SUM(ss.target),0)>0
-                THEN ROUND((COALESCE(SUM(ss.submitted_by_pencacah),0)+COALESCE(SUM(ss.approved_by_pengawas),0))/COALESCE(SUM(ss.target),0)*100,2)
+                THEN ROUND((COALESCE(SUM(ss.submitted_by_pencacah),0)+COALESCE(SUM(ss.rejected_by_pengawas),0)+COALESCE(SUM(ss.draft_count),0)+COALESCE(SUM(ss.approved_by_pengawas),0))/COALESCE(SUM(ss.target),0)*100,2)
                 ELSE 0 END submit_approve_pct,
             CASE WHEN COUNT(ms.id)>0
                 THEN ROUND(COALESCE(SUM(CASE WHEN cs.status_selesai='Selesai' THEN 1 ELSE 0 END),0)/COUNT(ms.id)*100,2)
@@ -374,7 +384,7 @@ function dashboard_chart_export_payload(array $rows, array $fields, string $tab)
 
     $headers = $tab === 'selesai'
         ? ['label', 'subsls_total', 'selesai_count', 'selesai_subsls_pct']
-        : ['label', 'target', 'submit', 'approved', 'submit_approve_pct'];
+        : ['label', 'target', 'submit', 'reject', 'pending', 'approved', 'progress_pendataan_pct'];
     $out = [];
     foreach ($rows as $row) {
         if ($tab === 'selesai') {
@@ -388,13 +398,18 @@ function dashboard_chart_export_payload(array $rows, array $fields, string $tab)
         } else {
             $target = (float)($row['target'] ?? 0);
             $submit = (float)($row['submitted_by_pencacah'] ?? 0);
+            $reject = (float)($row['rejected_by_pengawas'] ?? 0);
+            $pending = (float)($row['draft_count'] ?? 0);
             $approved = (float)($row['approved_by_pengawas'] ?? 0);
+            $pendataan = $submit + $reject + $pending + $approved;
             $out[] = [
                 $row['label'] ?? '-',
                 $row['target'] ?? 0,
                 $submit,
+                $reject,
+                $pending,
                 $approved,
-                $target > 0 ? round(($submit + $approved) / $target * 100, 2) : 0,
+                $target > 0 ? round($pendataan / $target * 100, 2) : 0,
             ];
         }
     }
@@ -422,13 +437,15 @@ if (($_GET['action'] ?? '') === 'export_attention' && $canSeePerformance) {
             $threshold['date'],
             $row['target'],
             $row['submitted_by_pencacah'],
+            $row['rejected_by_pengawas'],
+            $row['draft_count'],
             $row['approved_by_pengawas'],
             $row['subsls_total'],
             $row['selesai_count'],
         ];
     }
     dashboard_export_rows(
-        ['email', 'submit_approve_pct', 'selesai_subsls_pct', 'threshold_selesai_pct', 'batas_tanggal', 'target', 'submitted_by_pencacah', 'approved_by_pengawas', 'subsls_total', 'selesai_count'],
+        ['email', 'progress_pendataan_pct', 'selesai_subsls_pct', 'threshold_selesai_pct', 'batas_tanggal', 'target', 'submitted_by_pencacah', 'rejected_by_pengawas', 'draft_count', 'approved_by_pengawas', 'subsls_total', 'selesai_count'],
         $exportRows,
         'perlu_perhatian_' . $type . '_' . $kabId . '_' . date('Ymd'),
         $format
@@ -443,14 +460,16 @@ if (($_GET['action'] ?? '') === 'export_dashboard') {
     $format = ($_GET['format'] ?? 'csv') === 'xlsx' ? 'xlsx' : 'csv';
     $exportRowsSource = dashboard_rows($user, $filters, $fields);
     [$headers, $exportRows] = dashboard_chart_export_payload($exportRowsSource, $fields, $exportTab);
-    dashboard_export_rows($headers, $exportRows, 'dashboard_' . $exportTab . '_' . date('Ymd'), $format);
+    $exportNameTab = $exportTab === 'submit_approve' ? 'progress_pendataan' : $exportTab;
+    dashboard_export_rows($headers, $exportRows, 'dashboard_' . $exportNameTab . '_' . date('Ymd'), $format);
 }
 
 $opts = dashboard_filter_options($user, $filters);
 $chartRows = dashboard_rows($user, $filters, $fields);
 $totals = dashboard_totals($chartRows, $fields);
 $completionPct = $totals['subsls_total'] > 0 ? round($totals['selesai_count'] / $totals['subsls_total'] * 100, 2) : 0;
-$submitApprovePct = $totals['target'] > 0 ? round(((int)$totals['submitted_by_pencacah'] + (int)$totals['approved_by_pengawas']) / (int)$totals['target'] * 100, 2) : 0;
+$submitApproveCount = dashboard_pendataan_count($totals);
+$submitApprovePct = $totals['target'] > 0 ? round($submitApproveCount / (int)$totals['target'] * 100, 2) : 0;
 $performanceKabOptions = $canSeePerformance ? dashboard_kab_options_for_performance($user) : [];
 
 function dashboard_count_pct_text(int $count, float $pct): string
@@ -554,7 +573,7 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
 </style>
 
 <div class="dashboard-tabs">
-  <a class="dashboard-tab <?= $activeTab==='submit_approve'?'active':'' ?>" href="?<?= e(http_build_query(array_merge($_GET, ['tab' => 'submit_approve']))) ?>">Progress Submit+Approve</a>
+  <a class="dashboard-tab <?= $activeTab==='submit_approve'?'active':'' ?>" href="?<?= e(http_build_query(array_merge($_GET, ['tab' => 'submit_approve']))) ?>">Progress Pendataan</a>
   <a class="dashboard-tab <?= $activeTab==='status'?'active':'' ?>" href="?<?= e(http_build_query(array_merge($_GET, ['tab' => 'status']))) ?>">Progress By Status</a>
   <a class="dashboard-tab <?= $activeTab==='selesai'?'active':'' ?>" href="?<?= e(http_build_query(array_merge($_GET, ['tab' => 'selesai']))) ?>">Progress Selesai SubSLS</a>
   <?php if ($canSeePerformance): ?>
@@ -637,7 +656,7 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
       ['label' => 'Reject', 'value' => dashboard_count_pct_text((int)$totals['rejected_by_pengawas'], $targetTotal ? (int)$totals['rejected_by_pengawas'] / $targetTotal * 100 : 0)],
       ['label' => 'Pending', 'value' => dashboard_count_pct_text((int)$totals['draft_count'], $targetTotal ? (int)$totals['draft_count'] / $targetTotal * 100 : 0)],
       ['label' => 'Approve', 'value' => dashboard_count_pct_text((int)$totals['approved_by_pengawas'], $targetTotal ? (int)$totals['approved_by_pengawas'] / $targetTotal * 100 : 0)],
-      ['label' => 'Submit+Approve', 'value' => dashboard_count_pct_text((int)$totals['submitted_by_pencacah'] + (int)$totals['approved_by_pengawas'], $submitApprovePct)],
+      ['label' => 'Progress Pendataan', 'value' => dashboard_count_pct_text($submitApproveCount, $submitApprovePct)],
       ['label' => 'Selesai', 'value' => dashboard_count_pct_text((int)$totals['selesai_count'], $completionPct)],
       ['label' => 'Total SubSLS', 'value' => dashboard_count_only_text((int)$totals['subsls_total'])],
   ];
@@ -676,7 +695,7 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
           <th class="text-right">Reject</th>
           <th class="text-right">Pending</th>
           <th class="text-right">Approve</th>
-          <th class="text-right">Submit+Approve</th>
+          <th class="text-right">Progress Pendataan</th>
           <th class="text-right">Jumlah SubSLS Selesai</th>
         </tr>
       </thead>
@@ -684,7 +703,7 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
         <?php foreach ($chartRows as $row): ?>
           <?php
             $rowTarget = (int)$row['target'];
-            $submitApproveCount = (int)$row['submitted_by_pencacah'] + (int)$row['approved_by_pengawas'];
+            $submitApproveCount = dashboard_pendataan_count($row);
           ?>
           <tr>
             <td><?= e($row['label']) ?></td>
@@ -702,7 +721,7 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
       <tfoot>
         <?php
           $totalTarget = (int)$totals['target'];
-          $totalSubmitApprove = (int)$totals['submitted_by_pencacah'] + (int)$totals['approved_by_pengawas'];
+          $totalSubmitApprove = dashboard_pendataan_count($totals);
         ?>
         <tr>
           <td>Total</td>
@@ -718,6 +737,7 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
       </tfoot>
     </table>
   </div>
+  <div class="card-footer text-muted small">Progress Pendataan = submit+reject+pending+approve</div>
 </div>
 
 <script>
@@ -734,7 +754,7 @@ function pctColor(value) {
 }
 const percentRows = rows.map(r => {
   const target = Number(r.target || 0);
-  const submitApprove = target ? Math.round((Number(r.submitted_by_pencacah || 0) + Number(r.approved_by_pengawas || 0)) / target * 10000) / 100 : 0;
+  const submitApprove = target ? Math.round((Number(r.submitted_by_pencacah || 0) + Number(r.rejected_by_pengawas || 0) + Number(r.draft_count || 0) + Number(r.approved_by_pengawas || 0)) / target * 10000) / 100 : 0;
   const selesai = Number(r.subsls_total || 0) ? Math.round(Number(r.selesai_count || 0) / Number(r.subsls_total || 0) * 10000) / 100 : 0;
   return { label: r.label || '-', submitApprove, selesai };
 });
@@ -756,7 +776,7 @@ const config = activeTab === 'status'
       data: {
         labels: percentRows.map(r => r.label),
         datasets: [{
-          label: activeTab === 'selesai' ? 'Persen Selesai SubSLS' : 'Persen Submit+Approve',
+          label: activeTab === 'selesai' ? 'Persen Selesai SubSLS' : 'Persen Progress Pendataan',
           data: percentRows.map(r => activeTab === 'selesai' ? r.selesai : r.submitApprove),
           backgroundColor: percentRows.map(r => pctColor(activeTab === 'selesai' ? r.selesai : r.submitApprove))
         }]
@@ -825,7 +845,7 @@ if (pengawas) {
           <h5>10 <?= e($labelRole) ?> Terbaik</h5>
           <div class="table-responsive mb-4">
             <table class="table table-sm table-bordered table-striped mb-0">
-              <thead><tr><th>Email</th><th>Submit+Approve</th><th>Selesai SubSLS</th><th>Target</th><th>Total SubSLS</th></tr></thead>
+              <thead><tr><th>Email</th><th>Progress Pendataan</th><th>Selesai SubSLS</th><th>Target</th><th>Total SubSLS</th></tr></thead>
               <tbody>
               <?php foreach ($topRows as $r): ?>
                 <tr><td><?= e($r['email']) ?></td><td><?= number_format((float)$r['submit_approve_pct'],2,',','.') ?>%</td><td><?= number_format((float)$r['selesai_pct'],2,',','.') ?>%</td><td><?= number_format((int)$r['target'],0,',','.') ?></td><td><?= number_format((int)$r['subsls_total'],0,',','.') ?></td></tr>
@@ -845,7 +865,7 @@ if (pengawas) {
           </div>
           <div class="table-responsive">
             <table class="table table-sm table-bordered table-striped mb-0 attention-table" data-page-size="25">
-              <thead><tr><th>Email</th><th>Submit+Approve</th><th>Selesai SubSLS</th><th>Target</th><th>Total SubSLS</th></tr></thead>
+              <thead><tr><th>Email</th><th>Progress Pendataan</th><th>Selesai SubSLS</th><th>Target</th><th>Total SubSLS</th></tr></thead>
               <tbody>
               <?php foreach ($attentionRows as $r): ?>
                 <tr class="attention-row"><td><?= e($r['email']) ?></td><td><?= number_format((float)$r['submit_approve_pct'],2,',','.') ?>%</td><td><?= number_format((float)$r['selesai_pct'],2,',','.') ?>%</td><td><?= number_format((int)$r['target'],0,',','.') ?></td><td><?= number_format((int)$r['subsls_total'],0,',','.') ?></td></tr>

@@ -15,6 +15,14 @@ function wr_pct(int $count, int $target): float
     return $target > 0 ? round($count / $target * 100, 2) : 0.0;
 }
 
+function wr_pendataan_count(array $row): int
+{
+    return (int)($row['submitted_by_pencacah'] ?? 0)
+        + (int)($row['rejected_by_pengawas'] ?? 0)
+        + (int)($row['draft_count'] ?? 0)
+        + (int)($row['approved_by_pengawas'] ?? 0);
+}
+
 function wr_scope(array $user): array
 {
     if ($user['role'] === 'admin_kab') {
@@ -96,9 +104,9 @@ function wr_rows_with_delta(array $endRows, array $baseRows): array
         $baseByLabel[$row['label']] = $row;
     }
     foreach ($endRows as &$row) {
-        $submitApprove = (int)$row['submitted_by_pencacah'] + (int)$row['approved_by_pengawas'];
+        $submitApprove = wr_pendataan_count($row);
         $base = $baseByLabel[$row['label']] ?? [];
-        $baseSubmitApprove = (int)($base['submitted_by_pencacah'] ?? 0) + (int)($base['approved_by_pengawas'] ?? 0);
+        $baseSubmitApprove = wr_pendataan_count($base);
         $row['submit_approve_count'] = $submitApprove;
         $row['submit_approve_pct'] = wr_pct($submitApprove, (int)$row['target']);
         $row['weekly_delta_pct'] = round($row['submit_approve_pct'] - wr_pct($baseSubmitApprove, (int)($base['target'] ?? 0)), 2);
@@ -146,8 +154,8 @@ function wr_build_html(array $user, string $referenceDate): string
     $rows = wr_rows_with_delta($endRows, $baseRows);
     $totals = wr_totals($endRows);
     $baseTotals = wr_totals($baseRows);
-    $submitApproveTotal = (int)$totals['submitted_by_pencacah'] + (int)$totals['approved_by_pengawas'];
-    $baseSubmitApproveTotal = (int)$baseTotals['submitted_by_pencacah'] + (int)$baseTotals['approved_by_pengawas'];
+    $submitApproveTotal = wr_pendataan_count($totals);
+    $baseSubmitApproveTotal = wr_pendataan_count($baseTotals);
     $submitApprovePct = wr_pct($submitApproveTotal, (int)$totals['target']);
     $weeklyDeltaPct = round($submitApprovePct - wr_pct($baseSubmitApproveTotal, (int)$baseTotals['target']), 2);
     $selesaiPct = wr_pct((int)$totals['selesai_count'], (int)$totals['subsls_total']);
@@ -252,7 +260,7 @@ function wr_build_html(array $user, string $referenceDate): string
   <div class="card">
     <h2>Summary</h2>
     <p class="summary">
-      Progress Submit+Approve sampai akhir minggu ini mencapai <strong><?= number_format($submitApprovePct, 2, ',', '.') ?>%</strong>,
+      Progress Pendataan sampai akhir minggu ini mencapai <strong><?= number_format($submitApprovePct, 2, ',', '.') ?>%</strong>,
       naik <strong><?= number_format($weeklyDeltaPct, 2, ',', '.') ?> poin</strong> dibanding akhir minggu sebelumnya.
       Untuk mencapai 100% pada 31 Agustus 2026, rata-rata kenaikan yang dibutuhkan sekitar
       <strong><?= number_format($requiredWeeklyPct, 2, ',', '.') ?> poin per minggu</strong>.
@@ -263,24 +271,24 @@ function wr_build_html(array $user, string $referenceDate): string
   <div class="grid2">
     <div class="card">
       <h2>5 <?= e($scope['group_label']) ?> Tertinggi</h2>
-      <table><thead><tr><th><?= e($scope['group_label']) ?></th><th class="right">Submit+Approve</th><th class="right">Kenaikan</th><th class="right">Selesai</th></tr></thead><tbody>
+      <table><thead><tr><th><?= e($scope['group_label']) ?></th><th class="right">Progress Pendataan</th><th class="right">Kenaikan</th><th class="right">Selesai</th></tr></thead><tbody>
       <?php foreach ($topRows as $row): ?><tr><td><?= e($row['label']) ?></td><td class="right"><?= number_format((float)$row['submit_approve_pct'], 2, ',', '.') ?>%</td><td class="right"><?= number_format((float)$row['weekly_delta_pct'], 2, ',', '.') ?> poin</td><td class="right"><?= number_format((float)$row['selesai_pct'], 2, ',', '.') ?>%</td></tr><?php endforeach; ?>
       </tbody></table>
     </div>
     <div class="card">
       <h2>5 <?= e($scope['group_label']) ?> Perlu Perhatian</h2>
-      <table><thead><tr><th><?= e($scope['group_label']) ?></th><th class="right">Submit+Approve</th><th class="right">Kenaikan</th><th class="right">Selesai</th></tr></thead><tbody>
+      <table><thead><tr><th><?= e($scope['group_label']) ?></th><th class="right">Progress Pendataan</th><th class="right">Kenaikan</th><th class="right">Selesai</th></tr></thead><tbody>
       <?php foreach ($attentionRows as $row): ?><tr><td><?= e($row['label']) ?></td><td class="right"><?= number_format((float)$row['submit_approve_pct'], 2, ',', '.') ?>%</td><td class="right"><?= number_format((float)$row['weekly_delta_pct'], 2, ',', '.') ?> poin</td><td class="right"><?= number_format((float)$row['selesai_pct'], 2, ',', '.') ?>%</td></tr><?php endforeach; ?>
       </tbody></table>
     </div>
   </div>
   <div class="card">
-    <h2>Progress Submit+Approve Harian per <?= e($scope['group_label']) ?></h2>
+    <h2>Progress Pendataan Harian per <?= e($scope['group_label']) ?></h2>
     <div class="chart"><canvas id="trendChart"></canvas></div>
   </div>
   <div class="card">
     <h2>Ringkasan Per <?= e($scope['group_label']) ?></h2>
-    <table><thead><tr><th><?= e($scope['group_label']) ?></th><th class="right">Target</th><th class="right">Open</th><th class="right">Submit</th><th class="right">Reject</th><th class="right">Pending</th><th class="right">Approved</th><th class="right">Submit+Approve</th><th class="right">Kenaikan</th><th class="right">SubSLS Selesai</th></tr></thead><tbody>
+    <table><thead><tr><th><?= e($scope['group_label']) ?></th><th class="right">Target</th><th class="right">Open</th><th class="right">Submit</th><th class="right">Reject</th><th class="right">Pending</th><th class="right">Approved</th><th class="right">Progress Pendataan</th><th class="right">Kenaikan</th><th class="right">SubSLS Selesai</th></tr></thead><tbody>
     <?php foreach ($rows as $row): ?><?php
       $submitClass = '';
       if ($maxSubmitApprovePct !== null && abs((float)$row['submit_approve_pct'] - $maxSubmitApprovePct) < 0.001) {
@@ -291,6 +299,7 @@ function wr_build_html(array $user, string $referenceDate): string
       }
     ?><tr><td><?= e($row['label']) ?></td><td class="right"><?= number_format((int)$row['target'], 0, ',', '.') ?></td><td class="right"><?= number_format((int)$row['open_count'], 0, ',', '.') ?></td><td class="right"><?= number_format((int)$row['submitted_by_pencacah'], 0, ',', '.') ?></td><td class="right"><?= number_format((int)$row['rejected_by_pengawas'], 0, ',', '.') ?></td><td class="right"><?= number_format((int)$row['draft_count'], 0, ',', '.') ?></td><td class="right"><?= number_format((int)$row['approved_by_pengawas'], 0, ',', '.') ?></td><td class="right<?= e($submitClass) ?>"><?= number_format((int)$row['submit_approve_count'], 0, ',', '.') ?> (<?= number_format((float)$row['submit_approve_pct'], 2, ',', '.') ?>%)</td><td class="right"><?= number_format((float)$row['weekly_delta_pct'], 2, ',', '.') ?> poin</td><td class="right"><?= number_format((int)$row['selesai_count'], 0, ',', '.') ?> (<?= number_format((float)$row['selesai_pct'], 2, ',', '.') ?>%)</td></tr><?php endforeach; ?>
     </tbody></table>
+    <p class="muted" style="font-size:12px;margin:8px 0 0;">Progress Pendataan = submit+reject+pending+approve</p>
   </div>
 </div>
 <script>
