@@ -86,6 +86,42 @@ function wr_rows(array $scope, string $asOfDate): array
     return $stmt->fetchAll();
 }
 
+function wr_staff_rows(array $user, string $roleField, string $asOfDate): array
+{
+    if ($user['role'] !== 'admin_kab' || !in_array($roleField, ['pengawas_email', 'pencacah_email'], true)) {
+        return [];
+    }
+    $selects = [];
+    foreach (array_keys(status_fields()) as $field) {
+        $selects[] = "COALESCE(SUM(ds.$field),0) $field";
+    }
+    $stmt = db()->prepare("SELECT ms.$roleField label,
+            COUNT(ms.id) subsls_total,
+            COALESCE(SUM(ds.target),0) target,
+            " . implode(',', $selects) . ",
+            COALESCE(SUM(CASE WHEN cs.status_selesai='Selesai' THEN 1 ELSE 0 END),0) selesai_count
+        FROM master_subsls ms
+        JOIN master_sls sl ON sl.id=ms.sls_id
+        JOIN master_desa d ON d.id=sl.desa_id
+        JOIN master_kec kc ON kc.id=d.kec_id
+        LEFT JOIN (
+            SELECT ds1.*
+            FROM daily_status ds1
+            JOIN (
+                SELECT subsls_id, MAX(tanggal) max_tanggal
+                FROM daily_status
+                WHERE tanggal <= ?
+                GROUP BY subsls_id
+            ) latest ON latest.subsls_id=ds1.subsls_id AND latest.max_tanggal=ds1.tanggal
+        ) ds ON ds.subsls_id=ms.id
+        LEFT JOIN subsls_completion_status cs ON cs.subsls_id=ms.id
+        WHERE kc.kab_id=? AND ms.$roleField IS NOT NULL AND ms.$roleField <> ''
+        GROUP BY ms.$roleField
+        ORDER BY ms.$roleField");
+    $stmt->execute([$asOfDate, $user['kab_id']]);
+    return $stmt->fetchAll();
+}
+
 function wr_totals(array $rows): array
 {
     $totals = array_fill_keys(array_merge(['target', 'subsls_total', 'selesai_count'], array_keys(status_fields())), 0);
@@ -131,6 +167,23 @@ function wr_rank_rows(array $rows, string $direction): array
 function wr_card_html(string $label, string $value, string $sub = ''): string
 {
     return '<div class="wr-card"><strong>' . e($value) . '</strong><span>' . e($sub) . '</span><p>' . e($label) . '</p></div>';
+}
+
+function wr_rank_table_html(string $title, string $labelHeader, array $rows): string
+{
+    $html = '<div class="card"><h2>' . e($title) . '</h2>';
+    $html .= '<table><thead><tr><th>' . e($labelHeader) . '</th><th class="right">Progress Pendataan</th><th class="right">Kenaikan</th><th class="right">Selesai</th></tr></thead><tbody>';
+    foreach ($rows as $row) {
+        $html .= '<tr><td>' . e($row['label']) . '</td>'
+            . '<td class="right">' . number_format((float)$row['submit_approve_pct'], 2, ',', '.') . '%</td>'
+            . '<td class="right">' . number_format((float)$row['weekly_delta_pct'], 2, ',', '.') . ' poin</td>'
+            . '<td class="right">' . number_format((float)$row['selesai_pct'], 2, ',', '.') . '%</td></tr>';
+    }
+    if (!$rows) {
+        $html .= '<tr><td colspan="4" class="muted">Belum ada data.</td></tr>';
+    }
+    $html .= '</tbody></table></div>';
+    return $html;
 }
 
 function wr_report_dir(): string
@@ -191,6 +244,24 @@ function wr_build_html(array $user, string $referenceDate): string
     }
     $topRows = wr_rank_rows($rows, 'desc');
     $attentionRows = wr_rank_rows($rows, 'asc');
+    $topPengawasRows = [];
+    $attentionPengawasRows = [];
+    $topPencacahRows = [];
+    $attentionPencacahRows = [];
+    if ($user['role'] === 'admin_kab') {
+        $pengawasRows = wr_rows_with_delta(
+            wr_staff_rows($user, 'pengawas_email', $periodEnd),
+            wr_staff_rows($user, 'pengawas_email', $baselineDate)
+        );
+        $pencacahRows = wr_rows_with_delta(
+            wr_staff_rows($user, 'pencacah_email', $periodEnd),
+            wr_staff_rows($user, 'pencacah_email', $baselineDate)
+        );
+        $topPengawasRows = wr_rank_rows($pengawasRows, 'desc');
+        $attentionPengawasRows = wr_rank_rows($pengawasRows, 'asc');
+        $topPencacahRows = wr_rank_rows($pencacahRows, 'desc');
+        $attentionPencacahRows = wr_rank_rows($pencacahRows, 'asc');
+    }
     $submitApprovePcts = array_map(fn($row) => (float)$row['submit_approve_pct'], $rows);
     $maxSubmitApprovePct = $submitApprovePcts ? max($submitApprovePcts) : null;
     $minSubmitApprovePct = $submitApprovePcts ? min($submitApprovePcts) : null;
@@ -285,6 +356,16 @@ function wr_build_html(array $user, string $referenceDate): string
       </tbody></table>
     </div>
   </div>
+  <?php if ($user['role'] === 'admin_kab'): ?>
+    <div class="grid2">
+      <?= wr_rank_table_html('5 Pengawas Tertinggi', 'Pengawas', $topPengawasRows) ?>
+      <?= wr_rank_table_html('5 Pengawas Perlu Perhatian', 'Pengawas', $attentionPengawasRows) ?>
+    </div>
+    <div class="grid2">
+      <?= wr_rank_table_html('5 Pencacah Tertinggi', 'Pencacah', $topPencacahRows) ?>
+      <?= wr_rank_table_html('5 Pencacah Perlu Perhatian', 'Pencacah', $attentionPencacahRows) ?>
+    </div>
+  <?php endif; ?>
   <div class="card">
     <h2>Progress Pendataan Harian per <?= e($scope['group_label']) ?></h2>
     <div class="chart"><canvas id="trendChart"></canvas></div>

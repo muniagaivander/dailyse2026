@@ -567,6 +567,18 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
   color: #2563eb;
   font-weight: 700;
 }
+.best-progress {
+  color: #16a34a;
+  font-weight: 800;
+}
+.low-progress {
+  color: #dc2626;
+  font-weight: 800;
+}
+.best-progress .dashboard-table-pct,
+.low-progress .dashboard-table-pct {
+  color: inherit;
+}
 @media (max-width: 767.98px) {
   .dashboard-chart-wrap { height: 340px; }
 }
@@ -691,6 +703,15 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
 <div class="card">
   <div class="card-header"><strong>Tabel Ringkasan Sesuai Filter</strong></div>
   <div class="card-body table-responsive p-0">
+    <?php
+      $pendataanPcts = array_map(function ($row) {
+          $target = (int)$row['target'];
+          return $target > 0 ? dashboard_pendataan_count($row) / $target * 100 : 0;
+      }, $chartRows);
+      $maxPendataanPct = $pendataanPcts ? max($pendataanPcts) : null;
+      $minPendataanPct = $pendataanPcts ? min($pendataanPcts) : null;
+      $samePendataanPct = $maxPendataanPct !== null && $minPendataanPct !== null && abs($maxPendataanPct - $minPendataanPct) < 0.001;
+    ?>
     <table class="table table-sm table-bordered table-striped mb-0 dashboard-summary-table">
       <thead>
         <tr>
@@ -710,6 +731,13 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
           <?php
             $rowTarget = (int)$row['target'];
             $submitApproveCount = dashboard_pendataan_count($row);
+            $pendataanPct = $rowTarget > 0 ? $submitApproveCount / $rowTarget * 100 : 0;
+            $pendataanClass = '';
+            if ($samePendataanPct || ($maxPendataanPct !== null && abs($pendataanPct - $maxPendataanPct) < 0.001)) {
+                $pendataanClass = ' best-progress';
+            } elseif ($minPendataanPct !== null && abs($pendataanPct - $minPendataanPct) < 0.001) {
+                $pendataanClass = ' low-progress';
+            }
           ?>
           <tr>
             <td><?= e($row['label']) ?></td>
@@ -719,7 +747,7 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
             <td class="text-right"><?= number_format((int)$row['rejected_by_pengawas'], 0, ',', '.') ?></td>
             <td class="text-right"><?= number_format((int)$row['draft_count'], 0, ',', '.') ?></td>
             <td class="text-right"><?= dashboard_table_count_pct_text((int)$row['approved_by_pengawas'], $rowTarget) ?></td>
-            <td class="text-right"><?= dashboard_table_count_pct_text($submitApproveCount, $rowTarget) ?></td>
+            <td class="text-right<?= e($pendataanClass) ?>"><?= dashboard_table_count_pct_text($submitApproveCount, $rowTarget) ?></td>
             <td class="text-right"><?= number_format((int)$row['selesai_count'], 0, ',', '.') ?></td>
           </tr>
         <?php endforeach; ?>
