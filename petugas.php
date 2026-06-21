@@ -175,6 +175,7 @@ $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 100;
 $totalRows = 0;
 $totalPages = 0;
+$petugasSummary = ['pengawas' => 0, 'pencacah' => 0];
 
 if (isset($_GET['filter'])) {
     $where = [];
@@ -207,6 +208,22 @@ if (isset($_GET['filter'])) {
     $totalPages = max(1, (int)ceil($totalRows / $perPage));
     $page = min($page, $totalPages);
     $offset = ($page - 1) * $perPage;
+
+    $summaryStmt = db()->prepare("SELECT
+            COUNT(DISTINCT NULLIF(ms.pengawas_email, '')) jumlah_pengawas,
+            COUNT(DISTINCT NULLIF(ms.pencacah_email, '')) jumlah_pencacah
+        FROM master_subsls ms
+        JOIN master_sls sl ON sl.id=ms.sls_id
+        JOIN master_desa d ON d.id=sl.desa_id
+        JOIN master_kec kc ON kc.id=d.kec_id
+        JOIN master_kab k ON k.id=kc.kab_id
+        $sqlWhere");
+    $summaryStmt->execute($params);
+    $summary = $summaryStmt->fetch() ?: [];
+    $petugasSummary = [
+        'pengawas' => (int)($summary['jumlah_pengawas'] ?? 0),
+        'pencacah' => (int)($summary['jumlah_pencacah'] ?? 0),
+    ];
 
     $stmt = db()->prepare("SELECT p.nmprov, k.id kab_id, k.nmkab, kc.kdkec, kc.nmkec, d.kddesa, d.nmdesa, sl.kdsls, sl.nmsls,
                 ms.kdsubsls, ms.nmsubsls, ms.pengawas_email, ms.pencacah_email
@@ -256,6 +273,12 @@ render_header('Daftar Petugas');
     <div class="form-group col-md-2"><button class="btn btn-primary" name="filter" value="1">Filter</button></div>
   </div>
 </form>
+<?php if (isset($_GET['filter'])): ?>
+  <div class="card card-body py-2 mb-3">
+    <div><strong>Jumlah Pengawas:</strong> <?= number_format($petugasSummary['pengawas'], 0, ',', '.') ?></div>
+    <div><strong>Jumlah Pencacah:</strong> <?= number_format($petugasSummary['pencacah'], 0, ',', '.') ?></div>
+  </div>
+<?php endif; ?>
 <?php if ($user['role'] === 'admin_kab'): ?>
   <?php $downloadQuery = ['action' => 'download_petugas_template', 'kab_id' => $filters['kab_id'], 'kec_id' => $filters['kec_id'], 'desa_id' => $filters['desa_id']]; ?>
   <div class="card card-body mb-3">
