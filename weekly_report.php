@@ -258,6 +258,9 @@ function wr_build_html(array $user, string $referenceDate): string
     <?= wr_card_html('SubSLS Selesai', number_format((int)$totals['selesai_count'], 0, ',', '.'), number_format($selesaiPct, 2, ',', '.') . '%') ?>
   </div>
   <div class="card">
+    <strong><em>Progress Pendataan = Submit+Reject+Pending+Approve</em></strong>
+  </div>
+  <div class="card">
     <h2>Summary</h2>
     <p class="summary">
       Progress Pendataan sampai akhir minggu ini mencapai <strong><?= number_format($submitApprovePct, 2, ',', '.') ?>%</strong>,
