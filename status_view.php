@@ -179,7 +179,7 @@ if (($_GET['action'] ?? '') === 'export' && isset($_GET['filter'])) {
     $stmt = db()->prepare(status_view_select_sql($sqlWhere));
     $stmt->execute($params);
     $exportSource = $stmt->fetchAll();
-    $headers = ['Kabupaten', 'Kecamatan', 'Desa', 'Kode SubSLS', 'SLS', 'Nama SLS', 'SubSLS', 'Pengawas', 'Pencacah', 'Target'];
+    $headers = ['Kabupaten', 'Kecamatan', 'Desa', 'Kode SubSLS', 'SLS', 'SubSLS', 'Pengawas', 'Pencacah', 'Target'];
     foreach ($fields as $label) {
         $headers[] = $label;
     }
@@ -193,9 +193,8 @@ if (($_GET['action'] ?? '') === 'export' && isset($_GET['filter'])) {
             $r['kdkec'] . ' - ' . $r['nmkec'],
             $r['kddesa'] . ' - ' . $r['nmdesa'],
             $r['kab_id'] . $r['kdkec'] . $r['kddesa'] . $r['kdsls'] . $r['kdsubsls'],
-            $r['kdsls'],
             $r['nmsls'],
-            $r['kdsubsls'] . ' - ' . $r['nmsubsls'],
+            $r['kdsubsls'],
             $r['pengawas_email'],
             $r['pencacah_email'],
             (string)(int)$r['target'],
@@ -290,8 +289,8 @@ render_header('Status Terupdate');
         <tr>
           <td><?= e($r['kab_id'] . $r['kdkec'] . $r['kddesa'] . $r['kdsls'] . $r['kdsubsls']) ?></td>
           <td><?= e($r['nmdesa']) ?></td>
-          <td><?= e($r['kdsls'] . ' - ' . $r['nmsls']) ?></td>
-          <td><?= e($r['nmsubsls']) ?></td>
+          <td><?= e($r['nmsls']) ?></td>
+          <td><?= e($r['kdsubsls']) ?></td>
           <td><?= e($r['pengawas_email']) ?></td>
           <td><?= e($r['pencacah_email']) ?></td>
           <td><?= number_format((int)$r['target'], 0, ',', '.') ?></td>
