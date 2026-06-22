@@ -82,6 +82,38 @@ function public_dashboard_totals(array $rows, array $fields): array
     return $totals;
 }
 
+function public_dashboard_performance_rows(string $roleField, array $context): array
+{
+    $stmt = db()->prepare("SELECT ms.$roleField email,
+            COALESCE(SUM(ss.target),0) target,
+            COALESCE(SUM(ss.submitted_by_pencacah),0) submitted_by_pencacah,
+            COALESCE(SUM(ss.rejected_by_pengawas),0) rejected_by_pengawas,
+            COALESCE(SUM(ss.draft_count),0) draft_count,
+            COALESCE(SUM(ss.approved_by_pengawas),0) approved_by_pengawas,
+            COUNT(ms.id) subsls_total,
+            COALESCE(SUM(CASE WHEN cs.status_selesai='Selesai' THEN 1 ELSE 0 END),0) selesai_count,
+            CASE WHEN COALESCE(SUM(ss.target),0)>0
+                THEN ROUND((COALESCE(SUM(ss.submitted_by_pencacah),0)+COALESCE(SUM(ss.rejected_by_pengawas),0)+COALESCE(SUM(ss.draft_count),0)+COALESCE(SUM(ss.approved_by_pengawas),0))/COALESCE(SUM(ss.target),0)*100,2)
+                ELSE 0 END progress_pendataan_pct,
+            CASE WHEN COUNT(ms.id)>0
+                THEN ROUND(COALESCE(SUM(CASE WHEN cs.status_selesai='Selesai' THEN 1 ELSE 0 END),0)/COUNT(ms.id)*100,2)
+                ELSE 0 END selesai_pct
+        FROM master_subsls ms
+        JOIN master_sls sl ON sl.id=ms.sls_id
+        JOIN master_desa d ON d.id=sl.desa_id
+        JOIN master_kec kc ON kc.id=d.kec_id
+        JOIN master_kab k ON k.id=kc.kab_id
+        LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
+        LEFT JOIN subsls_completion_status cs ON cs.subsls_id=ms.id
+        {$context['where']}
+        " . ($context['where'] ? 'AND' : 'WHERE') . " ms.$roleField IS NOT NULL AND ms.$roleField <> ''
+        GROUP BY ms.$roleField
+        ORDER BY progress_pendataan_pct DESC, selesai_pct DESC, email ASC
+        LIMIT 10");
+    $stmt->execute($context['params']);
+    return $stmt->fetchAll();
+}
+
 function public_dashboard_cache_path(): string
 {
     return __DIR__ . '/cache/public_dashboard.json';
@@ -125,6 +157,8 @@ function public_dashboard_generate_cache(string $email): array
             'context' => $context,
             'rows' => $rows,
             'totals' => public_dashboard_totals($rows, $fields),
+            'top_pengawas' => public_dashboard_performance_rows('pengawas_email', $queryContext),
+            'top_pencacah' => public_dashboard_performance_rows('pencacah_email', $queryContext),
         ];
     }
 

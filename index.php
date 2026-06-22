@@ -210,10 +210,21 @@ function dashboard_pendataan_count(array $row): int
         + (int)($row['approved_by_pengawas'] ?? 0);
 }
 
+function dashboard_rank_badge(int $rank): string
+{
+    return match ($rank) {
+        1 => '<span class="rank-badge rank-1"><i class="fas fa-trophy mr-1"></i>Peringkat 1</span>',
+        2 => '<span class="rank-badge rank-2"><i class="fas fa-medal mr-1"></i>Peringkat 2</span>',
+        3 => '<span class="rank-badge rank-3"><i class="fas fa-award mr-1"></i>Peringkat 3</span>',
+        default => '<span class="rank-badge">#' . $rank . '</span>',
+    };
+}
+
 function performance_rows(string $roleField, string $kabId, string $direction): array
 {
     $order = $direction === 'desc' ? 'DESC' : 'ASC';
     $limit = $direction === 'desc' ? 'LIMIT 10' : '';
+    $whereKab = $kabId === '6400' ? '' : 'kc.kab_id=? AND';
     $stmt = db()->prepare("SELECT ms.$roleField email,
             COALESCE(SUM(ss.target),0) target,
             COALESCE(SUM(ss.submitted_by_pencacah),0) submitted_by_pencacah,
@@ -234,11 +245,11 @@ function performance_rows(string $roleField, string $kabId, string $direction): 
         JOIN master_kec kc ON kc.id=d.kec_id
         LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
         LEFT JOIN subsls_completion_status cs ON cs.subsls_id=ms.id
-        WHERE kc.kab_id=? AND ms.$roleField IS NOT NULL AND ms.$roleField <> ''
+        WHERE $whereKab ms.$roleField IS NOT NULL AND ms.$roleField <> ''
         GROUP BY ms.$roleField
         ORDER BY submit_approve_pct $order, selesai_pct $order, email ASC
         $limit");
-    $stmt->execute([$kabId]);
+    $stmt->execute($kabId === '6400' ? [] : [$kabId]);
     return $stmt->fetchAll();
 }
 
@@ -267,7 +278,9 @@ function dashboard_kab_options_for_performance(array $user): array
         $stmt->execute([$user['kab_id']]);
         return $stmt->fetchAll();
     }
-    return db()->query("SELECT id value, CONCAT(id,' - ',nmkab) label FROM master_kab ORDER BY id")->fetchAll();
+    $rows = db()->query("SELECT id value, CONCAT(id,' - ',nmkab) label FROM master_kab ORDER BY id")->fetchAll();
+    array_unshift($rows, ['value' => '6400', 'label' => '6400 - Kalimantan Timur']);
+    return $rows;
 }
 
 function dashboard_can_access_kab(array $user, string $kabId): bool
@@ -544,6 +557,19 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
   border-color: #22c55e;
   color: #111827;
 }
+.rank-badge {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  font-weight: 800;
+  gap: 2px;
+  justify-content: center;
+  min-width: 74px;
+  padding: 3px 8px;
+}
+.rank-1 { background: #fef3c7; color: #92400e; }
+.rank-2 { background: #e5e7eb; color: #374151; }
+.rank-3 { background: #ffedd5; color: #9a3412; }
 .attention-pagination {
   align-items: center;
   display: flex;
@@ -882,10 +908,10 @@ if (pengawas) {
           <h5>10 <?= e($labelRole) ?> Terbaik</h5>
           <div class="table-responsive mb-4">
             <table class="table table-sm table-bordered table-striped mb-0">
-              <thead><tr><th>Email</th><th>Progress Pendataan</th><th>Selesai SubSLS</th><th>Target</th><th>Total SubSLS</th></tr></thead>
+              <thead><tr><th>Peringkat</th><th>Email</th><th>Progress Pendataan</th><th>Selesai SubSLS</th><th>Target</th><th>Total SubSLS</th></tr></thead>
               <tbody>
-              <?php foreach ($topRows as $r): ?>
-                <tr><td><?= e($r['email']) ?></td><td><?= number_format((float)$r['submit_approve_pct'],2,',','.') ?>%</td><td><?= number_format((float)$r['selesai_pct'],2,',','.') ?>%</td><td><?= number_format((int)$r['target'],0,',','.') ?></td><td><?= number_format((int)$r['subsls_total'],0,',','.') ?></td></tr>
+              <?php foreach ($topRows as $rankIndex => $r): ?>
+                <tr><td><?= dashboard_rank_badge($rankIndex + 1) ?></td><td><?= e($r['email']) ?></td><td><?= number_format((float)$r['submit_approve_pct'],2,',','.') ?>%</td><td><?= number_format((float)$r['selesai_pct'],2,',','.') ?>%</td><td><?= number_format((int)$r['target'],0,',','.') ?></td><td><?= number_format((int)$r['subsls_total'],0,',','.') ?></td></tr>
               <?php endforeach; ?>
               </tbody>
             </table>
