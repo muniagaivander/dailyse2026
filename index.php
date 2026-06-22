@@ -210,6 +210,38 @@ function dashboard_pendataan_count(array $row): int
         + (int)($row['approved_by_pengawas'] ?? 0);
 }
 
+function dashboard_datetime_label(?string $datetime): string
+{
+    if (!$datetime) {
+        return '-';
+    }
+    $months = [
+        '01' => 'Januari',
+        '02' => 'Februari',
+        '03' => 'Maret',
+        '04' => 'April',
+        '05' => 'Mei',
+        '06' => 'Juni',
+        '07' => 'Juli',
+        '08' => 'Agustus',
+        '09' => 'September',
+        '10' => 'Oktober',
+        '11' => 'November',
+        '12' => 'Desember',
+    ];
+    $time = strtotime($datetime);
+    if (!$time) {
+        return '-';
+    }
+    return date('d', $time) . ' ' . $months[date('m', $time)] . ' ' . date('Y H:i', $time) . ' WITA';
+}
+
+function dashboard_latest_daily_status_label(): string
+{
+    $stmt = db()->query("SELECT MAX(updated_at) FROM daily_status");
+    return dashboard_datetime_label($stmt->fetchColumn() ?: null);
+}
+
 function dashboard_rank_badge(int $rank): string
 {
     return match ($rank) {
@@ -480,6 +512,7 @@ if (($_GET['action'] ?? '') === 'export_dashboard') {
 $opts = dashboard_filter_options($user, $filters);
 $chartRows = dashboard_rows($user, $filters, $fields);
 $totals = dashboard_totals($chartRows, $fields);
+$latestDailyStatusLabel = dashboard_latest_daily_status_label();
 $completionPct = $totals['subsls_total'] > 0 ? round($totals['selesai_count'] / $totals['subsls_total'] * 100, 2) : 0;
 $submitApproveCount = dashboard_pendataan_count($totals);
 $submitApprovePct = $totals['target'] > 0 ? round($submitApproveCount / (int)$totals['target'] * 100, 2) : 0;
@@ -570,6 +603,15 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
 .rank-1 { background: #fef3c7; color: #92400e; }
 .rank-2 { background: #e5e7eb; color: #374151; }
 .rank-3 { background: #ffedd5; color: #9a3412; }
+.data-update-dot {
+  background: #22c55e;
+  border-radius: 999px;
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, .16);
+  display: inline-block;
+  height: 10px;
+  margin-right: 8px;
+  width: 10px;
+}
 .attention-pagination {
   align-items: center;
   display: flex;
@@ -687,6 +729,7 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
 
 <?php if ($activeTab === 'submit_approve'): ?>
   <div class="card card-body py-2 mb-3">
+    <div class="mb-1"><span class="data-update-dot"></span><strong>Terakhir Update Data:</strong> <?= e($latestDailyStatusLabel) ?></div>
     <div><strong><em>Progress Pendataan = Submit+Reject+Pending+Approve</em></strong></div>
   </div>
 <?php endif; ?>
