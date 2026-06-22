@@ -141,6 +141,86 @@ function status_fields(): array {
     ];
 }
 
+function mobile_update_content_path(): string {
+    return __DIR__ . '/mobile_update_content.json';
+}
+
+function mobile_update_default_content(): array {
+    return [
+        [
+            'title' => 'Versi Fasih Mobile Terbaru v4.4.0',
+            'subtitle' => 'Tanggal 21 Juni 2026',
+            'details' => [
+                'Perbaikan kunjungan PML hanya untuk usaha non respon',
+                'Perbaikan rule validasi profesi supir dan fotografer di halaman sosek',
+                'Perbaikan force submit untuk assignment yang dipilih assignment keluarga',
+                'Perbaikan Role PML',
+                'Perbaikan CEK NIK, CEK NIB, CEK ID PLN, CEK NO METERAN',
+                'Profesi 999 hanya untuk keberadaan 3 / 4',
+                'NIK 8888 untuk yang belum memiliki NIK',
+                'Rule jika profesi petani (Halaman sosek) harus memiliki usaha kategori A',
+                'JK anggota keluarga prelist dikunci',
+                'ID Pelanggan boleh 11 / 12 digit',
+                'Range pengeluaran blok IV no 15a, 15b, 16a, 16b, 16c',
+            ],
+        ],
+        [
+            'title' => 'Versi Template dan Rule Validasi 4.7.0',
+            'subtitle' => '',
+            'details' => [
+                'Update Rule kepala keluarga perempuan, memiliki anak, cerai hidup/cerai mati.',
+                'Update Rule Validasi Force Submit pada akun PML',
+                'Update no meteran 11-13 Digit',
+                'Update nama orang dengan karakter / []',
+                'Update rule R17 dan R18 kode 9 tidak tahu padahal keberadaan kode 3/4',
+                'Update rule badan usaha PT pada CAWI',
+            ],
+        ],
+        [
+            'title' => 'Versi Fasih FORM Engine v0.2.0',
+            'subtitle' => '',
+            'details' => [
+                'Dukungan multi-bahasa baru: rusia dan mandarin untuk kebutuhan pendataan keluarga khusus',
+                'Peningkatan Konsistensi & Desain UI/UX (Input tandatangan, ambil waktu, geotag, file, foto, dan navigasi)',
+                'Penanganan hasil force submit agar dapat di-approve oleh PML',
+            ],
+        ],
+    ];
+}
+
+function mobile_update_content(): array {
+    $path = mobile_update_content_path();
+    if (!is_file($path)) {
+        return mobile_update_default_content();
+    }
+    $json = json_decode((string)file_get_contents($path), true);
+    if (!is_array($json) || count($json) !== 3) {
+        return mobile_update_default_content();
+    }
+    foreach ($json as $item) {
+        if (!isset($item['title'], $item['subtitle'], $item['details']) || !is_array($item['details'])) {
+            return mobile_update_default_content();
+        }
+    }
+    return $json;
+}
+
+function save_mobile_update_content(array $items): bool {
+    $clean = [];
+    for ($i = 0; $i < 3; $i++) {
+        $raw = $items[$i] ?? [];
+        $detailsText = str_replace(["\r\n", "\r"], "\n", (string)($raw['details_text'] ?? ''));
+        $details = array_values(array_filter(array_map('trim', explode("\n", $detailsText)), fn($line) => $line !== ''));
+        $clean[] = [
+            'title' => trim((string)($raw['title'] ?? '')),
+            'subtitle' => trim((string)($raw['subtitle'] ?? '')),
+            'details' => $details,
+        ];
+    }
+    $json = json_encode($clean, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    return $json !== false && file_put_contents(mobile_update_content_path(), $json . PHP_EOL, LOCK_EX) !== false;
+}
+
 function fetch_area_options(array $user, array $filters = []): array {
     $where = [];
     $params = [];

@@ -166,6 +166,7 @@ function render_header(string $title): void {
               <li class="nav-item"><a class="nav-link<?= $isActive(['assignment.php']) ?>" href="assignment.php"><i class="nav-icon fas fa-user-gear"></i><p>Ganti Petugas</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['snapshot.php']) ?>" href="snapshot.php"><i class="nav-icon fas fa-calendar-check"></i><p>Isi Snapshot Tanggal</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['public_dashboard_update.php']) ?>" href="public_dashboard_update.php"><i class="nav-icon fas fa-globe"></i><p>Update Dashboard Publik</p></a></li>
+              <li class="nav-item"><a class="nav-link<?= $isActive(['mobile_update.php']) ?>" href="mobile_update.php"><i class="nav-icon fas fa-bullhorn"></i><p>Edit Pop-up Login</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['user_passwords.php']) ?>" href="user_passwords.php"><i class="nav-icon fas fa-key"></i><p>Ganti Password User</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['backup_database.php']) ?>" href="backup_database.php"><i class="nav-icon fas fa-database"></i><p>Backup Database</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['import.php']) ?>" href="import.php"><i class="nav-icon fas fa-file-import"></i><p>Import Master</p></a></li>
@@ -185,6 +186,13 @@ function render_header(string $title): void {
 
 function render_footer(): void {
 global $EXTRA_FOOTER_SCRIPTS;
+$user = current_user();
+$showMobileUpdateModal = $user
+    && !empty($_SESSION['show_mobile_update_modal']);
+if ($showMobileUpdateModal) {
+    unset($_SESSION['show_mobile_update_modal']);
+}
+$mobileUpdateContent = $showMobileUpdateModal ? mobile_update_content() : [];
 ?>
     </div></section>
   </div>
@@ -228,6 +236,46 @@ global $EXTRA_FOOTER_SCRIPTS;
   </div>
 </div>
 <?php endif; ?>
+<?php if ($showMobileUpdateModal): ?>
+<div class="modal fade" id="mobileUpdateModal" tabindex="-1" role="dialog" aria-labelledby="mobileUpdateModalLabel" aria-hidden="true" data-backdrop="static">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title" id="mobileUpdateModalLabel">Informasi Update Aplikasi Fasih Mobile</h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Tutup"><span aria-hidden="true">&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <div class="accordion" id="mobileUpdateAccordion">
+          <?php foreach ($mobileUpdateContent as $idx => $item): ?>
+            <?php
+              $collapseId = 'mobileUpdateItem' . $idx;
+              $headId = 'mobileUpdateHead' . $idx;
+              $isOpen = $idx === 0;
+            ?>
+            <div class="card <?= $idx === count($mobileUpdateContent) - 1 ? 'mb-0' : 'mb-2' ?>">
+              <div class="card-header p-0" id="<?= e($headId) ?>">
+                <button class="btn btn-link btn-block text-left font-weight-normal <?= $isOpen ? '' : 'collapsed' ?>" type="button" data-toggle="collapse" data-target="#<?= e($collapseId) ?>" aria-expanded="<?= $isOpen ? 'true' : 'false' ?>" aria-controls="<?= e($collapseId) ?>">
+                  <strong><?= e($item['title']) ?></strong><?= trim((string)$item['subtitle']) !== '' ? ' ' . e($item['subtitle']) : '' ?>
+                </button>
+              </div>
+              <div id="<?= e($collapseId) ?>" class="collapse <?= $isOpen ? 'show' : '' ?>" aria-labelledby="<?= e($headId) ?>" data-parent="#mobileUpdateAccordion">
+                <div class="card-body py-2">
+                  <ul class="mb-0 pl-3">
+                    <?php foreach ($item['details'] as $detail): ?><li><?= e($detail) ?></li><?php endforeach; ?>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          <?php endforeach; ?>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" type="button" data-dismiss="modal">Mengerti</button>
+      </div>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
 <div class="progress-overlay" id="submitProgressOverlay" aria-hidden="true">
   <div class="progress-panel">
     <div class="d-flex align-items-center mb-3">
@@ -246,6 +294,13 @@ global $EXTRA_FOOTER_SCRIPTS;
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
 <?= $EXTRA_FOOTER_SCRIPTS ?? '' ?>
+<?php if ($showMobileUpdateModal): ?>
+<script>
+$(function () {
+  $('#mobileUpdateModal').modal('show');
+});
+</script>
+<?php endif; ?>
 <script>
 (function () {
   const overlay = document.getElementById('submitProgressOverlay');

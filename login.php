@@ -17,6 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'kab_id' => $user['kab_id'],
             'name' => $user['name'],
         ];
+        $_SESSION['show_mobile_update_modal'] = true;
         redirect('index.php');
     }
     $error = 'Email atau password salah.';
