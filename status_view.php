@@ -1,19 +1,19 @@
 <?php
 require __DIR__ . '/layout.php';
-$user = require_role(['superadmin', 'admin_kab']);
+$user = require_role(['superadmin', 'admin_kab', 'viewer_prov', 'viewer_kab']);
 $filters = [
     'kab_id' => $_GET['kab_id'] ?? '',
     'kec_id' => $_GET['kec_id'] ?? '',
     'desa_id' => $_GET['desa_id'] ?? '',
 ];
-if ($user['role'] === 'admin_kab') {
+if (in_array($user['role'], ['admin_kab', 'viewer_kab'], true)) {
     $filters['kab_id'] = $user['kab_id'];
 }
 
 function status_filter_options(array $user, array $filters): array
 {
     $out = ['kabupaten' => [], 'kecamatan' => [], 'desa' => []];
-    if ($user['role'] === 'admin_kab') {
+    if (in_array($user['role'], ['admin_kab', 'viewer_kab'], true)) {
         $stmt = db()->prepare("SELECT id value, CONCAT(id,' - ',nmkab) label FROM master_kab WHERE id=? ORDER BY id");
         $stmt->execute([$user['kab_id']]);
     } else {
@@ -49,7 +49,7 @@ function status_view_build_filter(array $user, array $filters): array
 {
     $where = [];
     $params = [];
-    if ($user['role'] === 'admin_kab') {
+    if (in_array($user['role'], ['admin_kab', 'viewer_kab'], true)) {
         $where[] = 'k.id=?';
         $params[] = $user['kab_id'];
     } elseif ($filters['kab_id']) {
@@ -235,7 +235,7 @@ render_header('Status Terupdate');
 <?php if ($error): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
 <form class="card card-body mb-3" method="get">
   <div class="form-row align-items-end">
-    <?php if ($user['role'] === 'superadmin'): ?>
+    <?php if (in_array($user['role'], ['superadmin', 'viewer_prov'], true)): ?>
       <div class="form-group col-md-3">
         <label>Kabupaten</label>
         <select class="form-control" name="kab_id" id="kab_id">
