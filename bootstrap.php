@@ -136,7 +136,7 @@ function status_fields(): array {
         'open_count' => 'Open',
         'submitted_by_pencacah' => 'Submit',
         'rejected_by_pengawas' => 'Reject',
-        'draft_count' => 'Pending',
+        'draft_count' => 'Draft',
         'approved_by_pengawas' => 'Approved',
     ];
 }

@@ -411,7 +411,7 @@ function dashboard_export_rows(array $headers, array $rows, string $filename, st
 function dashboard_chart_export_payload(array $rows, array $fields, string $tab): array
 {
     if ($tab === 'status') {
-        $headers = ['label', 'target', 'open', 'submit', 'reject', 'pending', 'approved', 'open_pct', 'submit_pct', 'reject_pct', 'pending_pct', 'approved_pct'];
+    $headers = ['label', 'target', 'open', 'submit', 'reject', 'draft_pending', 'approved', 'open_pct', 'submit_pct', 'reject_pct', 'draft_pending_pct', 'approved_pct'];
         $out = [];
         foreach ($rows as $row) {
             $target = (float)($row['target'] ?? 0);
@@ -429,7 +429,7 @@ function dashboard_chart_export_payload(array $rows, array $fields, string $tab)
 
     $headers = $tab === 'selesai'
         ? ['label', 'subsls_total', 'selesai_count', 'selesai_subsls_pct']
-        : ['label', 'target', 'submit', 'reject', 'pending', 'approved', 'progress_pendataan_pct'];
+        : ['label', 'target', 'submit', 'reject', 'draft_pending', 'approved', 'progress_pendataan_pct'];
     $out = [];
     foreach ($rows as $row) {
         if ($tab === 'selesai') {
@@ -730,7 +730,7 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
 <?php if ($activeTab === 'submit_approve'): ?>
   <div class="card card-body py-2 mb-3">
     <div class="mb-1"><span class="data-update-dot"></span><strong>Terakhir Update Data:</strong> <?= e($latestDailyStatusLabel) ?></div>
-    <div><strong><em>Progress Pendataan = Submit+Reject+Pending+Approve</em></strong></div>
+    <div><strong><em>Progress Pendataan = Submit+Reject+Draft+Approve</em></strong></div>
   </div>
 <?php endif; ?>
 
@@ -741,7 +741,7 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
       ['label' => 'Open', 'value' => dashboard_count_pct_text((int)$totals['open_count'], $targetTotal ? (int)$totals['open_count'] / $targetTotal * 100 : 0)],
       ['label' => 'Submit', 'value' => dashboard_count_pct_text((int)$totals['submitted_by_pencacah'], $targetTotal ? (int)$totals['submitted_by_pencacah'] / $targetTotal * 100 : 0)],
       ['label' => 'Reject', 'value' => dashboard_count_pct_text((int)$totals['rejected_by_pengawas'], $targetTotal ? (int)$totals['rejected_by_pengawas'] / $targetTotal * 100 : 0)],
-      ['label' => 'Pending', 'value' => dashboard_count_pct_text((int)$totals['draft_count'], $targetTotal ? (int)$totals['draft_count'] / $targetTotal * 100 : 0)],
+      ['label' => 'Draft', 'value' => dashboard_count_pct_text((int)$totals['draft_count'], $targetTotal ? (int)$totals['draft_count'] / $targetTotal * 100 : 0)],
       ['label' => 'Approve', 'value' => dashboard_count_pct_text((int)$totals['approved_by_pengawas'], $targetTotal ? (int)$totals['approved_by_pengawas'] / $targetTotal * 100 : 0)],
       ['label' => 'Progress Pendataan', 'value' => dashboard_count_pct_text($submitApproveCount, $submitApprovePct)],
       ['label' => 'Selesai', 'value' => dashboard_count_pct_text((int)$totals['selesai_count'], $completionPct)],
@@ -789,7 +789,7 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
           <th class="text-right">Open</th>
           <th class="text-right">Submit</th>
           <th class="text-right">Reject</th>
-          <th class="text-right">Pending</th>
+          <th class="text-right">Draft</th>
           <th class="text-right">Approve</th>
           <th class="text-right">Progress Pendataan</th>
           <th class="text-right">Jumlah SubSLS Selesai</th>
@@ -840,7 +840,7 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
       </tfoot>
     </table>
   </div>
-  <div class="card-footer text-muted small">Progress Pendataan = submit+reject+pending+approve</div>
+  <div class="card-footer text-muted small">Progress Pendataan = submit+reject+draft+approve</div>
 </div>
 
 <script>
@@ -933,7 +933,7 @@ if (pengawas) {
 <?php $roleField = $activeTab === 'performa_pengawas' ? 'pengawas_email' : 'pencacah_email'; $labelRole = $activeTab === 'performa_pengawas' ? 'Pengawas' : 'Pencacah'; ?>
 <?php $attentionThreshold = performance_attention_threshold(); $attentionType = $activeTab === 'performa_pengawas' ? 'pengawas' : 'pencacah'; ?>
 <div class="card card-body py-2 mb-3">
-  <div><strong><em>Progress Pendataan = Submit+Reject+Pending+Approve</em></strong></div>
+  <div><strong><em>Progress Pendataan = Submit+Reject+Draft+Approve</em></strong></div>
 </div>
 <div class="card">
   <div class="card-header p-2">
