@@ -234,6 +234,12 @@ if (isset($_GET['show'])) {
 
 render_header('Input Harian');
 ?>
+<?php if ($user['role'] === 'pengawas'): ?>
+  <div class="alert alert-info">
+    Menu Input Harian sementara kami Tutup ya, akan ada pemberitahuan lebih lanjut. Semangat Bapak/Ibu Dalam Mengerjakan SE 2026. Kita PASTI BISA.
+  </div>
+  <?php render_footer(); exit; ?>
+<?php endif; ?>
 <div class="mb-3">
   <button class="btn btn-outline-success" type="button" data-toggle="modal" data-target="#dailyTemplateModal"><i class="fas fa-file-excel mr-1"></i>Upload By Template</button>
 </div>
