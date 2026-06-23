@@ -39,7 +39,14 @@ function status_filter_options(array $user, array $filters): array
 $opts = status_filter_options($user, $filters);
 $rows = [];
 $error = null;
-$fields = status_fields();
+$statusFields = status_fields();
+$fields = [
+    'open_count' => $statusFields['open_count'],
+    'draft_count' => $statusFields['draft_count'],
+    'submitted_by_pencacah' => $statusFields['submitted_by_pencacah'],
+    'rejected_by_pengawas' => $statusFields['rejected_by_pengawas'],
+    'approved_by_pengawas' => $statusFields['approved_by_pengawas'],
+];
 $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 100;
 $totalRows = 0;
