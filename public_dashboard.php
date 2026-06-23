@@ -35,7 +35,7 @@ function public_pendataan_count(array $row): int
 {
     return (int)($row['submitted_by_pencacah'] ?? 0)
         + (int)($row['rejected_by_pengawas'] ?? 0)
-        + (int)($row['draft_count'] ?? 0)
+        + (int)($row['pending_count'] ?? 0)
         + (int)($row['approved_by_pengawas'] ?? 0);
 }
 
@@ -98,6 +98,7 @@ $cards = [
     ['label' => 'Submit', 'value' => public_count_pct_text((int)($totals['submitted_by_pencacah'] ?? 0), $targetTotal ? (int)($totals['submitted_by_pencacah'] ?? 0) / $targetTotal * 100 : 0)],
     ['label' => 'Reject', 'value' => public_count_pct_text((int)($totals['rejected_by_pengawas'] ?? 0), $targetTotal ? (int)($totals['rejected_by_pengawas'] ?? 0) / $targetTotal * 100 : 0)],
     ['label' => 'Draft', 'value' => public_count_pct_text((int)($totals['draft_count'] ?? 0), $targetTotal ? (int)($totals['draft_count'] ?? 0) / $targetTotal * 100 : 0)],
+    ['label' => 'Pending', 'value' => public_count_pct_text((int)($totals['pending_count'] ?? 0), $targetTotal ? (int)($totals['pending_count'] ?? 0) / $targetTotal * 100 : 0)],
     ['label' => 'Approve', 'value' => public_count_pct_text((int)($totals['approved_by_pengawas'] ?? 0), $targetTotal ? (int)($totals['approved_by_pengawas'] ?? 0) / $targetTotal * 100 : 0)],
     ['label' => 'Progress Pendataan', 'value' => public_count_pct_text($submitApproveCount, $submitApprovePct)],
     ['label' => 'Selesai', 'value' => public_count_pct_text((int)($totals['selesai_count'] ?? 0), $completionPct)],
@@ -283,7 +284,7 @@ $cards = [
   <div class="row">
     <div class="col-lg-6">
       <div class="card">
-        <div class="card-header"><strong>Progress Pendataan per <?= e($context['group_label']) ?> (submit+reject+draft+approve)</strong></div>
+        <div class="card-header"><strong>Progress Pendataan per <?= e($context['group_label']) ?> (submit+reject+pending+approve)</strong></div>
         <div class="card-body"><div class="public-chart-wrap"><canvas id="submitApproveChart"></canvas></div></div>
       </div>
     </div>
@@ -355,6 +356,7 @@ $cards = [
             <th class="text-right">Draft</th>
             <th class="text-right">Submit</th>
             <th class="text-right">Reject</th>
+            <th class="text-right">Pending</th>
             <th class="text-right">Approve</th>
             <th class="text-right">Progress Pendataan</th>
             <th class="text-right">Jumlah SubSLS Selesai</th>
@@ -380,6 +382,7 @@ $cards = [
               <td class="text-right"><?= number_format((int)$row['draft_count'], 0, ',', '.') ?></td>
               <td class="text-right"><?= public_table_count_pct_text((int)$row['submitted_by_pencacah'], $rowTarget) ?></td>
               <td class="text-right"><?= number_format((int)$row['rejected_by_pengawas'], 0, ',', '.') ?></td>
+              <td class="text-right"><?= number_format((int)($row['pending_count'] ?? 0), 0, ',', '.') ?></td>
               <td class="text-right"><?= public_table_count_pct_text((int)$row['approved_by_pengawas'], $rowTarget) ?></td>
               <td class="text-right<?= e($pendataanClass) ?>"><?= public_table_count_pct_text($submitApproveCount, $rowTarget) ?></td>
               <td class="text-right"><?= number_format((int)$row['selesai_count'], 0, ',', '.') ?></td>
@@ -398,6 +401,7 @@ $cards = [
             <td class="text-right"><?= number_format((int)$totals['draft_count'], 0, ',', '.') ?></td>
             <td class="text-right"><?= public_table_count_pct_text((int)$totals['submitted_by_pencacah'], $totalTarget) ?></td>
             <td class="text-right"><?= number_format((int)$totals['rejected_by_pengawas'], 0, ',', '.') ?></td>
+            <td class="text-right"><?= number_format((int)($totals['pending_count'] ?? 0), 0, ',', '.') ?></td>
             <td class="text-right"><?= public_table_count_pct_text((int)$totals['approved_by_pengawas'], $totalTarget) ?></td>
             <td class="text-right"><?= public_table_count_pct_text($totalSubmitApprove, $totalTarget) ?></td>
             <td class="text-right"><?= number_format((int)$totals['selesai_count'], 0, ',', '.') ?></td>
@@ -405,7 +409,7 @@ $cards = [
         </tfoot>
     </table>
   </div>
-  <div class="card-footer text-muted small">Progress Pendataan = submit+reject+draft+approve</div>
+  <div class="card-footer text-muted small">Progress Pendataan = submit+reject+pending+approve</div>
 </div>
 <?php endif; ?>
 </main>
@@ -426,7 +430,7 @@ function pctColor(value) {
 const chartLabels = rows.map(row => row.label || '-');
 const submitApprove = rows.map(row => {
   const target = Number(row.target || 0);
-  return target ? Math.round((Number(row.submitted_by_pencacah || 0) + Number(row.rejected_by_pengawas || 0) + Number(row.draft_count || 0) + Number(row.approved_by_pengawas || 0)) / target * 10000) / 100 : 0;
+  return target ? Math.round((Number(row.submitted_by_pencacah || 0) + Number(row.rejected_by_pengawas || 0) + Number(row.pending_count || 0) + Number(row.approved_by_pengawas || 0)) / target * 10000) / 100 : 0;
 });
 const completion = rows.map(row => {
   const total = Number(row.subsls_total || 0);

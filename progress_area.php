@@ -132,7 +132,8 @@ function progress_area_current_cards(array $user, array $filters): array
             COALESCE(SUM(ss.draft_count),0) draft_count,
             COALESCE(SUM(ss.submitted_by_pencacah),0) submitted_by_pencacah,
             COALESCE(SUM(ss.approved_by_pengawas),0) approved_by_pengawas,
-            COALESCE(SUM(ss.rejected_by_pengawas),0) rejected_by_pengawas
+            COALESCE(SUM(ss.rejected_by_pengawas),0) rejected_by_pengawas,
+            COALESCE(SUM(ss.pending_count),0) pending_count
         FROM master_subsls ms
         JOIN master_sls sl ON sl.id=ms.sls_id
         JOIN master_desa d ON d.id=sl.desa_id
@@ -171,7 +172,8 @@ if ($showProgress) {
             SUM(ds.submitted_by_pencacah) submitted_by_pencacah,
             SUM(ds.approved_by_pengawas) approved_by_pengawas,
             SUM(ds.rejected_by_pengawas) rejected_by_pengawas,
-            SUM(ds.draft_count) draft_count
+            SUM(ds.draft_count) draft_count,
+            SUM(ds.pending_count) pending_count
         FROM daily_status ds
         JOIN master_subsls ms ON ms.id=ds.subsls_id
         JOIN master_sls sl ON sl.id=ms.sls_id
@@ -257,7 +259,7 @@ render_header('Progress By Daerah');
   let maxPct = 0;
   rows.forEach(row => {
     const target = Number(row.target || 0);
-    const pendataan = Number(row.submitted_by_pencacah || 0) + Number(row.rejected_by_pengawas || 0) + Number(row.draft_count || 0) + Number(row.approved_by_pengawas || 0);
+    const pendataan = Number(row.submitted_by_pencacah || 0) + Number(row.rejected_by_pengawas || 0) + Number(row.pending_count || 0) + Number(row.approved_by_pengawas || 0);
     const pct = target ? Math.round(pendataan / target * 10000) / 100 : 0;
     maxPct = Math.max(maxPct, pct);
     valueMap[(row.label || '-') + '|' + row.tanggal] = pct;

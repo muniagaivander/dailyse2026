@@ -17,7 +17,8 @@ function daily_template_rows(array $user): array
             COALESCE(ss.draft_count,0) draft_count,
             COALESCE(ss.submitted_by_pencacah,0) submitted_by_pencacah,
             COALESCE(ss.approved_by_pengawas,0) approved_by_pengawas,
-            COALESCE(ss.rejected_by_pengawas,0) rejected_by_pengawas
+            COALESCE(ss.rejected_by_pengawas,0) rejected_by_pengawas,
+            COALESCE(ss.pending_count,0) pending_count
         FROM master_subsls ms
         JOIN master_sls sl ON sl.id=ms.sls_id
         JOIN master_desa d ON d.id=sl.desa_id
@@ -64,9 +65,10 @@ function dt_download_template(array $user): void
         'pengawas_email',
         'pencacah_email',
         'open',
-        'pending',
+        'draft',
         'submit',
         'reject',
+        'pending',
         'approved',
     ];
     $sheetRows = [$headers];
@@ -88,6 +90,7 @@ function dt_download_template(array $user): void
             $sample['draft_count'],
             $sample['submitted_by_pencacah'],
             $sample['rejected_by_pengawas'],
+            $sample['pending_count'],
             $sample['approved_by_pengawas'],
         ];
     }
@@ -138,7 +141,7 @@ function dt_download_template(array $user): void
     $zip->close();
 
     header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    header('Content-Disposition: attachment; filename="template_upload_harian.xlsx"');
+    header('Content-Disposition: attachment; filename="template_upload_harian_' . date('Ymd_His') . '.xlsx"');
     header('Content-Length: ' . filesize($tmp));
     readfile($tmp);
     unlink($tmp);
@@ -227,9 +230,10 @@ function dt_import_template(string $path, array $user): array
     $idx = array_flip($headers);
     $statusColumns = [
         'open_count' => ['open', 'open_count'],
+        'draft_count' => ['draft', 'draft_count'],
         'submitted_by_pencacah' => ['submit', 'submitted_by_pencacah'],
         'rejected_by_pengawas' => ['reject', 'rejected_by_pengawas'],
-        'draft_count' => ['pending', 'draft_count'],
+        'pending_count' => ['pending', 'pending_count'],
         'approved_by_pengawas' => ['approved', 'approved_by_pengawas'],
     ];
     foreach (['tanggal', 'subsls_id'] as $required) {
@@ -239,7 +243,7 @@ function dt_import_template(string $path, array $user): array
     }
     foreach ($statusColumns as $aliases) {
         if (!array_filter($aliases, fn($alias) => array_key_exists($alias, $idx))) {
-        throw new RuntimeException('Kolom status tidak lengkap. Gunakan header: open, pending, submit, reject, approved.');
+        throw new RuntimeException('Kolom status tidak lengkap. Gunakan header: open, draft, submit, reject, pending, approved.');
         }
     }
 
@@ -299,7 +303,8 @@ function dt_import_template(string $path, array $user): array
                 COALESCE(ss.draft_count,0) draft_count,
                 COALESCE(ss.submitted_by_pencacah,0) submitted_by_pencacah,
                 COALESCE(ss.approved_by_pengawas,0) approved_by_pengawas,
-                COALESCE(ss.rejected_by_pengawas,0) rejected_by_pengawas
+                COALESCE(ss.rejected_by_pengawas,0) rejected_by_pengawas,
+                COALESCE(ss.pending_count,0) pending_count
             FROM master_subsls ms
             JOIN master_sls sl ON sl.id=ms.sls_id
             JOIN master_desa d ON d.id=sl.desa_id
@@ -309,15 +314,15 @@ function dt_import_template(string $path, array $user): array
             WHERE ms.pengawas_email=? " . ($user['role'] === 'admin_kab' ? 'AND k.id=?' : '') . "
             ORDER BY ms.id");
         $stmtDaily = db()->prepare("INSERT INTO daily_status
-            (tanggal,subsls_id,kab_id,pengawas_email,pencacah_email,target,open_count,draft_count,submitted_by_pencacah,approved_by_pengawas,rejected_by_pengawas,submitted_at,updated_by)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+            (tanggal,subsls_id,kab_id,pengawas_email,pencacah_email,target,open_count,draft_count,submitted_by_pencacah,approved_by_pengawas,rejected_by_pengawas,pending_count,submitted_at,updated_by)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON DUPLICATE KEY UPDATE target=VALUES(target),open_count=VALUES(open_count),draft_count=VALUES(draft_count),
                 submitted_by_pencacah=VALUES(submitted_by_pencacah),approved_by_pengawas=VALUES(approved_by_pengawas),
-                rejected_by_pengawas=VALUES(rejected_by_pengawas),updated_by=VALUES(updated_by)");
+                rejected_by_pengawas=VALUES(rejected_by_pengawas),pending_count=VALUES(pending_count),updated_by=VALUES(updated_by)");
         $stmtNewer = db()->prepare("SELECT COUNT(*) FROM daily_status WHERE subsls_id=? AND tanggal>?");
         $stmtStatus = db()->prepare("REPLACE INTO subsls_status
-            (subsls_id,open_count,draft_count,submitted_by_pencacah,approved_by_pengawas,rejected_by_pengawas,target,last_update,updated_by)
-            VALUES (?,?,?,?,?,?,?,?,?)");
+            (subsls_id,open_count,draft_count,submitted_by_pencacah,approved_by_pengawas,rejected_by_pengawas,pending_count,target,last_update,updated_by)
+            VALUES (?,?,?,?,?,?,?,?,?,?)");
         $stmtLock = db()->prepare("INSERT INTO submit_locks (tanggal,pengawas_email,status)
             VALUES (?,?,'SUBMITTED')
             ON DUPLICATE KEY UPDATE status=VALUES(status), updated_at=CURRENT_TIMESTAMP");
@@ -337,13 +342,15 @@ function dt_import_template(string $path, array $user): array
                         'submitted_by_pencacah' => (int)$master['submitted_by_pencacah'],
                         'approved_by_pengawas' => (int)$master['approved_by_pengawas'],
                         'rejected_by_pengawas' => (int)$master['rejected_by_pengawas'],
+                        'pending_count' => (int)$master['pending_count'],
                     ];
                     $open = $status['open_count'];
                     $draft = $status['draft_count'];
                     $submitted = $status['submitted_by_pencacah'];
                     $approved = $status['approved_by_pengawas'];
                     $rejected = $status['rejected_by_pengawas'];
-                    $target = $open + $draft + $submitted + $approved + $rejected;
+                    $pending = $status['pending_count'];
+                    $target = $open + $draft + $submitted + $approved + $rejected + $pending;
                     $now = date('Y-m-d H:i:s');
                     $stmtDaily->execute([
                         $tanggal,
@@ -357,12 +364,13 @@ function dt_import_template(string $path, array $user): array
                         $submitted,
                         $approved,
                         $rejected,
+                        $pending,
                         $now,
                         $user['email'],
                     ]);
                     $stmtNewer->execute([$master['subsls_id'], $tanggal]);
                     if (!$stmtNewer->fetchColumn()) {
-                        $stmtStatus->execute([$master['subsls_id'], $open, $draft, $submitted, $approved, $rejected, $target, $now, $user['email']]);
+                        $stmtStatus->execute([$master['subsls_id'], $open, $draft, $submitted, $approved, $rejected, $pending, $target, $now, $user['email']]);
                     }
                     $processed++;
                 }
@@ -421,7 +429,7 @@ render_header('Upload Harian Template');
       <tbody>
         <tr><td>tanggal</td><td>Format disarankan YYYY-MM-DD, contoh <?= e(today()) ?>.</td></tr>
         <tr><td>subsls_id</td><td>Kunci unik wilayah. Isi hanya baris SubSLS yang mau di-upload.</td></tr>
-        <tr><td>open, pending, submit, reject, approved</td><td>Nilai status harian. Target dihitung otomatis dari jumlah lima status ini.</td></tr>
+        <tr><td>open, draft, submit, reject, pending, approved</td><td>Nilai status harian. Target dihitung otomatis dari jumlah enam status ini.</td></tr>
         <tr><td>pengawas_email dan pencacah_email</td><td>Hanya informasi dari master, tidak dipakai untuk mengganti petugas.</td></tr>
       </tbody>
     </table>

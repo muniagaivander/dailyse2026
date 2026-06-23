@@ -23,6 +23,7 @@ $stmt = db()->prepare("SELECT ms.id subsls_id, ms.kdsubsls, ms.nmsubsls, sl.kdsl
         COALESCE(ss.submitted_by_pencacah,0) submitted_by_pencacah,
         COALESCE(ss.rejected_by_pengawas,0) rejected_by_pengawas,
         COALESCE(ss.draft_count,0) draft_count,
+        COALESCE(ss.pending_count,0) pending_count,
         COALESCE(ss.approved_by_pengawas,0) approved_by_pengawas,
         ss.last_update, ss.updated_by
     FROM master_subsls ms

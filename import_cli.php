@@ -62,8 +62,8 @@ $stmtSubsls = $pdo->prepare(
 );
 $stmtStatus = $pdo->prepare(
     'INSERT IGNORE INTO subsls_status
-    (subsls_id, open_count, draft_count, submitted_by_pencacah, approved_by_pengawas, rejected_by_pengawas, target, last_update)
-    VALUES (?, 0, 0, 0, 0, 0, 0, NULL)'
+    (subsls_id, open_count, draft_count, submitted_by_pencacah, approved_by_pengawas, rejected_by_pengawas, pending_count, target, last_update)
+    VALUES (?, 0, 0, 0, 0, 0, 0, 0, NULL)'
 );
 $stmtUser = $pdo->prepare(
     'INSERT INTO users (email, password_hash, role, kab_id, name, active)

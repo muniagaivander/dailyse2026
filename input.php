@@ -127,7 +127,8 @@ function save_daily($date, $subslsId, $actingUser, $pengawasEmail, $post, $i): v
     $submitted = (int)($post['submitted_by_pencacah'][$i] ?? 0);
     $approved = (int)($post['approved_by_pengawas'][$i] ?? 0);
     $rejected = (int)($post['rejected_by_pengawas'][$i] ?? 0);
-    $target = $open + $draft + $submitted + $approved + $rejected;
+    $pending = (int)($post['pending_count'][$i] ?? 0);
+    $target = $open + $draft + $submitted + $approved + $rejected + $pending;
     $stmt = db()->prepare("SELECT ms.*, kc.kab_id
         FROM master_subsls ms
         JOIN master_sls sl ON sl.id=ms.sls_id
@@ -139,13 +140,13 @@ function save_daily($date, $subslsId, $actingUser, $pengawasEmail, $post, $i): v
     if (!$m || $m['pengawas_email'] !== $pengawasEmail) return;
     if ($actingUser['role'] === 'admin_kab' && $m['kab_id'] !== $actingUser['kab_id']) return;
 
-    db()->prepare("INSERT INTO daily_status (tanggal,subsls_id,kab_id,pengawas_email,pencacah_email,target,open_count,draft_count,submitted_by_pencacah,approved_by_pengawas,rejected_by_pengawas,submitted_at,updated_by)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-        ON DUPLICATE KEY UPDATE target=VALUES(target),open_count=VALUES(open_count),draft_count=VALUES(draft_count),submitted_by_pencacah=VALUES(submitted_by_pencacah),approved_by_pengawas=VALUES(approved_by_pengawas),rejected_by_pengawas=VALUES(rejected_by_pengawas),updated_by=VALUES(updated_by)")
-        ->execute([$date,$subslsId,$m['kab_id'],$pengawasEmail,$m['pencacah_email'],$target,$open,$draft,$submitted,$approved,$rejected,date('Y-m-d H:i:s'),$actingUser['email']]);
-    db()->prepare("REPLACE INTO subsls_status (subsls_id,open_count,draft_count,submitted_by_pencacah,approved_by_pengawas,rejected_by_pengawas,target,last_update,updated_by)
-        VALUES (?,?,?,?,?,?,?,?,?)")
-        ->execute([$subslsId,$open,$draft,$submitted,$approved,$rejected,$target,date('Y-m-d H:i:s'),$actingUser['email']]);
+    db()->prepare("INSERT INTO daily_status (tanggal,subsls_id,kab_id,pengawas_email,pencacah_email,target,open_count,draft_count,submitted_by_pencacah,approved_by_pengawas,rejected_by_pengawas,pending_count,submitted_at,updated_by)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON DUPLICATE KEY UPDATE target=VALUES(target),open_count=VALUES(open_count),draft_count=VALUES(draft_count),submitted_by_pencacah=VALUES(submitted_by_pencacah),approved_by_pengawas=VALUES(approved_by_pengawas),rejected_by_pengawas=VALUES(rejected_by_pengawas),pending_count=VALUES(pending_count),updated_by=VALUES(updated_by)")
+        ->execute([$date,$subslsId,$m['kab_id'],$pengawasEmail,$m['pencacah_email'],$target,$open,$draft,$submitted,$approved,$rejected,$pending,date('Y-m-d H:i:s'),$actingUser['email']]);
+    db()->prepare("REPLACE INTO subsls_status (subsls_id,open_count,draft_count,submitted_by_pencacah,approved_by_pengawas,rejected_by_pengawas,pending_count,target,last_update,updated_by)
+        VALUES (?,?,?,?,?,?,?,?,?,?)")
+        ->execute([$subslsId,$open,$draft,$submitted,$approved,$rejected,$pending,$target,date('Y-m-d H:i:s'),$actingUser['email']]);
 }
 
 $filters = [
@@ -411,7 +412,7 @@ render_header('Input Harian');
           <tbody>
             <tr><td>tanggal</td><td>Format disarankan YYYY-MM-DD, contoh <?= e(today()) ?>. Tidak boleh lebih besar dari hari upload.</td></tr>
             <tr><td>subsls_id</td><td>Kunci unik wilayah. Isi hanya baris SubSLS yang mau di-upload.</td></tr>
-            <tr><td>open, pending, submit, reject, approved</td><td>Nilai status harian. Target dihitung otomatis dari jumlah lima status ini.</td></tr>
+            <tr><td>open, draft, submit, reject, pending, approved</td><td>Nilai status harian. Target dihitung otomatis dari jumlah enam status ini.</td></tr>
             <tr><td>pengawas_email dan pencacah_email</td><td>Hanya informasi dari master, tidak dipakai untuk mengganti petugas.</td></tr>
           </tbody>
         </table>

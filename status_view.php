@@ -45,6 +45,7 @@ $fields = [
     'draft_count' => $statusFields['draft_count'],
     'submitted_by_pencacah' => $statusFields['submitted_by_pencacah'],
     'rejected_by_pengawas' => $statusFields['rejected_by_pengawas'],
+    'pending_count' => $statusFields['pending_count'],
     'approved_by_pengawas' => $statusFields['approved_by_pengawas'],
 ];
 $page = max(1, (int)($_GET['page'] ?? 1));
@@ -89,6 +90,7 @@ function status_view_select_sql(string $sqlWhere, ?int $limitRows = null, ?int $
                 COALESCE(ss.submitted_by_pencacah,0) submitted_by_pencacah,
                 COALESCE(ss.approved_by_pengawas,0) approved_by_pengawas,
                 COALESCE(ss.rejected_by_pengawas,0) rejected_by_pengawas,
+                COALESCE(ss.pending_count,0) pending_count,
                 ss.last_update, ss.updated_by,
                 COALESCE(cs.status_selesai, 'Belum Selesai') status_selesai
             FROM master_subsls ms

@@ -89,11 +89,12 @@ function public_dashboard_performance_rows(string $roleField, array $context): a
             COALESCE(SUM(ss.submitted_by_pencacah),0) submitted_by_pencacah,
             COALESCE(SUM(ss.rejected_by_pengawas),0) rejected_by_pengawas,
             COALESCE(SUM(ss.draft_count),0) draft_count,
+            COALESCE(SUM(ss.pending_count),0) pending_count,
             COALESCE(SUM(ss.approved_by_pengawas),0) approved_by_pengawas,
             COUNT(ms.id) subsls_total,
             COALESCE(SUM(CASE WHEN cs.status_selesai='Selesai' THEN 1 ELSE 0 END),0) selesai_count,
             CASE WHEN COALESCE(SUM(ss.target),0)>0
-                THEN ROUND((COALESCE(SUM(ss.submitted_by_pencacah),0)+COALESCE(SUM(ss.rejected_by_pengawas),0)+COALESCE(SUM(ss.draft_count),0)+COALESCE(SUM(ss.approved_by_pengawas),0))/COALESCE(SUM(ss.target),0)*100,2)
+                THEN ROUND((COALESCE(SUM(ss.submitted_by_pencacah),0)+COALESCE(SUM(ss.rejected_by_pengawas),0)+COALESCE(SUM(ss.pending_count),0)+COALESCE(SUM(ss.approved_by_pengawas),0))/COALESCE(SUM(ss.target),0)*100,2)
                 ELSE 0 END progress_pendataan_pct,
             CASE WHEN COUNT(ms.id)>0
                 THEN ROUND(COALESCE(SUM(CASE WHEN cs.status_selesai='Selesai' THEN 1 ELSE 0 END),0)/COUNT(ms.id)*100,2)
@@ -168,7 +169,7 @@ function public_dashboard_generate_cache(string $email): array
         'generated_at_label' => public_dashboard_wita_label($generatedAt),
         'generated_by' => $email,
         'fields' => $fields,
-        'status_colors' => ['#2563eb', '#16a34a', '#dc2626', '#f59e0b', '#0f766e'],
+        'status_colors' => ['#2563eb', '#f59e0b', '#16a34a', '#dc2626', '#7c3aed', '#0f766e'],
         'range_colors' => [
             ['label' => '< 20%', 'color' => '#dc2626'],
             ['label' => '20% - < 40%', 'color' => '#f59e0b'],

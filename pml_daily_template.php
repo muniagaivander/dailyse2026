@@ -35,7 +35,8 @@ function pml_master_rows(string $pengawasEmail, string $date): array
             COALESCE(ss.draft_count,0) draft_count,
             COALESCE(ss.submitted_by_pencacah,0) submitted_by_pencacah,
             COALESCE(ss.approved_by_pengawas,0) approved_by_pengawas,
-            COALESCE(ss.rejected_by_pengawas,0) rejected_by_pengawas
+            COALESCE(ss.rejected_by_pengawas,0) rejected_by_pengawas,
+            COALESCE(ss.pending_count,0) pending_count
         FROM master_subsls ms
         JOIN master_sls sl ON sl.id=ms.sls_id
         JOIN master_desa d ON d.id=sl.desa_id
@@ -82,9 +83,10 @@ function pml_download_template(array $user, string $date): void
         'pengawas_email',
         'pencacah_email',
         'open',
-        'pending',
+        'draft',
         'submit',
         'reject',
+        'pending',
         'approved',
     ];
     $sheetRows = [$headers];
@@ -106,6 +108,7 @@ function pml_download_template(array $user, string $date): void
             $row['draft_count'],
             $row['submitted_by_pencacah'],
             $row['rejected_by_pengawas'],
+            $row['pending_count'],
             $row['approved_by_pengawas'],
         ];
     }
@@ -156,7 +159,7 @@ function pml_download_template(array $user, string $date): void
     $zip->close();
 
     header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    header('Content-Disposition: attachment; filename="template_harian_pml_' . $date . '.xlsx"');
+    header('Content-Disposition: attachment; filename="template_harian_pml_' . $date . '_' . date('His') . '.xlsx"');
     header('Content-Length: ' . filesize($tmp));
     readfile($tmp);
     unlink($tmp);
@@ -245,9 +248,10 @@ function pml_import_template(string $path, array $user, string $date): array
     $idx = array_flip($headers);
     $statusColumns = [
         'open_count' => ['open', 'open_count'],
+        'draft_count' => ['draft', 'draft_count'],
         'submitted_by_pencacah' => ['submit', 'submitted_by_pencacah'],
         'rejected_by_pengawas' => ['reject', 'rejected_by_pengawas'],
-        'draft_count' => ['pending', 'draft_count'],
+        'pending_count' => ['pending', 'pending_count'],
         'approved_by_pengawas' => ['approved', 'approved_by_pengawas'],
     ];
     foreach (['subsls_id'] as $required) {
@@ -257,7 +261,7 @@ function pml_import_template(string $path, array $user, string $date): array
     }
     foreach ($statusColumns as $aliases) {
         if (!array_filter($aliases, fn($alias) => array_key_exists($alias, $idx))) {
-        throw new RuntimeException('Kolom status tidak lengkap. Gunakan header: open, pending, submit, reject, approved.');
+        throw new RuntimeException('Kolom status tidak lengkap. Gunakan header: open, draft, submit, reject, pending, approved.');
         }
     }
 
@@ -270,6 +274,7 @@ function pml_import_template(string $path, array $user, string $date): array
             'submitted_by_pencacah' => (int)$master['submitted_by_pencacah'],
             'approved_by_pengawas' => (int)$master['approved_by_pengawas'],
             'rejected_by_pengawas' => (int)$master['rejected_by_pengawas'],
+            'pending_count' => (int)$master['pending_count'],
             'master' => $master,
         ];
     }
@@ -304,19 +309,19 @@ function pml_import_template(string $path, array $user, string $date): array
     db()->beginTransaction();
     try {
         $stmtDaily = db()->prepare("INSERT INTO daily_status
-            (tanggal,subsls_id,kab_id,pengawas_email,pencacah_email,target,open_count,draft_count,submitted_by_pencacah,approved_by_pengawas,rejected_by_pengawas,submitted_at,updated_by)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+            (tanggal,subsls_id,kab_id,pengawas_email,pencacah_email,target,open_count,draft_count,submitted_by_pencacah,approved_by_pengawas,rejected_by_pengawas,pending_count,submitted_at,updated_by)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON DUPLICATE KEY UPDATE target=VALUES(target),open_count=VALUES(open_count),draft_count=VALUES(draft_count),
                 submitted_by_pencacah=VALUES(submitted_by_pencacah),approved_by_pengawas=VALUES(approved_by_pengawas),
-                rejected_by_pengawas=VALUES(rejected_by_pengawas),updated_by=VALUES(updated_by)");
+                rejected_by_pengawas=VALUES(rejected_by_pengawas),pending_count=VALUES(pending_count),updated_by=VALUES(updated_by)");
         $stmtStatus = db()->prepare("REPLACE INTO subsls_status
-            (subsls_id,open_count,draft_count,submitted_by_pencacah,approved_by_pengawas,rejected_by_pengawas,target,last_update,updated_by)
-            VALUES (?,?,?,?,?,?,?,?,?)");
+            (subsls_id,open_count,draft_count,submitted_by_pencacah,approved_by_pengawas,rejected_by_pengawas,pending_count,target,last_update,updated_by)
+            VALUES (?,?,?,?,?,?,?,?,?,?)");
         $now = date('Y-m-d H:i:s');
         $processed = 0;
         foreach ($dataById as $subslsId => $data) {
             $master = $data['master'];
-            $target = $data['open_count'] + $data['draft_count'] + $data['submitted_by_pencacah'] + $data['approved_by_pengawas'] + $data['rejected_by_pengawas'];
+            $target = $data['open_count'] + $data['draft_count'] + $data['submitted_by_pencacah'] + $data['approved_by_pengawas'] + $data['rejected_by_pengawas'] + $data['pending_count'];
             $stmtDaily->execute([
                 $date,
                 $subslsId,
@@ -329,6 +334,7 @@ function pml_import_template(string $path, array $user, string $date): array
                 $data['submitted_by_pencacah'],
                 $data['approved_by_pengawas'],
                 $data['rejected_by_pengawas'],
+                $data['pending_count'],
                 $now,
                 $user['email'],
             ]);
@@ -339,6 +345,7 @@ function pml_import_template(string $path, array $user, string $date): array
                 $data['submitted_by_pencacah'],
                 $data['approved_by_pengawas'],
                 $data['rejected_by_pengawas'],
+                $data['pending_count'],
                 $target,
                 $now,
                 $user['email'],

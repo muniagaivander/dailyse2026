@@ -120,7 +120,7 @@ function ensure_default_admins(): void {
 }
 
 function total_status(array $row): int {
-    return (int)$row['open_count'] + (int)$row['draft_count'] + (int)$row['submitted_by_pencacah'] + (int)$row['approved_by_pengawas'] + (int)$row['rejected_by_pengawas'];
+    return (int)$row['open_count'] + (int)$row['draft_count'] + (int)$row['submitted_by_pencacah'] + (int)$row['approved_by_pengawas'] + (int)$row['rejected_by_pengawas'] + (int)($row['pending_count'] ?? 0);
 }
 
 function normalize_email($email): string {
@@ -134,9 +134,10 @@ function today(): string {
 function status_fields(): array {
     return [
         'open_count' => 'Open',
+        'draft_count' => 'Draft',
         'submitted_by_pencacah' => 'Submit',
         'rejected_by_pengawas' => 'Reject',
-        'draft_count' => 'Draft',
+        'pending_count' => 'Pending',
         'approved_by_pengawas' => 'Approved',
     ];
 }
@@ -148,6 +149,7 @@ function daily_form_status_fields(): array {
         'draft_count' => $fields['draft_count'],
         'submitted_by_pencacah' => $fields['submitted_by_pencacah'],
         'rejected_by_pengawas' => $fields['rejected_by_pengawas'],
+        'pending_count' => $fields['pending_count'],
         'approved_by_pengawas' => $fields['approved_by_pengawas'],
     ];
 }

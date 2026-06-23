@@ -153,7 +153,7 @@ function edit_daily_dates(array $user, array $filters): array
 
 function edit_refresh_subsls_status(string $subslsId): void
 {
-    $stmt = db()->prepare("SELECT open_count,draft_count,submitted_by_pencacah,approved_by_pengawas,rejected_by_pengawas,target,updated_at,updated_by
+    $stmt = db()->prepare("SELECT open_count,draft_count,submitted_by_pencacah,approved_by_pengawas,rejected_by_pengawas,pending_count,target,updated_at,updated_by
         FROM daily_status
         WHERE subsls_id=?
         ORDER BY tanggal DESC, updated_at DESC, id DESC
@@ -163,8 +163,8 @@ function edit_refresh_subsls_status(string $subslsId): void
     if (!$latest) {
         return;
     }
-    db()->prepare("REPLACE INTO subsls_status (subsls_id,open_count,draft_count,submitted_by_pencacah,approved_by_pengawas,rejected_by_pengawas,target,last_update,updated_by)
-        VALUES (?,?,?,?,?,?,?,?,?)")
+    db()->prepare("REPLACE INTO subsls_status (subsls_id,open_count,draft_count,submitted_by_pencacah,approved_by_pengawas,rejected_by_pengawas,pending_count,target,last_update,updated_by)
+        VALUES (?,?,?,?,?,?,?,?,?,?)")
         ->execute([
             $subslsId,
             $latest['open_count'],
@@ -172,6 +172,7 @@ function edit_refresh_subsls_status(string $subslsId): void
             $latest['submitted_by_pencacah'],
             $latest['approved_by_pengawas'],
             $latest['rejected_by_pengawas'],
+            $latest['pending_count'],
             $latest['target'],
             $latest['updated_at'],
             $latest['updated_by'],
@@ -211,12 +212,13 @@ function save_edit_daily(string $date, string $subslsId, array $user, array $pos
     $submitted = max(0, (int)($post['submitted_by_pencacah'][$i] ?? 0));
     $approved = max(0, (int)($post['approved_by_pengawas'][$i] ?? 0));
     $rejected = max(0, (int)($post['rejected_by_pengawas'][$i] ?? 0));
-    $target = $open + $draft + $submitted + $approved + $rejected;
+    $pending = max(0, (int)($post['pending_count'][$i] ?? 0));
+    $target = $open + $draft + $submitted + $approved + $rejected + $pending;
 
     db()->prepare("UPDATE daily_status
-        SET target=?, open_count=?, draft_count=?, submitted_by_pencacah=?, approved_by_pengawas=?, rejected_by_pengawas=?, updated_by=?
+        SET target=?, open_count=?, draft_count=?, submitted_by_pencacah=?, approved_by_pengawas=?, rejected_by_pengawas=?, pending_count=?, updated_by=?
         WHERE tanggal=? AND subsls_id=?")
-        ->execute([$target, $open, $draft, $submitted, $approved, $rejected, $user['email'], $date, $subslsId]);
+        ->execute([$target, $open, $draft, $submitted, $approved, $rejected, $pending, $user['email'], $date, $subslsId]);
     edit_refresh_subsls_status($subslsId);
 }
 
@@ -328,7 +330,7 @@ function edit_export_rows(array $headers, array $rows, string $filename, string 
 
 function edit_export_payload(array $rows): array
 {
-    $headers = ['tanggal', 'prov_id', 'kab_id', 'kabupaten', 'kec_id', 'kecamatan', 'desa_id', 'desa', 'sls_id', 'kode_sls', 'nama_sls', 'subsls_id', 'kode_subsls', 'nama_subsls', 'pengawas_email', 'pencacah_email', 'target', 'open', 'submit', 'reject', 'pending', 'approved', 'updated_at', 'updated_by'];
+    $headers = ['tanggal', 'prov_id', 'kab_id', 'kabupaten', 'kec_id', 'kecamatan', 'desa_id', 'desa', 'sls_id', 'kode_sls', 'nama_sls', 'subsls_id', 'kode_subsls', 'nama_subsls', 'pengawas_email', 'pencacah_email', 'target', 'open', 'draft', 'submit', 'reject', 'pending', 'approved', 'updated_at', 'updated_by'];
     $out = [];
     foreach ($rows as $row) {
         $out[] = [
@@ -350,9 +352,10 @@ function edit_export_payload(array $rows): array
             $row['pencacah_email'],
             $row['target'],
             $row['open_count'],
+            $row['draft_count'],
             $row['submitted_by_pencacah'],
             $row['rejected_by_pengawas'],
-            $row['draft_count'],
+            $row['pending_count'],
             $row['approved_by_pengawas'],
             $row['updated_at'],
             $row['updated_by'],

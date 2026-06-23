@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS subsls_status (
   submitted_by_pencacah INT NOT NULL DEFAULT 0,
   approved_by_pengawas INT NOT NULL DEFAULT 0,
   rejected_by_pengawas INT NOT NULL DEFAULT 0,
+  pending_count INT NOT NULL DEFAULT 0,
   target INT NOT NULL DEFAULT 0,
   last_update DATETIME NULL,
   updated_by VARCHAR(150) NULL
@@ -92,6 +93,7 @@ CREATE TABLE IF NOT EXISTS daily_status (
   submitted_by_pencacah INT NOT NULL DEFAULT 0,
   approved_by_pengawas INT NOT NULL DEFAULT 0,
   rejected_by_pengawas INT NOT NULL DEFAULT 0,
+  pending_count INT NOT NULL DEFAULT 0,
   submitted_at DATETIME NULL,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   updated_by VARCHAR(150) NOT NULL,

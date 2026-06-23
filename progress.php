@@ -219,7 +219,8 @@ function progress_current_cards(array $user, string $type, array $filters): arra
             COALESCE(SUM(ss.draft_count),0) draft_count,
             COALESCE(SUM(ss.submitted_by_pencacah),0) submitted_by_pencacah,
             COALESCE(SUM(ss.approved_by_pengawas),0) approved_by_pengawas,
-            COALESCE(SUM(ss.rejected_by_pengawas),0) rejected_by_pengawas
+            COALESCE(SUM(ss.rejected_by_pengawas),0) rejected_by_pengawas,
+            COALESCE(SUM(ss.pending_count),0) pending_count
         FROM master_subsls ms
         JOIN master_sls sl ON sl.id=ms.sls_id
         JOIN master_desa d ON d.id=sl.desa_id
@@ -267,7 +268,7 @@ if ($showProgress) {
     [$trendWhere, $trendParams] = progress_trend_where($user, $type, $filters);
     $stmt = db()->prepare("SELECT ds.tanggal, SUM(ds.target) target, SUM(ds.open_count) open_count, SUM(ds.draft_count) draft_count,
             SUM(ds.submitted_by_pencacah) submitted_by_pencacah, SUM(ds.approved_by_pengawas) approved_by_pengawas,
-            SUM(ds.rejected_by_pengawas) rejected_by_pengawas
+            SUM(ds.rejected_by_pengawas) rejected_by_pengawas, SUM(ds.pending_count) pending_count
         FROM daily_status ds
         JOIN master_subsls ms ON ms.id=ds.subsls_id
         JOIN master_sls sl ON sl.id=ms.sls_id
@@ -374,7 +375,7 @@ render_header('Progress ' . ucfirst($type));
 const rows = <?= json_encode($trend) ?>;
 const fields = <?= json_encode(array_keys(status_fields())) ?>;
 const labels = <?= json_encode(array_values(status_fields())) ?>;
-const colors = ['#2563eb','#16a34a','#dc2626','#f59e0b','#0f766e'];
+const colors = ['#2563eb','#f59e0b','#16a34a','#dc2626','#7c3aed','#0f766e'];
 new Chart(document.getElementById('lineChart'), {
   type:'line',
   data:{ labels: rows.map(r=>r.tanggal), datasets: fields.map((f,i)=>({ label:labels[i], data:rows.map(r=>Number(r.target)?Math.round(Number(r[f])/Number(r.target)*10000)/100:0), borderColor:colors[i], backgroundColor:colors[i], tension:.2 })) },

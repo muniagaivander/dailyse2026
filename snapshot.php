@@ -149,8 +149,8 @@ function fill_daily_snapshot(string $tanggal, array $user): array
     db()->beginTransaction();
     try {
         $stmt = db()->prepare("INSERT INTO daily_status
-            (tanggal,subsls_id,kab_id,pengawas_email,pencacah_email,target,open_count,draft_count,submitted_by_pencacah,approved_by_pengawas,rejected_by_pengawas,submitted_at,updated_by)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)");
+            (tanggal,subsls_id,kab_id,pengawas_email,pencacah_email,target,open_count,draft_count,submitted_by_pencacah,approved_by_pengawas,rejected_by_pengawas,pending_count,submitted_at,updated_by)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
         foreach ($missingRows as $master) {
             $prev = $previousRows[$master['subsls_id']] ?? null;
             if ($prev) {
@@ -160,12 +160,13 @@ function fill_daily_snapshot(string $tanggal, array $user): array
                 $submit = (int)$prev['submitted_by_pencacah'];
                 $approve = (int)$prev['approved_by_pengawas'];
                 $reject = (int)$prev['rejected_by_pengawas'];
+                $pending = (int)($prev['pending_count'] ?? 0);
                 $kabId = $prev['kab_id'] ?: $master['kab_id'];
                 $pengawas = $prev['pengawas_email'] ?: $master['pengawas_email'];
                 $pencacah = $prev['pencacah_email'] ?: $master['pencacah_email'];
                 $fromPrevious++;
             } else {
-                $target = $open = $draft = $submit = $approve = $reject = 0;
+                $target = $open = $draft = $submit = $approve = $reject = $pending = 0;
                 $kabId = $master['kab_id'];
                 $pengawas = $master['pengawas_email'];
                 $pencacah = $master['pencacah_email'];
@@ -183,6 +184,7 @@ function fill_daily_snapshot(string $tanggal, array $user): array
                 $submit,
                 $approve,
                 $reject,
+                $pending,
                 null,
                 $updatedBy,
             ]);
