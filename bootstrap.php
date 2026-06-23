@@ -141,6 +141,17 @@ function status_fields(): array {
     ];
 }
 
+function daily_form_status_fields(): array {
+    $fields = status_fields();
+    return [
+        'open_count' => $fields['open_count'],
+        'draft_count' => $fields['draft_count'],
+        'submitted_by_pencacah' => $fields['submitted_by_pencacah'],
+        'rejected_by_pengawas' => $fields['rejected_by_pengawas'],
+        'approved_by_pengawas' => $fields['approved_by_pengawas'],
+    ];
+}
+
 function mobile_update_content_path(): string {
     return __DIR__ . '/mobile_update_content.json';
 }

@@ -64,9 +64,9 @@ function dt_download_template(array $user): void
         'pengawas_email',
         'pencacah_email',
         'open',
+        'pending',
         'submit',
         'reject',
-        'pending',
         'approved',
     ];
     $sheetRows = [$headers];
@@ -85,9 +85,9 @@ function dt_download_template(array $user): void
             $sample['pengawas_email'],
             $sample['pencacah_email'],
             $sample['open_count'],
+            $sample['draft_count'],
             $sample['submitted_by_pencacah'],
             $sample['rejected_by_pengawas'],
-            $sample['draft_count'],
             $sample['approved_by_pengawas'],
         ];
     }
@@ -239,7 +239,7 @@ function dt_import_template(string $path, array $user): array
     }
     foreach ($statusColumns as $aliases) {
         if (!array_filter($aliases, fn($alias) => array_key_exists($alias, $idx))) {
-            throw new RuntimeException('Kolom status tidak lengkap. Gunakan header: open, submit, reject, pending, approved.');
+        throw new RuntimeException('Kolom status tidak lengkap. Gunakan header: open, pending, submit, reject, approved.');
         }
     }
 
@@ -421,7 +421,7 @@ render_header('Upload Harian Template');
       <tbody>
         <tr><td>tanggal</td><td>Format disarankan YYYY-MM-DD, contoh <?= e(today()) ?>.</td></tr>
         <tr><td>subsls_id</td><td>Kunci unik wilayah. Isi hanya baris SubSLS yang mau di-upload.</td></tr>
-        <tr><td>open, submit, reject, pending, approved</td><td>Nilai status harian. Target dihitung otomatis dari jumlah lima status ini.</td></tr>
+        <tr><td>open, pending, submit, reject, approved</td><td>Nilai status harian. Target dihitung otomatis dari jumlah lima status ini.</td></tr>
         <tr><td>pengawas_email dan pencacah_email</td><td>Hanya informasi dari master, tidak dipakai untuk mengganti petugas.</td></tr>
       </tbody>
     </table>

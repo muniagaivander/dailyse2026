@@ -82,9 +82,9 @@ function pml_download_template(array $user, string $date): void
         'pengawas_email',
         'pencacah_email',
         'open',
+        'pending',
         'submit',
         'reject',
-        'pending',
         'approved',
     ];
     $sheetRows = [$headers];
@@ -103,9 +103,9 @@ function pml_download_template(array $user, string $date): void
             $row['pengawas_email'],
             $row['pencacah_email'],
             $row['open_count'],
+            $row['draft_count'],
             $row['submitted_by_pencacah'],
             $row['rejected_by_pengawas'],
-            $row['draft_count'],
             $row['approved_by_pengawas'],
         ];
     }
@@ -257,7 +257,7 @@ function pml_import_template(string $path, array $user, string $date): array
     }
     foreach ($statusColumns as $aliases) {
         if (!array_filter($aliases, fn($alias) => array_key_exists($alias, $idx))) {
-            throw new RuntimeException('Kolom status tidak lengkap. Gunakan header: open, submit, reject, pending, approved.');
+        throw new RuntimeException('Kolom status tidak lengkap. Gunakan header: open, pending, submit, reject, approved.');
         }
     }
 

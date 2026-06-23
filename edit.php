@@ -523,7 +523,7 @@ render_header('Edit Harian');
                 <thead>
                   <tr>
                     <th>Desa</th><th>SLS</th><th>Kode SubSLS</th><th>SubSLS</th><th>Target</th>
-                    <?php foreach (status_fields() as $label): ?><th><?= e($label) ?></th><?php endforeach; ?>
+                    <?php foreach (daily_form_status_fields() as $label): ?><th><?= e($label) ?></th><?php endforeach; ?>
                   </tr>
                 </thead>
                 <tbody>
@@ -534,7 +534,7 @@ render_header('Edit Harian');
                     <td><?= e($r['kdsls'] . $r['kdsubsls']) ?><input type="hidden" name="subsls_id[]" value="<?= e($r['subsls_id']) ?>"></td>
                     <td><?= e($r['nmsubsls']) ?></td>
                     <td><input class="form-control form-control-sm target" disabled value="<?= e($r['target']) ?>"></td>
-                    <?php foreach (array_keys(status_fields()) as $f): ?>
+                    <?php foreach (array_keys(daily_form_status_fields()) as $f): ?>
                       <td><input class="form-control form-control-sm status-input" type="number" min="0" name="<?= $f ?>[]" value="<?= e($r[$f]) ?>"></td>
                     <?php endforeach; ?>
                   </tr>

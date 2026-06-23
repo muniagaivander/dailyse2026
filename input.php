@@ -327,7 +327,7 @@ render_header('Input Harian');
               <table class="table table-sm table-bordered mb-0">
                 <thead>
                   <tr>
-                    <th>Desa</th><th>SLS</th><th>Kode SubSLS</th><th>SubSLS</th><th>Target</th><?php foreach (status_fields() as $label): ?><th><?= e($label) ?></th><?php endforeach; ?>
+                    <th>Desa</th><th>SLS</th><th>Kode SubSLS</th><th>SubSLS</th><th>Target</th><?php foreach (daily_form_status_fields() as $label): ?><th><?= e($label) ?></th><?php endforeach; ?>
                   </tr>
                 </thead>
                 <tbody>
@@ -338,7 +338,7 @@ render_header('Input Harian');
                     <td><?= e($r['kdsls'] . $r['kdsubsls']) ?><input type="hidden" name="subsls_id[]" value="<?= e($r['subsls_id']) ?>"></td>
                     <td><?= e($r['nmsubsls']) ?></td>
                     <td><input class="form-control form-control-sm target" disabled value="0"></td>
-                    <?php foreach (array_keys(status_fields()) as $f): ?>
+                    <?php foreach (array_keys(daily_form_status_fields()) as $f): ?>
                       <td><input class="form-control form-control-sm status-input" type="number" min="0" name="<?= $f ?>[]" value="0"></td>
                     <?php endforeach; ?>
                   </tr>
@@ -405,7 +405,7 @@ render_header('Input Harian');
           <tbody>
             <tr><td>tanggal</td><td>Format disarankan YYYY-MM-DD, contoh <?= e(today()) ?>. Tidak boleh lebih besar dari hari upload.</td></tr>
             <tr><td>subsls_id</td><td>Kunci unik wilayah. Isi hanya baris SubSLS yang mau di-upload.</td></tr>
-            <tr><td>open, submit, reject, pending, approved</td><td>Nilai status harian. Target dihitung otomatis dari jumlah lima status ini.</td></tr>
+            <tr><td>open, pending, submit, reject, approved</td><td>Nilai status harian. Target dihitung otomatis dari jumlah lima status ini.</td></tr>
             <tr><td>pengawas_email dan pencacah_email</td><td>Hanya informasi dari master, tidak dipakai untuk mengganti petugas.</td></tr>
           </tbody>
         </table>
