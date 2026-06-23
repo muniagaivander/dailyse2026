@@ -12,13 +12,16 @@ function assignment_rows(array $user): array
     }
     $stmt = db()->prepare("SELECT ms.id subsls_id, p.id prov_id, k.id kab_id, kc.kdkec,
             d.kddesa, sl.kdsls, sl.nmsls, ms.kdsubsls, ms.nmsubsls,
-            ms.pengawas_email, ms.pencacah_email
+            ms.pengawas_email, ms.pencacah_email,
+            up.name pengawas_name, uc.name pencacah_name
         FROM master_subsls ms
         JOIN master_sls sl ON sl.id=ms.sls_id
         JOIN master_desa d ON d.id=sl.desa_id
         JOIN master_kec kc ON kc.id=d.kec_id
         JOIN master_kab k ON k.id=kc.kab_id
         JOIN master_prov p ON p.id=k.prov_id
+        LEFT JOIN users up ON up.email=ms.pengawas_email
+        LEFT JOIN users uc ON uc.email=ms.pencacah_email
         $where
         ORDER BY k.id, kc.kdkec, d.kddesa, sl.kdsls, ms.kdsubsls");
     $stmt->execute($params);
@@ -54,7 +57,9 @@ function download_assignment_template(array $user): void
         'sls',
         'nama_sls',
         'subsls',
+        'pengawas_nama',
         'pengawas_email',
+        'pencacah_nama',
         'pencacah_email',
     ];
     $rows = assignment_rows($user);
@@ -71,7 +76,9 @@ function download_assignment_template(array $user): void
             $row['kdsls'],
             $row['nmsls'],
             $row['kdsubsls'],
+            $row['pengawas_name'],
             $row['pengawas_email'],
+            $row['pencacah_name'],
             $row['pencacah_email'],
         ];
     }
@@ -226,6 +233,8 @@ function import_assignment_template(string $path, array $user): array
             }
             $pengawas = normalize_email($row[$idx['pengawas_email']] ?? '');
             $pencacah = normalize_email($row[$idx['pencacah_email']] ?? '');
+            $pengawasName = array_key_exists('pengawas_nama', $idx) ? trim((string)($row[$idx['pengawas_nama']] ?? '')) : '';
+            $pencacahName = array_key_exists('pencacah_nama', $idx) ? trim((string)($row[$idx['pencacah_nama']] ?? '')) : '';
             $existsParams = [$subslsId];
             if ($user['role'] === 'admin_kab') {
                 $existsParams[] = $user['kab_id'];
@@ -238,10 +247,10 @@ function import_assignment_template(string $path, array $user): array
             $stmtMaster->execute([$pengawas, $pencacah, $subslsId]);
             $stmtDaily->execute([$pengawas, $pencacah, $subslsId]);
             if ($pengawas !== '') {
-                $stmtPengawasUser->execute([$pengawas, $hash, $pengawas]);
+                $stmtPengawasUser->execute([$pengawas, $hash, $pengawasName !== '' ? $pengawasName : $pengawas]);
             }
             if ($pencacah !== '') {
-                $stmtPencacahUser->execute([$pencacah, $hash, $pencacah]);
+                $stmtPencacahUser->execute([$pencacah, $hash, $pencacahName !== '' ? $pencacahName : $pencacah]);
             }
             $processed++;
         }
@@ -299,6 +308,7 @@ render_header('Ganti Petugas by Template');
       <tbody>
         <tr><td>subsls_id</td><td>Kunci unik wilayah. Jangan diubah. Isi hanya baris SubSLS yang mau diganti petugasnya.</td></tr>
         <tr><td>kode_subsls sampai subsls</td><td>Informasi wilayah untuk membantu pengecekan. Tidak dipakai sebagai kunci update.</td></tr>
+        <tr><td>pengawas_nama dan pencacah_nama</td><td>Nama petugas yang akan disimpan ke tabel users.</td></tr>
         <tr><td>pengawas_email</td><td>Email pengawas baru.</td></tr>
         <tr><td>pencacah_email</td><td>Email pencacah baru.</td></tr>
       </tbody>

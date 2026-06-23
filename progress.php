@@ -88,16 +88,20 @@ function progress_email_options(array $user, string $type, array $filters): arra
         $where[] = 'ms.pencacah_email=?';
         $params[] = $user['email'];
     }
-    $stmt = db()->prepare("SELECT DISTINCT {$field} email
+    $stmt = db()->prepare("SELECT DISTINCT {$field} email, u.name
         FROM master_subsls ms
         JOIN master_sls sl ON sl.id=ms.sls_id
         JOIN master_desa d ON d.id=sl.desa_id
         JOIN master_kec kc ON kc.id=d.kec_id
         JOIN master_kab k ON k.id=kc.kab_id
+        LEFT JOIN users u ON u.email={$field}
         WHERE " . implode(' AND ', $where) . "
-        ORDER BY email");
+        ORDER BY u.name, email");
     $stmt->execute($params);
-    return array_column($stmt->fetchAll(), 'email');
+    return array_map(fn($row) => [
+        'value' => $row['email'],
+        'label' => petugas_label($row['email'], $row['name'] ?? ''),
+    ], $stmt->fetchAll());
 }
 
 function progress_area_options(array $user, string $type, array $filters): array
@@ -239,7 +243,7 @@ function progress_current_cards(array $user, string $type, array $filters): arra
 
 $kabupatenOptions = progress_kabupaten_options($user);
 $emails = progress_email_options($user, $type, $filters);
-if ($filters['email'] && !in_array($filters['email'], $emails, true)) {
+if ($filters['email'] && !in_array($filters['email'], array_column($emails, 'value'), true)) {
     $filters['email'] = '';
     $filters['kec_id'] = '';
     $filters['desa_id'] = '';
@@ -328,7 +332,7 @@ render_header('Progress ' . ucfirst($type));
         <label>Email <?= e($type) ?></label>
         <select class="form-control select2-email" name="email" id="email" <?= $filters['kab_id'] ? '' : 'disabled' ?>>
           <option value=""><?= $user['role'] === 'pengawas' ? 'Semua Pencacah' : ($filters['kab_id'] ? 'Pilih email ' . e($type) : 'Pilih kabupaten dulu') ?></option>
-          <?php foreach ($emails as $email): ?><option value="<?= e($email) ?>" <?= $filters['email']===$email?'selected':'' ?>><?= e($email) ?></option><?php endforeach; ?>
+          <?php foreach ($emails as $email): ?><option value="<?= e($email['value']) ?>" <?= $filters['email']===$email['value']?'selected':'' ?>><?= e($email['label']) ?></option><?php endforeach; ?>
         </select>
       </div>
     <?php endif; ?>

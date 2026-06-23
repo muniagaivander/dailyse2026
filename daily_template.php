@@ -13,6 +13,7 @@ function daily_template_rows(array $user): array
     $stmt = db()->prepare("SELECT ms.id subsls_id, p.id prov_id, k.id kab_id, k.nmkab, kc.kdkec, kc.nmkec,
             d.kddesa, d.nmdesa, sl.kdsls, sl.nmsls, ms.kdsubsls, ms.nmsubsls,
             ms.pengawas_email, ms.pencacah_email,
+            up.name pengawas_name, uc.name pencacah_name,
             COALESCE(ss.open_count,0) open_count,
             COALESCE(ss.draft_count,0) draft_count,
             COALESCE(ss.submitted_by_pencacah,0) submitted_by_pencacah,
@@ -25,6 +26,8 @@ function daily_template_rows(array $user): array
         JOIN master_kec kc ON kc.id=d.kec_id
         JOIN master_kab k ON k.id=kc.kab_id
         JOIN master_prov p ON p.id=k.prov_id
+        LEFT JOIN users up ON up.email=ms.pengawas_email
+        LEFT JOIN users uc ON uc.email=ms.pencacah_email
         LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
         $where
         ORDER BY k.id, kc.kdkec, d.kddesa, sl.kdsls, ms.kdsubsls");
@@ -62,7 +65,9 @@ function dt_download_template(array $user): void
         'sls',
         'nama_sls',
         'subsls',
+        'pengawas_nama',
         'pengawas_email',
+        'pencacah_nama',
         'pencacah_email',
         'open',
         'draft',
@@ -84,7 +89,9 @@ function dt_download_template(array $user): void
             $sample['kdsls'],
             $sample['nmsls'],
             $sample['kdsubsls'],
+            $sample['pengawas_name'],
             $sample['pengawas_email'],
+            $sample['pencacah_name'],
             $sample['pencacah_email'],
             $sample['open_count'],
             $sample['draft_count'],

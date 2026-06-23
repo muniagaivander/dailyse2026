@@ -106,30 +106,38 @@ function edit_area_options(array $user, array $filters): array
     if ($user['role'] !== 'pengawas') {
         [$wherePengawas, $paramsPengawas] = edit_options_where($user, $filters, ['kab_id', 'kec_id', 'desa_id']);
         $wherePengawas .= $wherePengawas ? " AND ms.pengawas_email IS NOT NULL AND ms.pengawas_email <> ''" : "WHERE ms.pengawas_email IS NOT NULL AND ms.pengawas_email <> ''";
-        $stmt = db()->prepare("SELECT DISTINCT ms.pengawas_email value, ms.pengawas_email label
+        $stmt = db()->prepare("SELECT DISTINCT ms.pengawas_email value, up.name
             FROM master_subsls ms
             JOIN master_sls sl ON sl.id=ms.sls_id
             JOIN master_desa d ON d.id=sl.desa_id
             JOIN master_kec kc ON kc.id=d.kec_id
             JOIN master_kab k ON k.id=kc.kab_id
+            LEFT JOIN users up ON up.email=ms.pengawas_email
             $wherePengawas
-            ORDER BY ms.pengawas_email");
+            ORDER BY up.name, ms.pengawas_email");
         $stmt->execute($paramsPengawas);
-        $out['pengawas'] = $stmt->fetchAll();
+        $out['pengawas'] = array_map(fn($row) => [
+            'value' => $row['value'],
+            'label' => petugas_label($row['value'], $row['name'] ?? ''),
+        ], $stmt->fetchAll());
     }
 
     [$wherePencacah, $paramsPencacah] = edit_options_where($user, $filters, ['kab_id', 'kec_id', 'desa_id', 'pengawas_email']);
     $wherePencacah .= $wherePencacah ? " AND ms.pencacah_email IS NOT NULL AND ms.pencacah_email <> ''" : "WHERE ms.pencacah_email IS NOT NULL AND ms.pencacah_email <> ''";
-    $stmt = db()->prepare("SELECT DISTINCT ms.pencacah_email value, ms.pencacah_email label
+    $stmt = db()->prepare("SELECT DISTINCT ms.pencacah_email value, uc.name
         FROM master_subsls ms
         JOIN master_sls sl ON sl.id=ms.sls_id
         JOIN master_desa d ON d.id=sl.desa_id
         JOIN master_kec kc ON kc.id=d.kec_id
         JOIN master_kab k ON k.id=kc.kab_id
+        LEFT JOIN users uc ON uc.email=ms.pencacah_email
         $wherePencacah
-        ORDER BY ms.pencacah_email");
+        ORDER BY uc.name, ms.pencacah_email");
     $stmt->execute($paramsPencacah);
-    $out['pencacah'] = $stmt->fetchAll();
+    $out['pencacah'] = array_map(fn($row) => [
+        'value' => $row['value'],
+        'label' => petugas_label($row['value'], $row['name'] ?? ''),
+    ], $stmt->fetchAll());
 
     return $out;
 }
@@ -229,7 +237,8 @@ function edit_daily_rows(array $user, array $filters, string $date): array
     $params[] = $date;
     $stmt = db()->prepare("SELECT ds.*, p.id prov_id, p.nmprov, k.id kab_id, k.nmkab,
             kc.id kec_id, kc.kdkec, kc.nmkec, d.id desa_id, d.kddesa, d.nmdesa,
-            sl.id sls_id, sl.kdsls, sl.nmsls, ms.kdsubsls, ms.nmsubsls
+            sl.id sls_id, sl.kdsls, sl.nmsls, ms.kdsubsls, ms.nmsubsls,
+            up.name pengawas_name, uc.name pencacah_name
         FROM daily_status ds
         JOIN master_subsls ms ON ms.id=ds.subsls_id
         JOIN master_sls sl ON sl.id=ms.sls_id
@@ -237,8 +246,10 @@ function edit_daily_rows(array $user, array $filters, string $date): array
         JOIN master_kec kc ON kc.id=d.kec_id
         JOIN master_kab k ON k.id=kc.kab_id
         JOIN master_prov p ON p.id=k.prov_id
+        LEFT JOIN users up ON up.email=ds.pengawas_email
+        LEFT JOIN users uc ON uc.email=ds.pencacah_email
         WHERE " . implode(' AND ', $where) . "
-        ORDER BY ds.pencacah_email, d.nmdesa, sl.kdsls, ms.kdsubsls");
+        ORDER BY uc.name, ds.pencacah_email, d.nmdesa, sl.kdsls, ms.kdsubsls");
     $stmt->execute($params);
     return $stmt->fetchAll();
 }
@@ -348,8 +359,8 @@ function edit_export_payload(array $rows): array
             $row['subsls_id'],
             $row['kdsls'] . $row['kdsubsls'],
             $row['nmsubsls'],
-            $row['pengawas_email'],
-            $row['pencacah_email'],
+            petugas_label($row['pengawas_email'], $row['pengawas_name'] ?? ''),
+            petugas_label($row['pencacah_email'], $row['pencacah_name'] ?? ''),
             $row['target'],
             $row['open_count'],
             $row['draft_count'],
@@ -418,7 +429,7 @@ $groups = [];
 if ($showForm && $date) {
     $rows = edit_daily_rows($user, $filters, $date);
     foreach ($rows as $row) {
-        $groups[$row['pencacah_email'] ?: 'Tanpa Pencacah'][] = $row;
+        $groups[petugas_label($row['pencacah_email'], $row['pencacah_name'] ?? '')][] = $row;
     }
 }
 

@@ -306,7 +306,7 @@ $cards = [
               <thead>
                 <tr>
                   <th>Peringkat</th>
-                  <th>Email</th>
+                  <th>Nama</th>
                   <th class="text-right">Progress Pendataan</th>
                   <th class="text-right">Selesai SubSLS</th>
                   <th class="text-right">Target</th>
@@ -317,7 +317,7 @@ $cards = [
                 <?php foreach ($rankTable['rows'] as $rankIndex => $rankRow): ?>
                   <tr>
                     <td><?= public_rank_badge($rankIndex + 1) ?></td>
-                    <td><?= e($rankRow['email']) ?></td>
+                    <td><?= e($rankRow['display_name'] ?? ($rankRow['petugas_name'] ?? $rankRow['email'])) ?></td>
                     <td class="text-right"><?= number_format((float)$rankRow['progress_pendataan_pct'], 2, ',', '.') ?>%</td>
                     <td class="text-right"><?= number_format((float)$rankRow['selesai_pct'], 2, ',', '.') ?>%</td>
                     <td class="text-right"><?= number_format((int)$rankRow['target'], 0, ',', '.') ?></td>

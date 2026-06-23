@@ -84,6 +84,7 @@ function status_view_select_sql(string $sqlWhere, ?int $limitRows = null, ?int $
     return "SELECT k.id kab_id, k.nmkab, kc.kdkec, kc.nmkec, d.kddesa, d.nmdesa,
                 sl.kdsls, sl.nmsls, ms.kdsubsls, ms.nmsubsls,
                 ms.pengawas_email, ms.pencacah_email,
+                up.name pengawas_name, uc.name pencacah_name,
                 COALESCE(ss.target,0) target,
                 COALESCE(ss.open_count,0) open_count,
                 COALESCE(ss.draft_count,0) draft_count,
@@ -98,6 +99,8 @@ function status_view_select_sql(string $sqlWhere, ?int $limitRows = null, ?int $
             JOIN master_desa d ON d.id=sl.desa_id
             JOIN master_kec kc ON kc.id=d.kec_id
             JOIN master_kab k ON k.id=kc.kab_id
+            LEFT JOIN users up ON up.email=ms.pengawas_email
+            LEFT JOIN users uc ON uc.email=ms.pencacah_email
             LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
             LEFT JOIN subsls_completion_status cs ON cs.subsls_id=ms.id
             $sqlWhere
@@ -204,8 +207,8 @@ if (($_GET['action'] ?? '') === 'export' && isset($_GET['filter'])) {
             $r['kab_id'] . $r['kdkec'] . $r['kddesa'] . $r['kdsls'] . $r['kdsubsls'],
             $r['nmsls'],
             $r['kdsubsls'],
-            $r['pengawas_email'],
-            $r['pencacah_email'],
+            petugas_label($r['pengawas_email'], $r['pengawas_name'] ?? ''),
+            petugas_label($r['pencacah_email'], $r['pencacah_name'] ?? ''),
             (string)(int)$r['target'],
         ];
         foreach (array_keys($fields) as $field) {
@@ -300,8 +303,8 @@ render_header('Status Terupdate');
           <td><?= e($r['nmdesa']) ?></td>
           <td><?= e($r['nmsls']) ?></td>
           <td><?= e($r['kdsubsls']) ?></td>
-          <td><?= e($r['pengawas_email']) ?></td>
-          <td><?= e($r['pencacah_email']) ?></td>
+          <td><?= e(petugas_label($r['pengawas_email'], $r['pengawas_name'] ?? '')) ?></td>
+          <td><?= e(petugas_label($r['pencacah_email'], $r['pencacah_name'] ?? '')) ?></td>
           <td><?= number_format((int)$r['target'], 0, ',', '.') ?></td>
           <?php foreach (array_keys($fields) as $field): ?><td><?= number_format((int)$r[$field], 0, ',', '.') ?></td><?php endforeach; ?>
           <td><?= e($r['last_update'] ?: '-') ?></td>

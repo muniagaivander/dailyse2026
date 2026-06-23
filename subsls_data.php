@@ -18,6 +18,7 @@ $offset = ($page - 1) * $perPage;
 $stmt = db()->prepare("SELECT ms.id subsls_id, ms.kdsubsls, ms.nmsubsls, sl.kdsls, sl.nmsls,
         d.kddesa, d.nmdesa, kc.kdkec, kc.nmkec, k.id kab_id, k.nmkab,
         ms.pengawas_email, ms.pencacah_email,
+        up.name pengawas_name, uc.name pencacah_name,
         COALESCE(ss.target,0) target,
         COALESCE(ss.open_count,0) open_count,
         COALESCE(ss.submitted_by_pencacah,0) submitted_by_pencacah,
@@ -31,6 +32,8 @@ $stmt = db()->prepare("SELECT ms.id subsls_id, ms.kdsubsls, ms.nmsubsls, sl.kdsl
     JOIN master_desa d ON d.id=sl.desa_id
     JOIN master_kec kc ON kc.id=d.kec_id
     JOIN master_kab k ON k.id=kc.kab_id
+    LEFT JOIN users up ON up.email=ms.pengawas_email
+    LEFT JOIN users uc ON uc.email=ms.pencacah_email
     LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
     WHERE $roleColumn=?
     ORDER BY ms.id
@@ -71,8 +74,8 @@ render_header('Data SubSLS');
           <td><?= e($r['kddesa'] . ' - ' . $r['nmdesa']) ?></td>
           <td><?= e($r['kdsls'] . ' - ' . $r['nmsls']) ?></td>
           <td><?= e($r['kdsubsls'] . ' - ' . $r['nmsubsls']) ?></td>
-          <td><?= e($r['pengawas_email']) ?></td>
-          <td><?= e($r['pencacah_email']) ?></td>
+          <td><?= e(petugas_label($r['pengawas_email'], $r['pengawas_name'] ?? '')) ?></td>
+          <td><?= e(petugas_label($r['pencacah_email'], $r['pencacah_name'] ?? '')) ?></td>
           <td><?= number_format((int)$r['target'], 0, ',', '.') ?></td>
           <?php foreach (array_keys($fields) as $field): ?><td><?= number_format((int)$r[$field], 0, ',', '.') ?></td><?php endforeach; ?>
           <td><?= e($r['last_update'] ?: '-') ?></td>

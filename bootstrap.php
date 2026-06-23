@@ -127,6 +127,45 @@ function normalize_email($email): string {
     return strtolower(trim((string)$email));
 }
 
+function petugas_label(?string $email, ?string $name = null): string {
+    $email = normalize_email($email ?? '');
+    $name = trim((string)($name ?? ''));
+    if ($email === '') {
+        return '-';
+    }
+    if ($name === '' || strcasecmp($name, $email) === 0) {
+        return $email;
+    }
+    return $name . ' (' . $email . ')';
+}
+
+function petugas_name_by_email(?string $email): string {
+    static $cache = [];
+    $email = normalize_email($email ?? '');
+    if ($email === '') {
+        return '';
+    }
+    if (!array_key_exists($email, $cache)) {
+        $stmt = db()->prepare("SELECT name FROM users WHERE email=?");
+        $stmt->execute([$email]);
+        $cache[$email] = trim((string)($stmt->fetchColumn() ?: ''));
+    }
+    return $cache[$email];
+}
+
+function petugas_label_by_email(?string $email): string {
+    return petugas_label($email, petugas_name_by_email($email));
+}
+
+function petugas_short_area_label(?string $name, ?string $area): string {
+    $name = trim((string)($name ?? ''));
+    $area = trim((string)($area ?? ''));
+    if ($name === '') {
+        $name = '-';
+    }
+    return $area !== '' ? $name . ' (' . $area . ')' : $name;
+}
+
 function today(): string {
     return date('Y-m-d');
 }

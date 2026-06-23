@@ -67,13 +67,17 @@ function input_area_options(array $user, array $filters): array
         $out['desa'] = $stmt->fetchAll();
     }
     if (!empty($filters['desa_id'])) {
-        $stmt = db()->prepare("SELECT DISTINCT ms.pengawas_email value, ms.pengawas_email label
+        $stmt = db()->prepare("SELECT DISTINCT ms.pengawas_email value, up.name
             FROM master_subsls ms
             JOIN master_sls sl ON sl.id=ms.sls_id
+            LEFT JOIN users up ON up.email=ms.pengawas_email
             WHERE sl.desa_id=? AND ms.pengawas_email IS NOT NULL AND ms.pengawas_email <> ''
-            ORDER BY ms.pengawas_email");
+            ORDER BY up.name, ms.pengawas_email");
         $stmt->execute([$filters['desa_id']]);
-        $out['pengawas'] = $stmt->fetchAll();
+        $out['pengawas'] = array_map(fn($row) => [
+            'value' => $row['value'],
+            'label' => petugas_label($row['value'], $row['name'] ?? ''),
+        ], $stmt->fetchAll());
     }
     return $out;
 }
@@ -217,17 +221,18 @@ if (isset($_GET['show'])) {
             $where[] = 'kc.kab_id=?';
             $params[] = $user['kab_id'];
         }
-        $stmt = db()->prepare("SELECT ms.id subsls_id, ms.kdsubsls, ms.nmsubsls, ms.pencacah_email, sl.kdsls, sl.nmsls, d.nmdesa
+        $stmt = db()->prepare("SELECT ms.id subsls_id, ms.kdsubsls, ms.nmsubsls, ms.pencacah_email, uc.name pencacah_name, sl.kdsls, sl.nmsls, d.nmdesa
             FROM master_subsls ms
             JOIN master_sls sl ON sl.id=ms.sls_id
             JOIN master_desa d ON d.id=sl.desa_id
             JOIN master_kec kc ON kc.id=d.kec_id
+            LEFT JOIN users uc ON uc.email=ms.pencacah_email
             WHERE " . implode(' AND ', $where) . "
-            ORDER BY ms.pencacah_email, d.nmdesa, sl.nmsls, ms.kdsubsls");
+            ORDER BY uc.name, ms.pencacah_email, d.nmdesa, sl.nmsls, ms.kdsubsls");
         $stmt->execute($params);
         $rows = $stmt->fetchAll();
         foreach ($rows as $row) {
-            $key = $row['pencacah_email'] ?: 'Tanpa Pencacah';
+            $key = petugas_label($row['pencacah_email'], $row['pencacah_name'] ?? '');
             $groups[$key][] = $row;
         }
     }

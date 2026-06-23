@@ -36,10 +36,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmtCurrent = db()->prepare("SELECT pengawas_email, pencacah_email FROM master_subsls WHERE id=?");
         $stmtMaster = db()->prepare("UPDATE master_subsls SET pengawas_email=?, pencacah_email=? WHERE id=?");
         $stmtDaily = db()->prepare("UPDATE daily_status SET pengawas_email=?, pencacah_email=? WHERE subsls_id=?");
-        $stmtPengawasUser = db()->prepare("INSERT INTO users (email,password_hash,role,name,active) VALUES (?,?, 'pengawas', ?, 1) ON DUPLICATE KEY UPDATE role='pengawas', active=1");
+        $stmtPengawasUser = db()->prepare("INSERT INTO users (email,password_hash,role,name,active) VALUES (?,?, 'pengawas', ?, 1) ON DUPLICATE KEY UPDATE role='pengawas', active=1, name=VALUES(name)");
         $stmtPencacahUser = db()->prepare("INSERT INTO users (email,password_hash,role,name,active) VALUES (?,?, 'pencacah', ?, 1) ON DUPLICATE KEY UPDATE active=1, name=VALUES(name)");
         foreach ($ids as $i => $id) {
+            $pengawasName = trim((string)($_POST['pengawas_name'][$i] ?? ''));
             $pengawas = normalize_email($_POST['pengawas_email'][$i] ?? '');
+            $pencacahName = trim((string)($_POST['pencacah_name'][$i] ?? ''));
             $pencacah = normalize_email($_POST['pencacah_email'][$i] ?? '');
             $stmtCurrent->execute([$id]);
             $current = $stmtCurrent->fetch();
@@ -47,17 +49,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $skipped++;
                 continue;
             }
-            if (normalize_email($current['pengawas_email']) === $pengawas && normalize_email($current['pencacah_email']) === $pencacah) {
+            if (normalize_email($current['pengawas_email']) === $pengawas && normalize_email($current['pencacah_email']) === $pencacah && $pengawasName === '' && $pencacahName === '') {
                 $skipped++;
                 continue;
             }
             $stmtMaster->execute([$pengawas,$pencacah,$id]);
             $stmtDaily->execute([$pengawas,$pencacah,$id]);
             if ($pengawas) {
-                $stmtPengawasUser->execute([$pengawas,password_hash('123', PASSWORD_DEFAULT),$pengawas]);
+                $stmtPengawasUser->execute([$pengawas,password_hash('123', PASSWORD_DEFAULT),$pengawasName !== '' ? $pengawasName : $pengawas]);
             }
             if ($pencacah) {
-                $stmtPencacahUser->execute([$pencacah,password_hash('123', PASSWORD_DEFAULT),$pencacah]);
+                $stmtPencacahUser->execute([$pencacah,password_hash('123', PASSWORD_DEFAULT),$pencacahName !== '' ? $pencacahName : $pencacah]);
             }
             $updated++;
         }
@@ -75,10 +77,13 @@ if (isset($_GET['filter'])) {
     if (!$filters['kab_id'] || !$filters['kec_id'] || !$filters['desa_id']) {
         $error = 'Pilih sampai level Desa';
     } else {
-        $stmt = db()->prepare("SELECT ms.*, sl.kdsls, sl.nmsls, d.nmdesa
+        $stmt = db()->prepare("SELECT ms.*, sl.kdsls, sl.nmsls, d.nmdesa,
+                up.name pengawas_name, uc.name pencacah_name
             FROM master_subsls ms
             JOIN master_sls sl ON sl.id=ms.sls_id
             JOIN master_desa d ON d.id=sl.desa_id
+            LEFT JOIN users up ON up.email=ms.pengawas_email
+            LEFT JOIN users uc ON uc.email=ms.pencacah_email
             WHERE d.id=?
             ORDER BY sl.kdsls, ms.kdsubsls");
         $stmt->execute([$filters['desa_id']]);
@@ -105,12 +110,14 @@ render_header('Ganti Pengawas/Pencacah');
 <?php if ($rows): ?>
 <form method="post" data-progress-submit data-progress-title="Mengupdate master petugas..." data-progress-text="Mohon tunggu, sistem sedang mengecek perubahan dan memperbarui data satu desa.">
   <div class="card"><div class="card-body table-responsive p-0"><table class="table table-bordered table-sm">
-    <thead><tr><th>Kode SubSLS</th><th>SLS</th><th>SubSLS</th><th>Pengawas</th><th>Pencacah</th></tr></thead><tbody>
+    <thead><tr><th>Kode SubSLS</th><th>SLS</th><th>SubSLS</th><th>Nama Pengawas</th><th>Email Pengawas</th><th>Nama Pencacah</th><th>Email Pencacah</th></tr></thead><tbody>
     <?php foreach ($rows as $r): ?><tr>
       <td><?= e($r['kdsls'] . $r['kdsubsls']) ?><input type="hidden" name="subsls_id[]" value="<?= e($r['id']) ?>"></td>
       <td><?= e($r['kdsls'] . ' - ' . $r['nmsls']) ?></td>
       <td><?= e($r['nmsubsls']) ?></td>
+      <td><input class="form-control form-control-sm" name="pengawas_name[]" value="<?= e($r['pengawas_name'] ?? '') ?>"></td>
       <td><input class="form-control form-control-sm" name="pengawas_email[]" value="<?= e($r['pengawas_email']) ?>"></td>
+      <td><input class="form-control form-control-sm" name="pencacah_name[]" value="<?= e($r['pencacah_name'] ?? '') ?>"></td>
       <td><input class="form-control form-control-sm" name="pencacah_email[]" value="<?= e($r['pencacah_email']) ?>"></td>
     </tr><?php endforeach; ?>
     </tbody>
@@ -141,6 +148,7 @@ render_header('Ganti Pengawas/Pencacah');
           <tbody>
             <tr><td>subsls_id</td><td>Kunci unik wilayah. Jangan diubah. Isi hanya baris SubSLS yang mau diganti petugasnya.</td></tr>
             <tr><td>kode_subsls sampai subsls</td><td>Informasi wilayah untuk membantu pengecekan. Tidak dipakai sebagai kunci update.</td></tr>
+            <tr><td>pengawas_nama dan pencacah_nama</td><td>Nama petugas yang akan disimpan ke tabel users.</td></tr>
             <tr><td>pengawas_email</td><td>Email pengawas baru.</td></tr>
             <tr><td>pencacah_email</td><td>Email pencacah baru.</td></tr>
           </tbody>

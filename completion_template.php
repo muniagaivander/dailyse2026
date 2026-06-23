@@ -35,6 +35,7 @@ function ct_rows_for_user(array $user): array
     $stmt = db()->prepare("SELECT ms.id subsls_id, p.id provinsi, k.id kabupaten, kc.kdkec kecamatan,
             d.kddesa desa, sl.kdsls sls, sl.nmsls nama_sls, ms.kdsubsls subsls, ms.nmsubsls,
             ms.pengawas_email, ms.pencacah_email,
+            up.name pengawas_name, uc.name pencacah_name,
             COALESCE(cs.status_selesai, 'Belum Selesai') status_selesai
         FROM master_subsls ms
         JOIN master_sls sl ON sl.id=ms.sls_id
@@ -42,6 +43,8 @@ function ct_rows_for_user(array $user): array
         JOIN master_kec kc ON kc.id=d.kec_id
         JOIN master_kab k ON k.id=kc.kab_id
         JOIN master_prov p ON p.id=k.prov_id
+        LEFT JOIN users up ON up.email=ms.pengawas_email
+        LEFT JOIN users uc ON uc.email=ms.pencacah_email
         LEFT JOIN subsls_completion_status cs ON cs.subsls_id=ms.id
         $sqlWhere
         ORDER BY k.id, kc.kdkec, d.kddesa, sl.kdsls, ms.kdsubsls");
@@ -61,7 +64,9 @@ function ct_download_template(array $user): void
         'sls',
         'nama_sls',
         'subsls',
+        'pengawas_nama',
         'pengawas_email',
+        'pencacah_nama',
         'pencacah_email',
         'status selesai',
     ];
@@ -77,7 +82,9 @@ function ct_download_template(array $user): void
             $row['sls'],
             $row['nama_sls'],
             $row['subsls'],
+            $row['pengawas_name'],
             $row['pengawas_email'],
+            $row['pencacah_name'],
             $row['pencacah_email'],
             $row['status_selesai'],
         ];

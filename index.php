@@ -61,22 +61,30 @@ function dashboard_filter_options(array $user, array $filters): array
         $out['desa'] = $stmt->fetchAll();
     }
     if (!empty($filters['desa_id'])) {
-        $stmt = db()->prepare("SELECT DISTINCT ms.pengawas_email value, ms.pengawas_email label
+        $stmt = db()->prepare("SELECT DISTINCT ms.pengawas_email value, up.name
             FROM master_subsls ms
             JOIN master_sls sl ON sl.id=ms.sls_id
+            LEFT JOIN users up ON up.email=ms.pengawas_email
             WHERE sl.desa_id=? AND ms.pengawas_email IS NOT NULL AND ms.pengawas_email <> ''
-            ORDER BY ms.pengawas_email");
+            ORDER BY up.name, ms.pengawas_email");
         $stmt->execute([$filters['desa_id']]);
-        $out['pengawas'] = $stmt->fetchAll();
+        $out['pengawas'] = array_map(fn($row) => [
+            'value' => $row['value'],
+            'label' => petugas_label($row['value'], $row['name'] ?? ''),
+        ], $stmt->fetchAll());
     }
 
     if ($user['role'] === 'pengawas') {
-        $stmt = db()->prepare("SELECT DISTINCT pencacah_email value, pencacah_email label
-            FROM master_subsls
-            WHERE pengawas_email=? AND pencacah_email IS NOT NULL AND pencacah_email <> ''
-            ORDER BY pencacah_email");
+        $stmt = db()->prepare("SELECT DISTINCT ms.pencacah_email value, uc.name
+            FROM master_subsls ms
+            LEFT JOIN users uc ON uc.email=ms.pencacah_email
+            WHERE ms.pengawas_email=? AND ms.pencacah_email IS NOT NULL AND ms.pencacah_email <> ''
+            ORDER BY uc.name, ms.pencacah_email");
         $stmt->execute([$user['email']]);
-        $out['pencacah'] = $stmt->fetchAll();
+        $out['pencacah'] = array_map(fn($row) => [
+            'value' => $row['value'],
+            'label' => petugas_label($row['value'], $row['name'] ?? ''),
+        ], $stmt->fetchAll());
     } elseif (!empty($filters['pengawas_email'])) {
         $where = ['ms.pengawas_email=?', "ms.pencacah_email IS NOT NULL", "ms.pencacah_email <> ''"];
         $params = [$filters['pengawas_email']];
@@ -92,16 +100,20 @@ function dashboard_filter_options(array $user, array $filters): array
             $where[] = 'd.id=?';
             $params[] = $filters['desa_id'];
         }
-        $stmt = db()->prepare("SELECT DISTINCT ms.pencacah_email value, ms.pencacah_email label
+        $stmt = db()->prepare("SELECT DISTINCT ms.pencacah_email value, uc.name
             FROM master_subsls ms
             JOIN master_sls sl ON sl.id=ms.sls_id
             JOIN master_desa d ON d.id=sl.desa_id
             JOIN master_kec kc ON kc.id=d.kec_id
             JOIN master_kab k ON k.id=kc.kab_id
+            LEFT JOIN users uc ON uc.email=ms.pencacah_email
             WHERE " . implode(' AND ', $where) . "
-            ORDER BY ms.pencacah_email");
+            ORDER BY uc.name, ms.pencacah_email");
         $stmt->execute($params);
-        $out['pencacah'] = $stmt->fetchAll();
+        $out['pencacah'] = array_map(fn($row) => [
+            'value' => $row['value'],
+            'label' => petugas_label($row['value'], $row['name'] ?? ''),
+        ], $stmt->fetchAll());
     }
     return $out;
 }
@@ -188,7 +200,14 @@ function dashboard_rows(array $user, array $filters, array $fields): array
         GROUP BY $groupExpr, label
         ORDER BY label");
     $stmt->execute($params);
-    return $stmt->fetchAll();
+    $rows = $stmt->fetchAll();
+    if ($groupExpr === 'ms.pencacah_email' || $groupExpr === 'ms.pengawas_email') {
+        foreach ($rows as &$row) {
+            $row['label'] = petugas_label_by_email($row['label']);
+        }
+        unset($row);
+    }
+    return $rows;
 }
 
 function dashboard_totals(array $rows, array $fields): array
@@ -258,6 +277,7 @@ function performance_rows(string $roleField, string $kabId, string $direction): 
     $limit = $direction === 'desc' ? 'LIMIT 10' : '';
     $whereKab = $kabId === '6400' ? '' : 'kc.kab_id=? AND';
     $stmt = db()->prepare("SELECT ms.$roleField email,
+            u.name petugas_name,
             COALESCE(SUM(ss.target),0) target,
             COALESCE(SUM(ss.submitted_by_pencacah),0) submitted_by_pencacah,
             COALESCE(SUM(ss.rejected_by_pengawas),0) rejected_by_pengawas,
@@ -278,9 +298,10 @@ function performance_rows(string $roleField, string $kabId, string $direction): 
         JOIN master_kec kc ON kc.id=d.kec_id
         LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
         LEFT JOIN subsls_completion_status cs ON cs.subsls_id=ms.id
+        LEFT JOIN users u ON u.email=ms.$roleField
         WHERE $whereKab ms.$roleField IS NOT NULL AND ms.$roleField <> ''
-        GROUP BY ms.$roleField
-        ORDER BY submit_approve_pct $order, selesai_pct $order, email ASC
+        GROUP BY ms.$roleField, u.name
+        ORDER BY submit_approve_pct $order, selesai_pct $order, petugas_name ASC, email ASC
         $limit");
     $stmt->execute($kabId === '6400' ? [] : [$kabId]);
     return $stmt->fetchAll();
@@ -476,7 +497,7 @@ if (($_GET['action'] ?? '') === 'export_attention' && $canSeePerformance) {
     $exportRows = [];
     foreach ($rows as $row) {
         $exportRows[] = [
-            $row['email'],
+            petugas_label($row['email'], $row['petugas_name'] ?? ''),
             $row['submit_approve_pct'],
             $row['selesai_pct'],
             $threshold['pct'],
@@ -492,7 +513,7 @@ if (($_GET['action'] ?? '') === 'export_attention' && $canSeePerformance) {
         ];
     }
     dashboard_export_rows(
-        ['email', 'progress_pendataan_pct', 'selesai_subsls_pct', 'threshold_selesai_pct', 'batas_tanggal', 'target', 'submitted_by_pencacah', 'rejected_by_pengawas', 'draft_count', 'pending_count', 'approved_by_pengawas', 'subsls_total', 'selesai_count'],
+        ['petugas', 'progress_pendataan_pct', 'selesai_subsls_pct', 'threshold_selesai_pct', 'batas_tanggal', 'target', 'submitted_by_pencacah', 'rejected_by_pengawas', 'draft_count', 'pending_count', 'approved_by_pengawas', 'subsls_total', 'selesai_count'],
         $exportRows,
         'perlu_perhatian_' . $type . '_' . $kabId . '_' . date('Ymd'),
         $format
@@ -960,7 +981,7 @@ if (pengawas) {
               <thead><tr><th>Peringkat</th><th>Email</th><th>Progress Pendataan</th><th>Selesai SubSLS</th><th>Target</th><th>Total SubSLS</th></tr></thead>
               <tbody>
               <?php foreach ($topRows as $rankIndex => $r): ?>
-                <tr><td><?= dashboard_rank_badge($rankIndex + 1) ?></td><td><?= e($r['email']) ?></td><td><?= number_format((float)$r['submit_approve_pct'],2,',','.') ?>%</td><td><?= number_format((float)$r['selesai_pct'],2,',','.') ?>%</td><td><?= number_format((int)$r['target'],0,',','.') ?></td><td><?= number_format((int)$r['subsls_total'],0,',','.') ?></td></tr>
+                <tr><td><?= dashboard_rank_badge($rankIndex + 1) ?></td><td><?= e(petugas_label($r['email'], $r['petugas_name'] ?? '')) ?></td><td><?= number_format((float)$r['submit_approve_pct'],2,',','.') ?>%</td><td><?= number_format((float)$r['selesai_pct'],2,',','.') ?>%</td><td><?= number_format((int)$r['target'],0,',','.') ?></td><td><?= number_format((int)$r['subsls_total'],0,',','.') ?></td></tr>
               <?php endforeach; ?>
               </tbody>
             </table>
@@ -980,7 +1001,7 @@ if (pengawas) {
               <thead><tr><th>Email</th><th>Progress Pendataan</th><th>Selesai SubSLS</th><th>Target</th><th>Total SubSLS</th></tr></thead>
               <tbody>
               <?php foreach ($attentionRows as $r): ?>
-                <tr class="attention-row"><td><?= e($r['email']) ?></td><td><?= number_format((float)$r['submit_approve_pct'],2,',','.') ?>%</td><td><?= number_format((float)$r['selesai_pct'],2,',','.') ?>%</td><td><?= number_format((int)$r['target'],0,',','.') ?></td><td><?= number_format((int)$r['subsls_total'],0,',','.') ?></td></tr>
+                <tr class="attention-row"><td><?= e(petugas_label($r['email'], $r['petugas_name'] ?? '')) ?></td><td><?= number_format((float)$r['submit_approve_pct'],2,',','.') ?>%</td><td><?= number_format((float)$r['selesai_pct'],2,',','.') ?>%</td><td><?= number_format((int)$r['target'],0,',','.') ?></td><td><?= number_format((int)$r['subsls_total'],0,',','.') ?></td></tr>
               <?php endforeach; ?>
               <?php if (!$attentionRows): ?>
                 <tr><td colspan="5" class="text-center text-muted">Tidak ada <?= e(strtolower($labelRole)) ?> yang masuk kategori perlu perhatian.</td></tr>

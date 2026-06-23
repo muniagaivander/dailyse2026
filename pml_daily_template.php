@@ -31,6 +31,7 @@ function pml_master_rows(string $pengawasEmail, string $date): array
 {
     $stmt = db()->prepare("SELECT ms.id subsls_id, p.id provinsi, k.id kabupaten, kc.kdkec kecamatan,
             d.kddesa desa, sl.kdsls sls, sl.nmsls nama_sls, ms.kdsubsls subsls, ms.pengawas_email, ms.pencacah_email,
+            up.name pengawas_name, uc.name pencacah_name,
             COALESCE(ss.open_count,0) open_count,
             COALESCE(ss.draft_count,0) draft_count,
             COALESCE(ss.submitted_by_pencacah,0) submitted_by_pencacah,
@@ -43,6 +44,8 @@ function pml_master_rows(string $pengawasEmail, string $date): array
         JOIN master_kec kc ON kc.id=d.kec_id
         JOIN master_kab k ON k.id=kc.kab_id
         JOIN master_prov p ON p.id=k.prov_id
+        LEFT JOIN users up ON up.email=ms.pengawas_email
+        LEFT JOIN users uc ON uc.email=ms.pencacah_email
         LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
         WHERE ms.pengawas_email=?
         ORDER BY ms.pencacah_email, ms.id");
@@ -80,7 +83,9 @@ function pml_download_template(array $user, string $date): void
         'sls',
         'nama_sls',
         'subsls',
+        'pengawas_nama',
         'pengawas_email',
+        'pencacah_nama',
         'pencacah_email',
         'open',
         'draft',
@@ -102,7 +107,9 @@ function pml_download_template(array $user, string $date): void
             $row['sls'],
             $row['nama_sls'],
             $row['subsls'],
+            $row['pengawas_name'],
             $row['pengawas_email'],
+            $row['pencacah_name'],
             $row['pencacah_email'],
             $row['open_count'],
             $row['draft_count'],

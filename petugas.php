@@ -67,13 +67,16 @@ function petugas_template_rows(array $user, array $filters): array
     }
     $stmt = db()->prepare("SELECT ms.id subsls_id, p.id prov_id, k.id kab_id, kc.kdkec,
             d.kddesa, sl.kdsls, sl.nmsls, ms.kdsubsls,
-            ms.pengawas_email, ms.pencacah_email
+            ms.pengawas_email, ms.pencacah_email,
+            up.name pengawas_name, uc.name pencacah_name
         FROM master_subsls ms
         JOIN master_sls sl ON sl.id=ms.sls_id
         JOIN master_desa d ON d.id=sl.desa_id
         JOIN master_kec kc ON kc.id=d.kec_id
         JOIN master_kab k ON k.id=kc.kab_id
         JOIN master_prov p ON p.id=k.prov_id
+        LEFT JOIN users up ON up.email=ms.pengawas_email
+        LEFT JOIN users uc ON uc.email=ms.pencacah_email
         WHERE " . implode(' AND ', $where) . "
         ORDER BY k.id, kc.kdkec, d.kddesa, sl.kdsls, ms.kdsubsls");
     $stmt->execute($params);
@@ -92,7 +95,9 @@ function petugas_download_assignment_template(array $user, array $filters): void
         'sls',
         'nama_sls',
         'subsls',
+        'pengawas_nama',
         'pengawas_email',
+        'pencacah_nama',
         'pencacah_email',
     ]];
     foreach (petugas_template_rows($user, $filters) as $row) {
@@ -106,7 +111,9 @@ function petugas_download_assignment_template(array $user, array $filters): void
             $row['kdsls'],
             $row['nmsls'],
             $row['kdsubsls'],
+            $row['pengawas_name'],
             $row['pengawas_email'],
+            $row['pencacah_name'],
             $row['pencacah_email'],
         ];
     }
@@ -226,13 +233,16 @@ if (isset($_GET['filter'])) {
     ];
 
     $stmt = db()->prepare("SELECT p.nmprov, k.id kab_id, k.nmkab, kc.kdkec, kc.nmkec, d.kddesa, d.nmdesa, sl.kdsls, sl.nmsls,
-                ms.kdsubsls, ms.nmsubsls, ms.pengawas_email, ms.pencacah_email
+                ms.kdsubsls, ms.nmsubsls, ms.pengawas_email, ms.pencacah_email,
+                up.name pengawas_name, uc.name pencacah_name
             FROM master_subsls ms
             JOIN master_sls sl ON sl.id=ms.sls_id
             JOIN master_desa d ON d.id=sl.desa_id
             JOIN master_kec kc ON kc.id=d.kec_id
             JOIN master_kab k ON k.id=kc.kab_id
             JOIN master_prov p ON p.id=k.prov_id
+            LEFT JOIN users up ON up.email=ms.pengawas_email
+            LEFT JOIN users uc ON uc.email=ms.pencacah_email
             $sqlWhere
             ORDER BY k.id, kc.kdkec, d.kddesa, sl.kdsls, ms.kdsubsls
             LIMIT $perPage OFFSET $offset");
@@ -302,8 +312,8 @@ render_header('Daftar Petugas');
           <td><?= e($r['nmdesa']) ?></td>
           <td><?= e($r['kdsls'] . ' - ' . $r['nmsls']) ?></td>
           <td><?= e($r['kdsubsls']) ?></td>
-          <td><?= e($r['pengawas_email']) ?></td>
-          <td><?= e($r['pencacah_email']) ?></td>
+          <td><?= e(petugas_label($r['pengawas_email'], $r['pengawas_name'] ?? '')) ?></td>
+          <td><?= e(petugas_label($r['pencacah_email'], $r['pencacah_name'] ?? '')) ?></td>
         </tr>
       <?php endforeach; ?>
       </tbody>

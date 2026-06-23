@@ -39,12 +39,13 @@ function completion_area_options(array $user, array $filters): array
 
 function completion_pencacah_options(string $pengawasEmail): array
 {
-    $stmt = db()->prepare("SELECT DISTINCT pencacah_email email
-        FROM master_subsls
-        WHERE pengawas_email=? AND pencacah_email IS NOT NULL AND pencacah_email <> ''
-        ORDER BY pencacah_email");
+    $stmt = db()->prepare("SELECT DISTINCT ms.pencacah_email email, uc.name
+        FROM master_subsls ms
+        LEFT JOIN users uc ON uc.email=ms.pencacah_email
+        WHERE ms.pengawas_email=? AND ms.pencacah_email IS NOT NULL AND ms.pencacah_email <> ''
+        ORDER BY uc.name, ms.pencacah_email");
     $stmt->execute([$pengawasEmail]);
-    return array_column($stmt->fetchAll(), 'email');
+    return $stmt->fetchAll();
 }
 
 function completion_work_area_label(array $user): string
@@ -145,11 +146,14 @@ if (isset($_GET['filter'])) {
             }
             $stmt = db()->prepare("SELECT ms.id subsls_id, CONCAT(sl.kdsls, ms.kdsubsls) kode_subsls,
                     d.nmdesa, sl.kdsls, sl.nmsls, ms.kdsubsls, ms.nmsubsls, ms.pengawas_email, ms.pencacah_email,
+                    up.name pengawas_name, uc.name pencacah_name,
                     COALESCE(cs.status_selesai, 'Belum Selesai') status_selesai, cs.updated_at, cs.updated_by
                 FROM master_subsls ms
                 JOIN master_sls sl ON sl.id=ms.sls_id
                 JOIN master_desa d ON d.id=sl.desa_id
                 JOIN master_kec kc ON kc.id=d.kec_id
+                LEFT JOIN users up ON up.email=ms.pengawas_email
+                LEFT JOIN users uc ON uc.email=ms.pencacah_email
                 LEFT JOIN subsls_completion_status cs ON cs.subsls_id=ms.id
                 WHERE " . implode(' AND ', $areaWhere) . "
                 ORDER BY sl.kdsls, ms.kdsubsls");
@@ -162,10 +166,13 @@ if (isset($_GET['filter'])) {
         } else {
             $stmt = db()->prepare("SELECT ms.id subsls_id, CONCAT(sl.kdsls, ms.kdsubsls) kode_subsls,
                     d.nmdesa, sl.kdsls, sl.nmsls, ms.kdsubsls, ms.nmsubsls, ms.pengawas_email, ms.pencacah_email,
+                    up.name pengawas_name, uc.name pencacah_name,
                     COALESCE(cs.status_selesai, 'Belum Selesai') status_selesai, cs.updated_at, cs.updated_by
                 FROM master_subsls ms
                 JOIN master_sls sl ON sl.id=ms.sls_id
                 JOIN master_desa d ON d.id=sl.desa_id
+                LEFT JOIN users up ON up.email=ms.pengawas_email
+                LEFT JOIN users uc ON uc.email=ms.pencacah_email
                 LEFT JOIN subsls_completion_status cs ON cs.subsls_id=ms.id
                 WHERE ms.pengawas_email=? AND ms.pencacah_email=?
                 ORDER BY ms.id");
@@ -215,7 +222,7 @@ render_header('Status Selesai SubSLS');
         <label>Pencacah</label>
         <select class="form-control" name="pencacah_email" required>
           <option value="">Pilih Pencacah</option>
-          <?php foreach ($pencacahOptions as $email): ?><option value="<?= e($email) ?>" <?= $filters['pencacah_email']===$email?'selected':'' ?>><?= e($email) ?></option><?php endforeach; ?>
+          <?php foreach ($pencacahOptions as $o): ?><option value="<?= e($o['email']) ?>" <?= $filters['pencacah_email']===$o['email']?'selected':'' ?>><?= e(petugas_label($o['email'], $o['name'] ?? '')) ?></option><?php endforeach; ?>
         </select>
       </div>
     <?php endif; ?>
@@ -247,8 +254,8 @@ render_header('Status Selesai SubSLS');
           <td><?= e($r['kode_subsls']) ?></td>
           <td><?= e($r['kdsls'] . ' - ' . $r['nmsls']) ?></td>
           <td><?= e($r['kdsubsls'] . ' - ' . $r['nmsubsls']) ?></td>
-          <td><?= e($r['pengawas_email']) ?></td>
-          <td><?= e($r['pencacah_email']) ?></td>
+          <td><?= e(petugas_label($r['pengawas_email'], $r['pengawas_name'] ?? '')) ?></td>
+          <td><?= e(petugas_label($r['pencacah_email'], $r['pencacah_name'] ?? '')) ?></td>
           <td>
             <form method="post" id="<?= e($formId) ?>" class="d-none">
               <input type="hidden" name="subsls_id" value="<?= e($r['subsls_id']) ?>">
