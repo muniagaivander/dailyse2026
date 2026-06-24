@@ -71,6 +71,11 @@ function rekap_petugas_rows(array $user, array $filters): array
     $stmt = db()->prepare("SELECT
             ms.$emailField email,
             u.name petugas_name,
+            MIN(k.id) sort_kab_id,
+            GROUP_CONCAT(DISTINCT CASE
+                WHEN up.name IS NULL OR up.name='' OR LOWER(up.name)=LOWER(ms.pengawas_email) THEN ms.pengawas_email
+                ELSE up.name
+            END ORDER BY up.name, ms.pengawas_email SEPARATOR ', ') pml_names,
             GROUP_CONCAT(DISTINCT CONCAT(k.id,' - ',k.nmkab) ORDER BY k.id SEPARATOR ', ') kabupaten,
             GROUP_CONCAT(DISTINCT d.nmdesa ORDER BY kc.kdkec, d.kddesa SEPARATOR ', ') wilayah_kerja,
             COALESCE(SUM(ss.target),0) target,
@@ -86,10 +91,11 @@ function rekap_petugas_rows(array $user, array $filters): array
         JOIN master_kec kc ON kc.id=d.kec_id
         JOIN master_kab k ON k.id=kc.kab_id
         LEFT JOIN users u ON u.email=ms.$emailField
+        LEFT JOIN users up ON up.email=ms.pengawas_email
         LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
         $where
         GROUP BY ms.$emailField, u.name
-        ORDER BY u.name, ms.$emailField");
+        ORDER BY sort_kab_id, u.name, ms.$emailField");
     $stmt->execute($params);
     return $stmt->fetchAll();
 }
@@ -183,7 +189,10 @@ $rows = rekap_petugas_rows($user, $filters);
 
 if (($_GET['action'] ?? '') === 'export') {
     $format = ($_GET['format'] ?? 'csv') === 'xlsx' ? 'xlsx' : 'csv';
-    $headers = ['Nama Petugas', 'Email Petugas', 'Kabupaten', 'Wilayah Kerja', 'Target'];
+    $headers = ['Nama Petugas', 'Email Petugas', 'Kabupaten', 'Wilayah Kerja Desa', 'Target'];
+    if ($filters['petugas_type'] === 'pcl') {
+        array_splice($headers, 2, 0, ['Nama PML']);
+    }
     foreach ($fields as $label) {
         $headers[] = $label;
     }
@@ -196,6 +205,9 @@ if (($_GET['action'] ?? '') === 'export') {
             $r['wilayah_kerja'] ?: '-',
             (string)(int)$r['target'],
         ];
+        if ($filters['petugas_type'] === 'pcl') {
+            array_splice($row, 2, 0, [$r['pml_names'] ?: '-']);
+        }
         foreach (array_keys($fields) as $field) {
             $row[] = (string)(int)$r[$field];
         }
@@ -267,8 +279,9 @@ render_header('Rekap Petugas');
         <tr>
           <th>Nama Petugas</th>
           <th>Email Petugas</th>
+          <?php if ($filters['petugas_type'] === 'pcl'): ?><th>Nama PML</th><?php endif; ?>
           <th>Kabupaten</th>
-          <th>Wilayah Kerja</th>
+          <th>Wilayah Kerja Desa</th>
           <th class="text-right">Target</th>
           <?php foreach ($fields as $label): ?><th class="text-right"><?= e($label) ?></th><?php endforeach; ?>
         </tr>
@@ -278,6 +291,7 @@ render_header('Rekap Petugas');
           <tr>
             <td><?= e(trim((string)($r['petugas_name'] ?? '')) ?: '-') ?></td>
             <td><?= e($r['email']) ?></td>
+            <?php if ($filters['petugas_type'] === 'pcl'): ?><td><?= e($r['pml_names'] ?: '-') ?></td><?php endif; ?>
             <td><?= e($r['kabupaten'] ?: '-') ?></td>
             <td><?= e($r['wilayah_kerja'] ?: '-') ?></td>
             <td class="text-right"><?= number_format((int)$r['target'], 0, ',', '.') ?></td>
@@ -285,7 +299,7 @@ render_header('Rekap Petugas');
           </tr>
         <?php endforeach; ?>
         <?php if (!$rows): ?>
-          <tr><td colspan="<?= 5 + count($fields) ?>" class="text-center text-muted">Tidak ada data petugas pada filter ini.</td></tr>
+          <tr><td colspan="<?= 5 + count($fields) + ($filters['petugas_type'] === 'pcl' ? 1 : 0) ?>" class="text-center text-muted">Tidak ada data petugas pada filter ini.</td></tr>
         <?php endif; ?>
       </tbody>
     </table>
