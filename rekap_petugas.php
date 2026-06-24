@@ -78,6 +78,7 @@ function rekap_petugas_rows(array $user, array $filters): array
             END ORDER BY up.name, ms.pengawas_email SEPARATOR ', ') pml_names,
             GROUP_CONCAT(DISTINCT CONCAT(k.id,' - ',k.nmkab) ORDER BY k.id SEPARATOR ', ') kabupaten,
             GROUP_CONCAT(DISTINCT d.nmdesa ORDER BY kc.kdkec, d.kddesa SEPARATOR ', ') wilayah_kerja,
+            COUNT(ms.id) subsls_total,
             COALESCE(SUM(ss.target),0) target,
             COALESCE(SUM(ss.open_count),0) open_count,
             COALESCE(SUM(ss.draft_count),0) draft_count,
@@ -189,7 +190,7 @@ $rows = rekap_petugas_rows($user, $filters);
 
 if (($_GET['action'] ?? '') === 'export') {
     $format = ($_GET['format'] ?? 'csv') === 'xlsx' ? 'xlsx' : 'csv';
-    $headers = ['Nama Petugas', 'Email Petugas', 'Kabupaten', 'Wilayah Kerja Desa', 'Target'];
+    $headers = ['Nama Petugas', 'Email Petugas', 'Kabupaten', 'Wilayah Kerja Desa', 'Jumlah SubSLS', 'Target'];
     if ($filters['petugas_type'] === 'pcl') {
         array_splice($headers, 2, 0, ['Nama PML']);
     }
@@ -203,6 +204,7 @@ if (($_GET['action'] ?? '') === 'export') {
             $r['email'],
             $r['kabupaten'] ?: '-',
             $r['wilayah_kerja'] ?: '-',
+            (string)(int)$r['subsls_total'],
             (string)(int)$r['target'],
         ];
         if ($filters['petugas_type'] === 'pcl') {
@@ -282,6 +284,7 @@ render_header('Rekap Petugas');
           <?php if ($filters['petugas_type'] === 'pcl'): ?><th>Nama PML</th><?php endif; ?>
           <th>Kabupaten</th>
           <th>Wilayah Kerja Desa</th>
+          <th class="text-right">Jumlah SubSLS</th>
           <th class="text-right">Target</th>
           <?php foreach ($fields as $label): ?><th class="text-right"><?= e($label) ?></th><?php endforeach; ?>
         </tr>
@@ -294,12 +297,13 @@ render_header('Rekap Petugas');
             <?php if ($filters['petugas_type'] === 'pcl'): ?><td><?= e($r['pml_names'] ?: '-') ?></td><?php endif; ?>
             <td><?= e($r['kabupaten'] ?: '-') ?></td>
             <td><?= e($r['wilayah_kerja'] ?: '-') ?></td>
+            <td class="text-right"><?= number_format((int)$r['subsls_total'], 0, ',', '.') ?></td>
             <td class="text-right"><?= number_format((int)$r['target'], 0, ',', '.') ?></td>
             <?php foreach (array_keys($fields) as $field): ?><td class="text-right"><?= number_format((int)$r[$field], 0, ',', '.') ?></td><?php endforeach; ?>
           </tr>
         <?php endforeach; ?>
         <?php if (!$rows): ?>
-          <tr><td colspan="<?= 5 + count($fields) + ($filters['petugas_type'] === 'pcl' ? 1 : 0) ?>" class="text-center text-muted">Tidak ada data petugas pada filter ini.</td></tr>
+          <tr><td colspan="<?= 6 + count($fields) + ($filters['petugas_type'] === 'pcl' ? 1 : 0) ?>" class="text-center text-muted">Tidak ada data petugas pada filter ini.</td></tr>
         <?php endif; ?>
       </tbody>
     </table>

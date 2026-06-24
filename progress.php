@@ -299,6 +299,24 @@ render_header('Progress ' . ucfirst($type));
     position: relative;
     width: 100%;
   }
+  .progress-section-title {
+    background: linear-gradient(90deg, #dbeafe 0%, rgba(239, 246, 255, .88) 100%);
+    border-left: 5px solid #3b82f6;
+    border-radius: 8px;
+    color: #1d4ed8;
+    font-weight: 800;
+    margin: 18px 0 12px;
+    padding: 10px 14px;
+  }
+  .progress-stat-card {
+    background: linear-gradient(180deg, #fff3df 0%, #fffaf2 64%) !important;
+    border: 1px solid #f0b35c;
+    border-left: 5px solid #f59e0b;
+    border-radius: 8px;
+    box-shadow: 0 8px 18px rgba(180, 83, 9, .12);
+  }
+  .progress-stat-card h3 { color: #111827; font-weight: 800; }
+  .progress-stat-card p { color: #92400e; font-weight: 700; }
   @media (max-width: 767.98px) {
     .progress-chart-wrap { height: 320px; }
   }
@@ -373,14 +391,35 @@ render_header('Progress ' . ucfirst($type));
 <?php endif; ?>
 
 <?php if ($showProgress): ?>
-<div class="row"><?php foreach (array_merge(['target'=>'Target'], status_fields()) as $field=>$label): ?><div class="col-md"><div class="small-box bg-light"><div class="inner"><h3><?= number_format((int)$cards[$field],0,',','.') ?></h3><p><?= e($label) ?></p></div></div></div><?php endforeach; ?></div>
-<div class="card"><div class="card-body"><div class="progress-chart-wrap"><canvas id="lineChart"></canvas></div></div></div>
+<div class="row"><?php foreach (array_merge(['target'=>'Target'], status_fields()) as $field=>$label): ?><div class="col-md"><div class="small-box progress-stat-card"><div class="inner"><h3><?= number_format((int)$cards[$field],0,',','.') ?></h3><p><?= e($label) ?></p></div></div></div><?php endforeach; ?></div>
+<div class="progress-section-title">Progress by Pendataan</div>
+<div class="card"><div class="card-body"><div class="progress-chart-wrap"><canvas id="pendataanChart"></canvas></div></div></div>
+<div class="progress-section-title">Progress by Status</div>
+<div class="card"><div class="card-body"><div class="progress-chart-wrap"><canvas id="statusChart"></canvas></div></div></div>
 <script>
 const rows = <?= json_encode($trend) ?>;
 const fields = <?= json_encode(array_keys(status_fields())) ?>;
 const labels = <?= json_encode(array_values(status_fields())) ?>;
 const colors = ['#2563eb','#f59e0b','#16a34a','#dc2626','#7c3aed','#0f766e'];
-new Chart(document.getElementById('lineChart'), {
+function chartYMax(value) {
+  if (value <= 10) return 10;
+  if (value <= 25) return 25;
+  if (value <= 50) return 50;
+  if (value <= 75) return 75;
+  return 100;
+}
+const pendataanValues = rows.map(r => {
+  const target = Number(r.target || 0);
+  const count = Number(r.submitted_by_pencacah || 0) + Number(r.rejected_by_pengawas || 0) + Number(r.pending_count || 0) + Number(r.approved_by_pengawas || 0);
+  return target ? Math.round(count / target * 10000) / 100 : 0;
+});
+const maxPendataan = Math.max(0, ...pendataanValues);
+new Chart(document.getElementById('pendataanChart'), {
+  type:'line',
+  data:{ labels: rows.map(r=>r.tanggal), datasets:[{ label:'Progress Pendataan', data:pendataanValues, borderColor:'#2563eb', backgroundColor:'#2563eb', tension:.2 }] },
+  options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{min:0,max:chartYMax(maxPendataan),ticks:{callback:v=>v+'%'}} } }
+});
+new Chart(document.getElementById('statusChart'), {
   type:'line',
   data:{ labels: rows.map(r=>r.tanggal), datasets: fields.map((f,i)=>({ label:labels[i], data:rows.map(r=>Number(r.target)?Math.round(Number(r[f])/Number(r.target)*10000)/100:0), borderColor:colors[i], backgroundColor:colors[i], tension:.2 })) },
   options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{min:0,max:100,ticks:{callback:v=>v+'%'}} } }

@@ -196,6 +196,15 @@ render_header('Progress By Daerah');
     position: relative;
     width: 100%;
   }
+  .progress-stat-card {
+    background: linear-gradient(180deg, #fff3df 0%, #fffaf2 64%) !important;
+    border: 1px solid #f0b35c;
+    border-left: 5px solid #f59e0b;
+    border-radius: 8px;
+    box-shadow: 0 8px 18px rgba(180, 83, 9, .12);
+  }
+  .progress-stat-card h3 { color: #111827; font-weight: 800; }
+  .progress-stat-card p { color: #92400e; font-weight: 700; }
   @media (max-width: 767.98px) {
     .progress-chart-wrap { height: 320px; }
   }
@@ -245,7 +254,7 @@ render_header('Progress By Daerah');
 <?php if (!$showProgress): ?>
   <div class="alert alert-info">Atur filter wilayah, lalu klik tombol Filter untuk menampilkan progress.</div>
 <?php else: ?>
-  <div class="row"><?php foreach (array_merge(['target'=>'Target'], status_fields()) as $field=>$label): ?><div class="col-md"><div class="small-box bg-light"><div class="inner"><h3><?= number_format((int)$cards[$field],0,',','.') ?></h3><p><?= e($label) ?></p></div></div></div><?php endforeach; ?></div>
+  <div class="row"><?php foreach (array_merge(['target'=>'Target'], status_fields()) as $field=>$label): ?><div class="col-md"><div class="small-box progress-stat-card"><div class="inner"><h3><?= number_format((int)$cards[$field],0,',','.') ?></h3><p><?= e($label) ?></p></div></div></div><?php endforeach; ?></div>
   <div class="card">
     <div class="card-header"><strong>Progress Pendataan per <?= e($groupLabel) ?></strong></div>
     <div class="card-body"><div class="progress-chart-wrap"><canvas id="lineChart"></canvas></div></div>

@@ -141,6 +141,10 @@ function status_view_card_rows(array $user, array $filters, string $type): array
         $sql = "SELECT ms.pengawas_email email, up.name petugas_name,
                     COUNT(DISTINCT NULLIF(ms.pencacah_email,'')) pcl_count,
                     COUNT(ms.id) subsls_count,
+                    GROUP_CONCAT(DISTINCT CASE
+                        WHEN uc.name IS NULL OR uc.name='' OR LOWER(uc.name)=LOWER(ms.pencacah_email) THEN ms.pencacah_email
+                        ELSE CONCAT(uc.name, ' ', ms.pencacah_email)
+                    END ORDER BY uc.name, ms.pencacah_email SEPARATOR ' ') pencacah_names,
                     GROUP_CONCAT(DISTINCT d.nmdesa ORDER BY kc.kdkec, d.kddesa SEPARATOR ', ') desa_names,
                     COALESCE(SUM(ss.target),0) target,
                     COALESCE(SUM(ss.open_count),0) open_count,
@@ -155,6 +159,7 @@ function status_view_card_rows(array $user, array $filters, string $type): array
                 JOIN master_kec kc ON kc.id=d.kec_id
                 JOIN master_kab k ON k.id=kc.kab_id
                 LEFT JOIN users up ON up.email=ms.pengawas_email
+                LEFT JOIN users uc ON uc.email=ms.pencacah_email
                 LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
                 $where
                 GROUP BY ms.pengawas_email, up.name
@@ -537,7 +542,7 @@ render_header('Status Terupdate');
     <div class="status-view-grid mb-4" id="pmlCardGrid">
       <?php foreach ($pmlCards as $card): ?>
         <?php $progressCount = status_view_progress_count($card); $progressPct = status_view_progress_pct($card); ?>
-        <div class="status-summary-card" data-card-search="<?= e(strtolower(status_view_card_title($card, 'pml'))) ?>">
+        <div class="status-summary-card" data-card-pml-search="<?= e(strtolower(status_view_card_title($card, 'pml'))) ?>" data-card-pcl-search="<?= e(strtolower($card['pencacah_names'] ?? '')) ?>">
           <div class="card-body">
             <div class="status-person-title"><?= e(status_view_card_title($card, 'pml')) ?></div>
             <div class="status-person-meta"><?= number_format((int)$card['pcl_count'], 0, ',', '.') ?> PCL - <?= number_format((int)$card['subsls_count'], 0, ',', '.') ?> SubSLS</div>
@@ -573,7 +578,7 @@ render_header('Status Terupdate');
     <div class="status-view-grid" id="pclCardGrid">
       <?php foreach ($pclCards as $card): ?>
         <?php $progressCount = status_view_progress_count($card); $progressPct = status_view_progress_pct($card); ?>
-        <div class="status-summary-card" data-card-search="<?= e(strtolower(petugas_label($card['email'], $card['petugas_name'] ?? ''))) ?>">
+        <div class="status-summary-card" data-card-pml-search="<?= e(strtolower(status_view_card_subtitle($card))) ?>" data-card-pcl-search="<?= e(strtolower(petugas_label($card['email'], $card['petugas_name'] ?? ''))) ?>">
           <div class="card-body">
             <div class="status-person-title"><?= e(petugas_label($card['email'], $card['petugas_name'] ?? '')) ?></div>
             <div class="status-person-supervisor"><?= e(status_view_card_subtitle($card)) ?></div>
@@ -690,19 +695,20 @@ if (viewMode) {
     this.form.submit();
   });
 }
-function bindCardSearch(inputId, gridId) {
-  const input = document.getElementById(inputId);
-  const grid = document.getElementById(gridId);
-  if (!input || !grid) return;
-  input.addEventListener('input', function () {
-    const keyword = this.value.trim().toLowerCase();
-    grid.querySelectorAll('.status-summary-card').forEach(function (card) {
-      const haystack = card.dataset.cardSearch || '';
-      card.style.display = haystack.includes(keyword) ? '' : 'none';
-    });
+function applyLinkedCardSearch() {
+  const pmlKeyword = (document.getElementById('pmlSearch')?.value || '').trim().toLowerCase();
+  const pclKeyword = (document.getElementById('pclSearch')?.value || '').trim().toLowerCase();
+  document.querySelectorAll('#pmlCardGrid .status-summary-card, #pclCardGrid .status-summary-card').forEach(function (card) {
+    const pmlHaystack = card.dataset.cardPmlSearch || '';
+    const pclHaystack = card.dataset.cardPclSearch || '';
+    const matchPml = !pmlKeyword || pmlHaystack.includes(pmlKeyword);
+    const matchPcl = !pclKeyword || pclHaystack.includes(pclKeyword);
+    card.style.display = (matchPml && matchPcl) ? '' : 'none';
   });
 }
-bindCardSearch('pmlSearch', 'pmlCardGrid');
-bindCardSearch('pclSearch', 'pclCardGrid');
+['pmlSearch', 'pclSearch'].forEach(function (inputId) {
+  const input = document.getElementById(inputId);
+  if (input) input.addEventListener('input', applyLinkedCardSearch);
+});
 </script>
 <?php render_footer(); ?>
