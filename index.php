@@ -658,6 +658,26 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
   color: #2563eb;
   font-weight: 700;
 }
+.dashboard-stat-card {
+  background: linear-gradient(180deg, #fff3df 0%, #fffaf2 64%) !important;
+  border: 1px solid #f0b35c;
+  border-left: 5px solid #f59e0b;
+  border-radius: 8px;
+  box-shadow: 0 8px 18px rgba(180, 83, 9, .12);
+  color: #374151;
+}
+.dashboard-stat-card .inner {
+  padding: 14px;
+}
+.dashboard-stat-card h4 {
+  color: #111827;
+  font-weight: 800;
+}
+.dashboard-stat-card p {
+  color: #92400e;
+  font-weight: 700;
+  margin-bottom: 0;
+}
 .best-progress {
   color: #16a34a;
   font-weight: 800;
@@ -775,7 +795,7 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
 <div class="row">
   <?php foreach ($dashboardCards as $card): ?>
     <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6">
-      <div class="small-box bg-light">
+      <div class="small-box dashboard-stat-card">
         <div class="inner">
           <h4 class="mb-1"><?= $card['value'] ?></h4>
           <p><?= e($card['label']) ?></p>
