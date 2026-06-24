@@ -24,24 +24,6 @@ function render_header(string $title): void {
     .content-wrapper { min-height: 100vh; }
     .table-sm input { min-width: 82px; }
     .brand-link { font-weight: 700; }
-    .content .card:not(.status-summary-card) {
-      border: 1px solid #f0b35c;
-      border-left: 5px solid #f59e0b;
-      border-radius: 8px;
-      box-shadow: 0 8px 18px rgba(180, 83, 9, .10);
-    }
-    .content .card:not(.status-summary-card) > .card-header {
-      background: linear-gradient(90deg, #fff3df 0%, #fffaf2 100%);
-      border-bottom-color: rgba(217, 119, 6, .22);
-      color: #92400e;
-      font-weight: 700;
-    }
-    .content .card:not(.status-summary-card) > .card-body {
-      background: linear-gradient(180deg, #fffaf2 0%, #fff 80%);
-    }
-    .content form.card.card-body {
-      background: linear-gradient(180deg, #fffaf2 0%, #fff 80%);
-    }
     .progress-overlay {
       align-items: center;
       background: rgba(15, 23, 42, .55);
