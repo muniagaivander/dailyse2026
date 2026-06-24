@@ -6,6 +6,7 @@ $filters = [
     'kec_id' => $_GET['kec_id'] ?? '',
     'desa_id' => $_GET['desa_id'] ?? '',
     'view_mode' => ($_GET['view_mode'] ?? 'card') === 'table' ? 'table' : 'card',
+    'card_sort' => ($_GET['card_sort'] ?? 'desc') === 'asc' ? 'asc' : 'desc',
 ];
 if (in_array($user['role'], ['admin_kab', 'viewer_kab'], true)) {
     $filters['kab_id'] = $user['kab_id'];
@@ -134,6 +135,7 @@ function status_view_card_where(string $sqlWhere, string $emailField): string
 function status_view_card_rows(array $user, array $filters, string $type): array
 {
     [$sqlWhere, $params] = status_view_build_filter($user, $filters);
+    $sortDirection = ($filters['card_sort'] ?? 'desc') === 'asc' ? 'ASC' : 'DESC';
     if ($type === 'pml') {
         $where = status_view_card_where($sqlWhere, 'pengawas_email');
         $sql = "SELECT ms.pengawas_email email, up.name petugas_name,
@@ -158,7 +160,7 @@ function status_view_card_rows(array $user, array $filters, string $type): array
                 GROUP BY ms.pengawas_email, up.name
                 ORDER BY CASE WHEN COALESCE(SUM(ss.target),0) > 0
                     THEN ((COALESCE(SUM(ss.submitted_by_pencacah),0) + COALESCE(SUM(ss.rejected_by_pengawas),0) + COALESCE(SUM(ss.pending_count),0) + COALESCE(SUM(ss.approved_by_pengawas),0)) / COALESCE(SUM(ss.target),0))
-                    ELSE 0 END DESC, up.name, ms.pengawas_email";
+                    ELSE 0 END $sortDirection, up.name, ms.pengawas_email";
     } else {
         $where = status_view_card_where($sqlWhere, 'pencacah_email');
         $sql = "SELECT ms.pencacah_email email, uc.name petugas_name,
@@ -185,7 +187,7 @@ function status_view_card_rows(array $user, array $filters, string $type): array
                 GROUP BY ms.pencacah_email, uc.name, ms.pengawas_email, up.name
                 ORDER BY CASE WHEN COALESCE(SUM(ss.target),0) > 0
                     THEN ((COALESCE(SUM(ss.submitted_by_pencacah),0) + COALESCE(SUM(ss.rejected_by_pengawas),0) + COALESCE(SUM(ss.pending_count),0) + COALESCE(SUM(ss.approved_by_pengawas),0)) / COALESCE(SUM(ss.target),0))
-                    ELSE 0 END DESC, uc.name, ms.pencacah_email";
+                    ELSE 0 END $sortDirection, uc.name, ms.pencacah_email";
     }
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
@@ -204,6 +206,18 @@ function status_view_card_title(array $row, string $type): string
 function status_view_card_subtitle(array $row): string
 {
     return '(' . petugas_label($row['pengawas_email'] ?? '', $row['pengawas_name'] ?? '') . ')';
+}
+
+function status_view_card_section_sort_url(array $filters, string $sort): string
+{
+    return '?' . http_build_query([
+        'filter' => 1,
+        'kab_id' => $filters['kab_id'],
+        'kec_id' => $filters['kec_id'],
+        'desa_id' => $filters['desa_id'],
+        'view_mode' => 'card',
+        'card_sort' => $sort,
+    ]);
 }
 
 function status_view_xlsx_col(int $index): string
@@ -414,9 +428,46 @@ render_header('Status Terupdate');
   color: #b45309;
   font-weight: 700;
 }
+.status-card-section {
+  align-items: center;
+  background: linear-gradient(90deg, #fff3df 0%, rgba(255, 250, 242, .82) 100%);
+  border-left: 5px solid #f59e0b;
+  border-radius: 8px;
+  box-shadow: inset 0 -1px 0 rgba(217, 119, 6, .16);
+  display: flex;
+  justify-content: space-between;
+  margin: 18px 0 12px;
+  padding: 10px 14px;
+}
+.status-card-section h5 {
+  color: #92400e;
+  font-weight: 800;
+  margin: 0;
+}
+.status-sort-control {
+  align-items: center;
+  color: #7c2d12;
+  display: inline-flex;
+  font-size: .9rem;
+  gap: 6px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.status-sort-control:hover {
+  color: #b45309;
+  text-decoration: none;
+}
+@media (max-width: 575.98px) {
+  .status-card-section {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+}
 </style>
 <?php if ($error): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
 <form class="card card-body mb-3" method="get">
+  <input type="hidden" name="card_sort" value="<?= e($filters['card_sort']) ?>">
   <div class="form-row align-items-end">
     <?php if (in_array($user['role'], ['superadmin', 'viewer_prov'], true)): ?>
       <div class="form-group col-12 col-md-3">
@@ -460,8 +511,16 @@ render_header('Status Terupdate');
   <div class="alert alert-warning">Data Terlalu Banyak, silahkan Table View saja.</div>
 <?php endif; ?>
 <?php if ($canShowStatus && $filters['view_mode'] === 'card' && !$isAllKabCardTooLarge): ?>
-  <div class="d-flex justify-content-between align-items-center mb-2">
-    <h5 class="mb-0">Card View PML</h5>
+  <?php
+    $nextSort = $filters['card_sort'] === 'asc' ? 'desc' : 'asc';
+    $sortIcon = $filters['card_sort'] === 'asc' ? 'fa-arrow-up-short-wide' : 'fa-arrow-down-wide-short';
+    $sortLabel = $filters['card_sort'] === 'asc' ? 'Ascending' : 'Descending';
+  ?>
+  <div class="status-card-section">
+    <h5>Card PML</h5>
+    <a class="status-sort-control" href="<?= e(status_view_card_section_sort_url($filters, $nextSort)) ?>">
+      <span>Progress Pendataan: <?= e($sortLabel) ?></span><i class="fas <?= e($sortIcon) ?>"></i>
+    </a>
   </div>
   <?php if ($pmlCards): ?>
     <div class="status-view-grid mb-4">
@@ -492,7 +551,12 @@ render_header('Status Terupdate');
     <div class="alert alert-info">Tidak ada data PML pada filter ini.</div>
   <?php endif; ?>
 
-  <h5 class="mb-2">Card PCL</h5>
+  <div class="status-card-section">
+    <h5>Card PCL</h5>
+    <a class="status-sort-control" href="<?= e(status_view_card_section_sort_url($filters, $nextSort)) ?>">
+      <span>Progress Pendataan: <?= e($sortLabel) ?></span><i class="fas <?= e($sortIcon) ?>"></i>
+    </a>
+  </div>
   <?php if ($pclCards): ?>
     <div class="status-view-grid">
       <?php foreach ($pclCards as $card): ?>
