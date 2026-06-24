@@ -144,6 +144,7 @@ function render_header(string $title): void {
             <?php endif; ?>
             <?php if (in_array($user['role'], ['admin_kab','superadmin','viewer_prov','viewer_kab'], true)): ?>
               <li class="nav-item"><a class="nav-link<?= $isActive(['status_view.php']) ?>" href="status_view.php"><i class="nav-icon fas fa-table-list"></i><p>Status Terupdate</p></a></li>
+              <li class="nav-item"><a class="nav-link<?= $isActive(['rekap_petugas.php']) ?>" href="rekap_petugas.php"><i class="nav-icon fas fa-clipboard-list"></i><p>Rekap Petugas</p></a></li>
             <?php endif; ?>
             <?php if (in_array($user['role'], ['admin_kab','superadmin','pengawas'], true)): ?>
               <li class="nav-item"><a class="nav-link<?= $isActive(['status_selesai.php']) ?>" href="status_selesai.php"><i class="nav-icon fas fa-circle-check"></i><p>Status Selesai SubSLS</p></a></li>
