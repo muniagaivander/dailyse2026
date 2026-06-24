@@ -187,6 +187,12 @@ $fields = [
     'approved_by_pengawas' => 'Approve',
 ];
 $rows = rekap_petugas_rows($user, $filters);
+$page = max(1, (int)($_GET['page'] ?? 1));
+$perPage = 100;
+$totalRows = count($rows);
+$totalPages = max(1, (int)ceil($totalRows / $perPage));
+$page = min($page, $totalPages);
+$displayRows = array_slice($rows, ($page - 1) * $perPage, $perPage);
 
 if (($_GET['action'] ?? '') === 'export') {
     $format = ($_GET['format'] ?? 'csv') === 'xlsx' ? 'xlsx' : 'csv';
@@ -260,7 +266,7 @@ render_header('Rekap Petugas');
 
 <div class="card">
   <div class="card-header py-2 d-flex justify-content-between align-items-center">
-    <strong>Rekap <?= $filters['petugas_type'] === 'pcl' ? 'PCL' : 'PML' ?></strong>
+    <strong>Rekap <?= $filters['petugas_type'] === 'pcl' ? 'PCL' : 'PML' ?> (<?= number_format($totalRows, 0, ',', '.') ?> petugas)</strong>
     <div>
       <?php
         $exportQuery = [
@@ -290,7 +296,7 @@ render_header('Rekap Petugas');
         </tr>
       </thead>
       <tbody>
-        <?php foreach ($rows as $r): ?>
+        <?php foreach ($displayRows as $r): ?>
           <tr>
             <td><?= e(trim((string)($r['petugas_name'] ?? '')) ?: '-') ?></td>
             <td><?= e($r['email']) ?></td>
@@ -302,13 +308,34 @@ render_header('Rekap Petugas');
             <?php foreach (array_keys($fields) as $field): ?><td class="text-right"><?= number_format((int)$r[$field], 0, ',', '.') ?></td><?php endforeach; ?>
           </tr>
         <?php endforeach; ?>
-        <?php if (!$rows): ?>
+        <?php if (!$displayRows): ?>
           <tr><td colspan="<?= 6 + count($fields) + ($filters['petugas_type'] === 'pcl' ? 1 : 0) ?>" class="text-center text-muted">Tidak ada data petugas pada filter ini.</td></tr>
         <?php endif; ?>
       </tbody>
     </table>
   </div>
 </div>
+<?php if ($totalPages > 1): ?>
+  <nav class="mt-3">
+    <ul class="pagination pagination-sm">
+      <?php
+        $baseQuery = [
+            'petugas_type' => $filters['petugas_type'],
+            'kab_id' => $filters['kab_id'],
+            'kec_id' => $filters['kec_id'],
+            'desa_id' => $filters['desa_id'],
+        ];
+        $start = max(1, $page - 2);
+        $end = min($totalPages, $page + 2);
+      ?>
+      <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>"><a class="page-link" href="?<?= e(http_build_query($baseQuery + ['page' => max(1, $page - 1)])) ?>">Prev</a></li>
+      <?php for ($p = $start; $p <= $end; $p++): ?>
+        <li class="page-item <?= $p === $page ? 'active' : '' ?>"><a class="page-link" href="?<?= e(http_build_query($baseQuery + ['page' => $p])) ?>"><?= $p ?></a></li>
+      <?php endfor; ?>
+      <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>"><a class="page-link" href="?<?= e(http_build_query($baseQuery + ['page' => min($totalPages, $page + 1)])) ?>">Next</a></li>
+    </ul>
+  </nav>
+<?php endif; ?>
 
 <script>
 const petugasType = document.getElementById('petugas_type');
