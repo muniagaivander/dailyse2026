@@ -430,23 +430,24 @@ render_header('Status Terupdate');
 }
 .status-card-section {
   align-items: center;
-  background: linear-gradient(90deg, #fff3df 0%, rgba(255, 250, 242, .82) 100%);
-  border-left: 5px solid #f59e0b;
+  background: linear-gradient(90deg, #dbeafe 0%, rgba(239, 246, 255, .88) 100%);
+  border-left: 5px solid #3b82f6;
   border-radius: 8px;
-  box-shadow: inset 0 -1px 0 rgba(217, 119, 6, .16);
+  box-shadow: inset 0 -1px 0 rgba(37, 99, 235, .16);
   display: flex;
-  justify-content: space-between;
+  gap: 14px;
+  justify-content: flex-start;
   margin: 18px 0 12px;
   padding: 10px 14px;
 }
 .status-card-section h5 {
-  color: #92400e;
+  color: #1d4ed8;
   font-weight: 800;
   margin: 0;
 }
 .status-sort-control {
   align-items: center;
-  color: #7c2d12;
+  color: #1e40af;
   display: inline-flex;
   font-size: .9rem;
   gap: 6px;
@@ -454,14 +455,23 @@ render_header('Status Terupdate');
   white-space: nowrap;
 }
 .status-sort-control:hover {
-  color: #b45309;
+  color: #2563eb;
   text-decoration: none;
+}
+.status-section-search {
+  max-width: 280px;
+  min-width: 220px;
 }
 @media (max-width: 575.98px) {
   .status-card-section {
     align-items: flex-start;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
+  }
+  .status-section-search {
+    max-width: 100%;
+    min-width: 0;
+    width: 100%;
   }
 }
 </style>
@@ -519,14 +529,15 @@ render_header('Status Terupdate');
   <div class="status-card-section">
     <h5>Card PML</h5>
     <a class="status-sort-control" href="<?= e(status_view_card_section_sort_url($filters, $nextSort)) ?>">
-      <span>Progress Pendataan: <?= e($sortLabel) ?></span><i class="fas <?= e($sortIcon) ?>"></i>
+      <span>Sort by Progress Pendataan: <?= e($sortLabel) ?></span><i class="fas <?= e($sortIcon) ?>"></i>
     </a>
+    <input class="form-control form-control-sm status-section-search" id="pmlSearch" type="search" placeholder="Cari nama PML">
   </div>
   <?php if ($pmlCards): ?>
-    <div class="status-view-grid mb-4">
+    <div class="status-view-grid mb-4" id="pmlCardGrid">
       <?php foreach ($pmlCards as $card): ?>
         <?php $progressCount = status_view_progress_count($card); $progressPct = status_view_progress_pct($card); ?>
-        <div class="status-summary-card">
+        <div class="status-summary-card" data-card-search="<?= e(strtolower(status_view_card_title($card, 'pml'))) ?>">
           <div class="card-body">
             <div class="status-person-title"><?= e(status_view_card_title($card, 'pml')) ?></div>
             <div class="status-person-meta"><?= number_format((int)$card['pcl_count'], 0, ',', '.') ?> PCL - <?= number_format((int)$card['subsls_count'], 0, ',', '.') ?> SubSLS</div>
@@ -554,14 +565,15 @@ render_header('Status Terupdate');
   <div class="status-card-section">
     <h5>Card PCL</h5>
     <a class="status-sort-control" href="<?= e(status_view_card_section_sort_url($filters, $nextSort)) ?>">
-      <span>Progress Pendataan: <?= e($sortLabel) ?></span><i class="fas <?= e($sortIcon) ?>"></i>
+      <span>Sort by Progress Pendataan: <?= e($sortLabel) ?></span><i class="fas <?= e($sortIcon) ?>"></i>
     </a>
+    <input class="form-control form-control-sm status-section-search" id="pclSearch" type="search" placeholder="Cari nama PCL">
   </div>
   <?php if ($pclCards): ?>
-    <div class="status-view-grid">
+    <div class="status-view-grid" id="pclCardGrid">
       <?php foreach ($pclCards as $card): ?>
         <?php $progressCount = status_view_progress_count($card); $progressPct = status_view_progress_pct($card); ?>
-        <div class="status-summary-card">
+        <div class="status-summary-card" data-card-search="<?= e(strtolower(petugas_label($card['email'], $card['petugas_name'] ?? ''))) ?>">
           <div class="card-body">
             <div class="status-person-title"><?= e(petugas_label($card['email'], $card['petugas_name'] ?? '')) ?></div>
             <div class="status-person-supervisor"><?= e(status_view_card_subtitle($card)) ?></div>
@@ -678,5 +690,19 @@ if (viewMode) {
     this.form.submit();
   });
 }
+function bindCardSearch(inputId, gridId) {
+  const input = document.getElementById(inputId);
+  const grid = document.getElementById(gridId);
+  if (!input || !grid) return;
+  input.addEventListener('input', function () {
+    const keyword = this.value.trim().toLowerCase();
+    grid.querySelectorAll('.status-summary-card').forEach(function (card) {
+      const haystack = card.dataset.cardSearch || '';
+      card.style.display = haystack.includes(keyword) ? '' : 'none';
+    });
+  });
+}
+bindCardSearch('pmlSearch', 'pmlCardGrid');
+bindCardSearch('pclSearch', 'pclCardGrid');
 </script>
 <?php render_footer(); ?>

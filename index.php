@@ -278,6 +278,7 @@ function performance_rows(string $roleField, string $kabId, string $direction): 
     $whereKab = $kabId === '6400' ? '' : 'kc.kab_id=? AND';
     $stmt = db()->prepare("SELECT ms.$roleField email,
             u.name petugas_name,
+            GROUP_CONCAT(DISTINCT d.nmdesa ORDER BY kc.kdkec, d.kddesa SEPARATOR ', ') wilayah_kerja,
             COALESCE(SUM(ss.target),0) target,
             COALESCE(SUM(ss.submitted_by_pencacah),0) submitted_by_pencacah,
             COALESCE(SUM(ss.rejected_by_pengawas),0) rejected_by_pengawas,
@@ -508,12 +509,13 @@ if (($_GET['action'] ?? '') === 'export_attention' && $canSeePerformance) {
             $row['draft_count'],
             $row['pending_count'],
             $row['approved_by_pengawas'],
+            $row['wilayah_kerja'] ?? '',
             $row['subsls_total'],
             $row['selesai_count'],
         ];
     }
     dashboard_export_rows(
-        ['petugas', 'progress_pendataan_pct', 'selesai_subsls_pct', 'threshold_selesai_pct', 'batas_tanggal', 'target', 'submitted_by_pencacah', 'rejected_by_pengawas', 'draft_count', 'pending_count', 'approved_by_pengawas', 'subsls_total', 'selesai_count'],
+        ['petugas', 'progress_pendataan_pct', 'selesai_subsls_pct', 'threshold_selesai_pct', 'batas_tanggal', 'target', 'submitted_by_pencacah', 'rejected_by_pengawas', 'draft_count', 'pending_count', 'approved_by_pengawas', 'wilayah_kerja', 'subsls_total', 'selesai_count'],
         $exportRows,
         'perlu_perhatian_' . $type . '_' . $kabId . '_' . date('Ymd'),
         $format
@@ -998,10 +1000,10 @@ if (pengawas) {
           <h5>10 <?= e($labelRole) ?> Terbaik</h5>
           <div class="table-responsive mb-4">
             <table class="table table-sm table-bordered table-striped mb-0">
-              <thead><tr><th>Peringkat</th><th>Email</th><th>Progress Pendataan</th><th>Selesai SubSLS</th><th>Target</th><th>Total SubSLS</th></tr></thead>
+              <thead><tr><th>Peringkat</th><th>Email</th><th>Wilayah Kerja</th><th>Progress Pendataan</th><th>Selesai SubSLS</th><th>Target</th><th>Total SubSLS</th></tr></thead>
               <tbody>
               <?php foreach ($topRows as $rankIndex => $r): ?>
-                <tr><td><?= dashboard_rank_badge($rankIndex + 1) ?></td><td><?= e(petugas_label($r['email'], $r['petugas_name'] ?? '')) ?></td><td><?= number_format((float)$r['submit_approve_pct'],2,',','.') ?>%</td><td><?= number_format((float)$r['selesai_pct'],2,',','.') ?>%</td><td><?= number_format((int)$r['target'],0,',','.') ?></td><td><?= number_format((int)$r['subsls_total'],0,',','.') ?></td></tr>
+                <tr><td><?= dashboard_rank_badge($rankIndex + 1) ?></td><td><?= e(petugas_label($r['email'], $r['petugas_name'] ?? '')) ?></td><td><?= e($r['wilayah_kerja'] ?: '-') ?></td><td><?= number_format((float)$r['submit_approve_pct'],2,',','.') ?>%</td><td><?= number_format((float)$r['selesai_pct'],2,',','.') ?>%</td><td><?= number_format((int)$r['target'],0,',','.') ?></td><td><?= number_format((int)$r['subsls_total'],0,',','.') ?></td></tr>
               <?php endforeach; ?>
               </tbody>
             </table>
@@ -1018,13 +1020,13 @@ if (pengawas) {
           </div>
           <div class="table-responsive">
             <table class="table table-sm table-bordered table-striped mb-0 attention-table" data-page-size="25">
-              <thead><tr><th>Email</th><th>Progress Pendataan</th><th>Selesai SubSLS</th><th>Target</th><th>Total SubSLS</th></tr></thead>
+              <thead><tr><th>Email</th><th>Wilayah Kerja</th><th>Progress Pendataan</th><th>Selesai SubSLS</th><th>Target</th><th>Total SubSLS</th></tr></thead>
               <tbody>
               <?php foreach ($attentionRows as $r): ?>
-                <tr class="attention-row"><td><?= e(petugas_label($r['email'], $r['petugas_name'] ?? '')) ?></td><td><?= number_format((float)$r['submit_approve_pct'],2,',','.') ?>%</td><td><?= number_format((float)$r['selesai_pct'],2,',','.') ?>%</td><td><?= number_format((int)$r['target'],0,',','.') ?></td><td><?= number_format((int)$r['subsls_total'],0,',','.') ?></td></tr>
+                <tr class="attention-row"><td><?= e(petugas_label($r['email'], $r['petugas_name'] ?? '')) ?></td><td><?= e($r['wilayah_kerja'] ?: '-') ?></td><td><?= number_format((float)$r['submit_approve_pct'],2,',','.') ?>%</td><td><?= number_format((float)$r['selesai_pct'],2,',','.') ?>%</td><td><?= number_format((int)$r['target'],0,',','.') ?></td><td><?= number_format((int)$r['subsls_total'],0,',','.') ?></td></tr>
               <?php endforeach; ?>
               <?php if (!$attentionRows): ?>
-                <tr><td colspan="5" class="text-center text-muted">Tidak ada <?= e(strtolower($labelRole)) ?> yang masuk kategori perlu perhatian.</td></tr>
+                <tr><td colspan="6" class="text-center text-muted">Tidak ada <?= e(strtolower($labelRole)) ?> yang masuk kategori perlu perhatian.</td></tr>
               <?php endif; ?>
               </tbody>
             </table>

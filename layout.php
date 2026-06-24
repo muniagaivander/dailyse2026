@@ -126,51 +126,46 @@ function render_header(string $title): void {
         <ul class="nav nav-pills nav-sidebar flex-column">
           <?php if ($user): ?>
             <li class="nav-item"><a class="nav-link<?= $isActive(['index.php', '']) ?>" href="index.php"><i class="nav-icon fas fa-chart-column"></i><p>Dashboard</p></a></li>
-            <?php if ($user['role'] === 'pencacah'): ?>
-              <li class="nav-item"><a class="nav-link<?= $currentPage === 'progress.php' && ($_GET['type'] ?? '') === 'pencacah' ? ' active' : '' ?>" href="progress.php?type=pencacah"><i class="nav-icon fas fa-chart-line"></i><p>Progress Pencacah</p></a></li>
+            <?php if (in_array($user['role'], ['superadmin','admin_kab'], true)): ?>
+              <li class="nav-item"><a class="nav-link important-input-menu<?= $isActive(['input.php']) ?>" href="input.php"><i class="nav-icon fas fa-pen"></i><p>Input Harian</p></a></li>
             <?php endif; ?>
             <?php if (in_array($user['role'], ['superadmin','admin_kab','pengawas'], true)): ?>
-              <li class="nav-item"><a class="nav-link important-input-menu<?= $isActive(['input.php']) ?>" href="input.php"><i class="nav-icon fas fa-pen"></i><p>Input Harian</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['edit.php']) ?>" href="edit.php"><i class="nav-icon fas fa-edit"></i><p>Edit Harian</p></a></li>
-              <?php if ($user['role'] === 'pengawas'): ?>
-                <li class="nav-item"><a class="nav-link<?= $currentPage === 'progress.php' && ($_GET['type'] ?? '') === 'pencacah' ? ' active' : '' ?>" href="progress.php?type=pencacah"><i class="nav-icon fas fa-users"></i><p>Progress Pencacah</p></a></li>
-              <?php endif; ?>
-            <?php endif; ?>
-            <?php if (in_array($user['role'], ['pengawas','pencacah'], true)): ?>
-              <li class="nav-item"><a class="nav-link<?= $isActive(['subsls_data.php']) ?>" href="subsls_data.php"><i class="nav-icon fas fa-table"></i><p>Data SubSLS</p></a></li>
-            <?php endif; ?>
-            <?php if ($user['role'] === 'pengawas'): ?>
-              <li class="nav-item"><a class="nav-link<?= $isActive(['status_selesai.php']) ?>" href="status_selesai.php"><i class="nav-icon fas fa-circle-check"></i><p>Status Selesai SubSLS</p></a></li>
             <?php endif; ?>
             <?php if (in_array($user['role'], ['admin_kab','superadmin','viewer_prov','viewer_kab'], true)): ?>
               <li class="nav-item"><a class="nav-link<?= $isActive(['progress_area.php']) ?>" href="progress_area.php"><i class="nav-icon fas fa-map-location-dot"></i><p>Progress By Daerah</p></a></li>
-              <li class="nav-item"><a class="nav-link<?= $currentPage === 'progress.php' && ($_GET['type'] ?? 'pengawas') !== 'pencacah' ? ' active' : '' ?>" href="progress.php?type=pengawas"><i class="nav-icon fas fa-user-check"></i><p>Progress Pengawas</p></a></li>
-              <li class="nav-item"><a class="nav-link<?= $currentPage === 'progress.php' && ($_GET['type'] ?? '') === 'pencacah' ? ' active' : '' ?>" href="progress.php?type=pencacah"><i class="nav-icon fas fa-users"></i><p>Progress Pencacah</p></a></li>
+              <li class="nav-item"><a class="nav-link<?= $currentPage === 'progress.php' && ($_GET['type'] ?? 'pengawas') !== 'pencacah' ? ' active' : '' ?>" href="progress.php?type=pengawas"><i class="nav-icon fas fa-user-check"></i><p>Progress By Pengawas</p></a></li>
+              <li class="nav-item"><a class="nav-link<?= $currentPage === 'progress.php' && ($_GET['type'] ?? '') === 'pencacah' ? ' active' : '' ?>" href="progress.php?type=pencacah"><i class="nav-icon fas fa-users"></i><p>Progress By Pencacah</p></a></li>
             <?php endif; ?>
-            <?php if (in_array($user['role'], ['admin_kab','superadmin'], true)): ?>
-              <li class="nav-item"><a class="nav-link<?= $isActive(['weekly_report.php']) ?>" href="weekly_report.php"><i class="nav-icon fas fa-file-lines"></i><p>Weekly Report</p></a></li>
-            <?php endif; ?>
-            <?php if (in_array($user['role'], ['admin_kab','viewer_kab'], true)): ?>
-              <li class="nav-item"><a class="nav-link<?= $isActive(['petugas.php']) ?>" href="petugas.php"><i class="nav-icon fas fa-address-book"></i><p>Daftar Petugas</p></a></li>
+            <?php if ($user['role'] === 'pengawas'): ?>
+              <li class="nav-item"><a class="nav-link<?= $currentPage === 'progress.php' && ($_GET['type'] ?? '') === 'pencacah' ? ' active' : '' ?>" href="progress.php?type=pencacah"><i class="nav-icon fas fa-users"></i><p>Progress By Pencacah</p></a></li>
+            <?php elseif ($user['role'] === 'pencacah'): ?>
+              <li class="nav-item"><a class="nav-link<?= $currentPage === 'progress.php' && ($_GET['type'] ?? '') === 'pencacah' ? ' active' : '' ?>" href="progress.php?type=pencacah"><i class="nav-icon fas fa-chart-line"></i><p>Progress By Pencacah</p></a></li>
             <?php endif; ?>
             <?php if (in_array($user['role'], ['admin_kab','superadmin','viewer_prov','viewer_kab'], true)): ?>
               <li class="nav-item"><a class="nav-link<?= $isActive(['status_view.php']) ?>" href="status_view.php"><i class="nav-icon fas fa-table-list"></i><p>Status Terupdate</p></a></li>
             <?php endif; ?>
-            <?php if (in_array($user['role'], ['admin_kab','superadmin'], true)): ?>
+            <?php if (in_array($user['role'], ['admin_kab','superadmin','pengawas'], true)): ?>
               <li class="nav-item"><a class="nav-link<?= $isActive(['status_selesai.php']) ?>" href="status_selesai.php"><i class="nav-icon fas fa-circle-check"></i><p>Status Selesai SubSLS</p></a></li>
             <?php endif; ?>
-            <?php if (in_array($user['role'], ['superadmin','viewer_prov'], true)): ?>
+            <?php if (in_array($user['role'], ['admin_kab','superadmin'], true)): ?>
+              <li class="nav-item"><a class="nav-link<?= $isActive(['weekly_report.php']) ?>" href="weekly_report.php"><i class="nav-icon fas fa-file-lines"></i><p>Weekly Report</p></a></li>
+            <?php endif; ?>
+            <?php if (in_array($user['role'], ['admin_kab','viewer_kab','superadmin','viewer_prov'], true)): ?>
               <li class="nav-item"><a class="nav-link<?= $isActive(['petugas.php']) ?>" href="petugas.php"><i class="nav-icon fas fa-address-book"></i><p>Daftar Petugas</p></a></li>
             <?php endif; ?>
             <?php if ($user['role'] === 'superadmin'): ?>
               <li class="nav-item"><a class="nav-link<?= $isActive(['assignment.php']) ?>" href="assignment.php"><i class="nav-icon fas fa-user-gear"></i><p>Ganti Petugas</p></a></li>
+              <li class="nav-item"><a class="nav-link<?= $isActive(['export_daily.php']) ?>" href="export_daily.php"><i class="nav-icon fas fa-file-csv"></i><p>Export Data Daily</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['snapshot.php']) ?>" href="snapshot.php"><i class="nav-icon fas fa-calendar-check"></i><p>Isi Snapshot Tanggal</p></a></li>
-              <li class="nav-item"><a class="nav-link<?= $isActive(['public_dashboard_update.php']) ?>" href="public_dashboard_update.php"><i class="nav-icon fas fa-globe"></i><p>Update Dashboard Publik</p></a></li>
+              <li class="nav-item"><a class="nav-link<?= $isActive(['public_dashboard_update.php']) ?>" href="public_dashboard_update.php"><i class="nav-icon fas fa-globe"></i><p>Dashboard Publik</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['mobile_update.php']) ?>" href="mobile_update.php"><i class="nav-icon fas fa-bullhorn"></i><p>Edit Pop-up Login</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['user_passwords.php']) ?>" href="user_passwords.php"><i class="nav-icon fas fa-key"></i><p>Ganti Password User</p></a></li>
-              <li class="nav-item"><a class="nav-link<?= $isActive(['export_daily.php']) ?>" href="export_daily.php"><i class="nav-icon fas fa-file-csv"></i><p>Export Data Daily</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['backup_database.php']) ?>" href="backup_database.php"><i class="nav-icon fas fa-database"></i><p>Backup Database</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['import.php']) ?>" href="import.php"><i class="nav-icon fas fa-file-import"></i><p>Import Master</p></a></li>
+            <?php endif; ?>
+            <?php if (in_array($user['role'], ['pengawas','pencacah'], true)): ?>
+              <li class="nav-item"><a class="nav-link<?= $isActive(['subsls_data.php']) ?>" href="subsls_data.php"><i class="nav-icon fas fa-table"></i><p>Data SubSLS</p></a></li>
             <?php endif; ?>
           <?php endif; ?>
         </ul>
