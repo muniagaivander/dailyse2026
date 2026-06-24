@@ -5,6 +5,7 @@ $filters = [
     'kab_id' => $_GET['kab_id'] ?? '',
     'kec_id' => $_GET['kec_id'] ?? '',
     'desa_id' => $_GET['desa_id'] ?? '',
+    'view_mode' => ($_GET['view_mode'] ?? 'card') === 'table' ? 'table' : 'card',
 ];
 if (in_array($user['role'], ['admin_kab', 'viewer_kab'], true)) {
     $filters['kab_id'] = $user['kab_id'];
@@ -38,6 +39,8 @@ function status_filter_options(array $user, array $filters): array
 
 $opts = status_filter_options($user, $filters);
 $rows = [];
+$pmlCards = [];
+$pclCards = [];
 $error = null;
 $statusFields = status_fields();
 $fields = [
@@ -52,6 +55,9 @@ $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 100;
 $totalRows = 0;
 $totalPages = 0;
+$requiresSpecificKab = in_array($user['role'], ['superadmin', 'viewer_prov'], true);
+$isAllKabCardTooLarge = $requiresSpecificKab && $filters['kab_id'] === '' && $filters['view_mode'] === 'card';
+$canShowStatus = true;
 
 function status_view_build_filter(array $user, array $filters): array
 {
@@ -106,6 +112,98 @@ function status_view_select_sql(string $sqlWhere, ?int $limitRows = null, ?int $
             $sqlWhere
             ORDER BY k.id, kc.kdkec, d.kddesa, sl.kdsls, ms.kdsubsls
             $limit";
+}
+
+function status_view_progress_count(array $row): int
+{
+    return (int)$row['submitted_by_pencacah'] + (int)$row['rejected_by_pengawas'] + (int)$row['pending_count'] + (int)$row['approved_by_pengawas'];
+}
+
+function status_view_progress_pct(array $row): float
+{
+    $target = (int)$row['target'];
+    return $target > 0 ? (status_view_progress_count($row) / $target) * 100 : 0.0;
+}
+
+function status_view_card_where(string $sqlWhere, string $emailField): string
+{
+    $extra = "ms.{$emailField} IS NOT NULL AND ms.{$emailField} <> ''";
+    return $sqlWhere ? $sqlWhere . ' AND ' . $extra : 'WHERE ' . $extra;
+}
+
+function status_view_card_rows(array $user, array $filters, string $type): array
+{
+    [$sqlWhere, $params] = status_view_build_filter($user, $filters);
+    if ($type === 'pml') {
+        $where = status_view_card_where($sqlWhere, 'pengawas_email');
+        $sql = "SELECT ms.pengawas_email email, up.name petugas_name,
+                    COUNT(DISTINCT NULLIF(ms.pencacah_email,'')) pcl_count,
+                    COUNT(ms.id) subsls_count,
+                    GROUP_CONCAT(DISTINCT d.nmdesa ORDER BY kc.kdkec, d.kddesa SEPARATOR ', ') desa_names,
+                    COALESCE(SUM(ss.target),0) target,
+                    COALESCE(SUM(ss.open_count),0) open_count,
+                    COALESCE(SUM(ss.draft_count),0) draft_count,
+                    COALESCE(SUM(ss.submitted_by_pencacah),0) submitted_by_pencacah,
+                    COALESCE(SUM(ss.rejected_by_pengawas),0) rejected_by_pengawas,
+                    COALESCE(SUM(ss.pending_count),0) pending_count,
+                    COALESCE(SUM(ss.approved_by_pengawas),0) approved_by_pengawas
+                FROM master_subsls ms
+                JOIN master_sls sl ON sl.id=ms.sls_id
+                JOIN master_desa d ON d.id=sl.desa_id
+                JOIN master_kec kc ON kc.id=d.kec_id
+                JOIN master_kab k ON k.id=kc.kab_id
+                LEFT JOIN users up ON up.email=ms.pengawas_email
+                LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
+                $where
+                GROUP BY ms.pengawas_email, up.name
+                ORDER BY CASE WHEN COALESCE(SUM(ss.target),0) > 0
+                    THEN ((COALESCE(SUM(ss.submitted_by_pencacah),0) + COALESCE(SUM(ss.rejected_by_pengawas),0) + COALESCE(SUM(ss.pending_count),0) + COALESCE(SUM(ss.approved_by_pengawas),0)) / COALESCE(SUM(ss.target),0))
+                    ELSE 0 END DESC, up.name, ms.pengawas_email";
+    } else {
+        $where = status_view_card_where($sqlWhere, 'pencacah_email');
+        $sql = "SELECT ms.pencacah_email email, uc.name petugas_name,
+                    ms.pengawas_email pengawas_email, up.name pengawas_name,
+                    1 pcl_count,
+                    COUNT(ms.id) subsls_count,
+                    GROUP_CONCAT(DISTINCT d.nmdesa ORDER BY kc.kdkec, d.kddesa SEPARATOR ', ') desa_names,
+                    COALESCE(SUM(ss.target),0) target,
+                    COALESCE(SUM(ss.open_count),0) open_count,
+                    COALESCE(SUM(ss.draft_count),0) draft_count,
+                    COALESCE(SUM(ss.submitted_by_pencacah),0) submitted_by_pencacah,
+                    COALESCE(SUM(ss.rejected_by_pengawas),0) rejected_by_pengawas,
+                    COALESCE(SUM(ss.pending_count),0) pending_count,
+                    COALESCE(SUM(ss.approved_by_pengawas),0) approved_by_pengawas
+                FROM master_subsls ms
+                JOIN master_sls sl ON sl.id=ms.sls_id
+                JOIN master_desa d ON d.id=sl.desa_id
+                JOIN master_kec kc ON kc.id=d.kec_id
+                JOIN master_kab k ON k.id=kc.kab_id
+                LEFT JOIN users uc ON uc.email=ms.pencacah_email
+                LEFT JOIN users up ON up.email=ms.pengawas_email
+                LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
+                $where
+                GROUP BY ms.pencacah_email, uc.name, ms.pengawas_email, up.name
+                ORDER BY CASE WHEN COALESCE(SUM(ss.target),0) > 0
+                    THEN ((COALESCE(SUM(ss.submitted_by_pencacah),0) + COALESCE(SUM(ss.rejected_by_pengawas),0) + COALESCE(SUM(ss.pending_count),0) + COALESCE(SUM(ss.approved_by_pengawas),0)) / COALESCE(SUM(ss.target),0))
+                    ELSE 0 END DESC, uc.name, ms.pencacah_email";
+    }
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
+function status_view_card_title(array $row, string $type): string
+{
+    $label = petugas_label($row['email'], $row['petugas_name'] ?? '');
+    if ($type === 'pcl') {
+        $label .= ' (' . petugas_label($row['pengawas_email'] ?? '', $row['pengawas_name'] ?? '') . ')';
+    }
+    return $label;
+}
+
+function status_view_card_subtitle(array $row): string
+{
+    return '(' . petugas_label($row['pengawas_email'] ?? '', $row['pengawas_name'] ?? '') . ')';
 }
 
 function status_view_xlsx_col(int $index): string
@@ -186,6 +284,10 @@ function status_view_export(array $headers, array $rows, string $format): void
 }
 
 if (($_GET['action'] ?? '') === 'export' && isset($_GET['filter'])) {
+    if (!$canShowStatus) {
+        http_response_code(400);
+        exit('Pilih salah satu kabupaten terlebih dahulu.');
+    }
     $format = ($_GET['format'] ?? 'csv') === 'xlsx' ? 'xlsx' : 'csv';
     [$sqlWhere, $params] = status_view_build_filter($user, $filters);
     $stmt = db()->prepare(status_view_select_sql($sqlWhere));
@@ -222,7 +324,12 @@ if (($_GET['action'] ?? '') === 'export' && isset($_GET['filter'])) {
     status_view_export($headers, $exportRows, $format);
 }
 
-if (isset($_GET['filter'])) {
+if ($canShowStatus && $filters['view_mode'] === 'card' && !$isAllKabCardTooLarge) {
+    $pmlCards = status_view_card_rows($user, $filters, 'pml');
+    $pclCards = status_view_card_rows($user, $filters, 'pcl');
+}
+
+if ($canShowStatus && $filters['view_mode'] === 'table') {
     [$sqlWhere, $params] = status_view_build_filter($user, $filters);
     $countStmt = db()->prepare("SELECT COUNT(*)
         FROM master_subsls ms
@@ -244,11 +351,75 @@ if (isset($_GET['filter'])) {
 
 render_header('Status Terupdate');
 ?>
+<style>
+.status-view-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+.status-summary-card {
+  border: 1px solid #f0b35c;
+  border-left: 5px solid #f59e0b;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fff3df 0%, #fffaf2 64%);
+  box-shadow: 0 8px 18px rgba(180, 83, 9, .12);
+}
+.status-summary-card .card-body {
+  padding: 14px;
+}
+.status-person-title {
+  font-weight: 700;
+  color: #92400e;
+  margin-bottom: 4px;
+  overflow-wrap: anywhere;
+}
+.status-person-supervisor {
+  color: #7c2d12;
+  font-size: .86rem;
+  margin-top: -2px;
+  margin-bottom: 6px;
+  overflow-wrap: anywhere;
+}
+.status-person-meta {
+  color: #b45309;
+  font-size: .9rem;
+  margin-bottom: 10px;
+}
+.status-area-list {
+  color: #6b7280;
+  font-size: .85rem;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(217, 119, 6, .22);
+}
+.status-card-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  color: #374151;
+}
+.status-card-row:nth-of-type(even) {
+  background: rgba(251, 191, 36, .18);
+}
+.status-card-row strong {
+  color: #111827;
+}
+.status-card-rule {
+  border-top: 1px dashed rgba(217, 119, 6, .38);
+  margin: 9px 0;
+}
+.status-progress-value {
+  color: #b45309;
+  font-weight: 700;
+}
+</style>
 <?php if ($error): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
 <form class="card card-body mb-3" method="get">
   <div class="form-row align-items-end">
     <?php if (in_array($user['role'], ['superadmin', 'viewer_prov'], true)): ?>
-      <div class="form-group col-md-3">
+      <div class="form-group col-12 col-md-3">
         <label>Kabupaten</label>
         <select class="form-control" name="kab_id" id="kab_id">
           <option value="">Semua Kabupaten</option>
@@ -258,30 +429,107 @@ render_header('Status Terupdate');
     <?php else: ?>
       <input type="hidden" name="kab_id" value="<?= e($filters['kab_id']) ?>">
     <?php endif; ?>
-    <div class="form-group col-md-3">
+    <div class="form-group col-12 col-md-3">
       <label>Kecamatan</label>
       <select class="form-control" name="kec_id" id="kec_id" <?= $filters['kab_id'] ? '' : 'disabled' ?>>
         <option value=""><?= $filters['kab_id'] ? 'Semua Kecamatan' : 'Pilih kabupaten dulu' ?></option>
         <?php foreach ($opts['kecamatan'] as $o): ?><option value="<?= e($o['value']) ?>" <?= $filters['kec_id']===$o['value']?'selected':'' ?>><?= e($o['label']) ?></option><?php endforeach; ?>
       </select>
     </div>
-    <div class="form-group col-md-3">
+    <div class="form-group col-12 col-md-3">
       <label>Desa</label>
       <select class="form-control" name="desa_id" id="desa_id" <?= $filters['kec_id'] ? '' : 'disabled' ?>>
         <option value=""><?= $filters['kec_id'] ? 'Semua Desa' : 'Pilih kecamatan dulu' ?></option>
         <?php foreach ($opts['desa'] as $o): ?><option value="<?= e($o['value']) ?>" <?= $filters['desa_id']===$o['value']?'selected':'' ?>><?= e($o['label']) ?></option><?php endforeach; ?>
       </select>
     </div>
-    <div class="form-group col-md-2"><button class="btn btn-primary" name="filter" value="1">Filter</button></div>
+    <div class="form-group col-12 col-md-2">
+      <label>Tampilan</label>
+      <select class="form-control" name="view_mode" id="view_mode">
+        <option value="card" <?= $filters['view_mode']==='card'?'selected':'' ?>>Card View</option>
+        <option value="table" <?= $filters['view_mode']==='table'?'selected':'' ?>>Table View</option>
+      </select>
+    </div>
+    <div class="form-group col-12 col-md-1"><button class="btn btn-primary btn-block" name="filter" value="1">Filter</button></div>
   </div>
 </form>
-<?php if ($rows): ?>
+<div class="alert alert-light border mb-3">
+  <strong><em>Progress Pendataan = Submit+Reject+Pending+Approve</em></strong>
+</div>
+<?php if ($isAllKabCardTooLarge): ?>
+  <div class="alert alert-warning">Data Terlalu Banyak, silahkan Table View saja.</div>
+<?php endif; ?>
+<?php if ($canShowStatus && $filters['view_mode'] === 'card' && !$isAllKabCardTooLarge): ?>
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h5 class="mb-0">Card View PML</h5>
+  </div>
+  <?php if ($pmlCards): ?>
+    <div class="status-view-grid mb-4">
+      <?php foreach ($pmlCards as $card): ?>
+        <?php $progressCount = status_view_progress_count($card); $progressPct = status_view_progress_pct($card); ?>
+        <div class="status-summary-card">
+          <div class="card-body">
+            <div class="status-person-title"><?= e(status_view_card_title($card, 'pml')) ?></div>
+            <div class="status-person-meta"><?= number_format((int)$card['pcl_count'], 0, ',', '.') ?> PCL - <?= number_format((int)$card['subsls_count'], 0, ',', '.') ?> SubSLS</div>
+            <div class="status-metric-block">
+            <div class="status-card-row"><span>Open</span><strong><?= number_format((int)$card['open_count'], 0, ',', '.') ?></strong></div>
+            <div class="status-card-row"><span>Draft</span><strong><?= number_format((int)$card['draft_count'], 0, ',', '.') ?></strong></div>
+            <div class="status-card-row"><span>Submitted</span><strong><?= number_format((int)$card['submitted_by_pencacah'], 0, ',', '.') ?></strong></div>
+            <div class="status-card-row"><span>Rejected</span><strong><?= number_format((int)$card['rejected_by_pengawas'], 0, ',', '.') ?></strong></div>
+            <div class="status-card-row"><span>Pending</span><strong><?= number_format((int)$card['pending_count'], 0, ',', '.') ?></strong></div>
+            <div class="status-card-row"><span>Approved</span><strong><?= number_format((int)$card['approved_by_pengawas'], 0, ',', '.') ?></strong></div>
+            <div class="status-card-rule"></div>
+            <div class="status-card-row"><span>Progress</span><span class="status-progress-value">(<?= number_format($progressPct, 2, ',', '.') ?>%) <?= number_format($progressCount, 0, ',', '.') ?></span></div>
+            <div class="status-card-rule"></div>
+            <div class="status-card-row"><span>Total Assignment</span><strong><?= number_format((int)$card['target'], 0, ',', '.') ?></strong></div>
+            </div>
+            <div class="status-area-list"><strong>Wilayah Kerja Desa:</strong> <?= e($card['desa_names'] ?: '-') ?></div>
+          </div>
+        </div>
+      <?php endforeach; ?>
+    </div>
+  <?php else: ?>
+    <div class="alert alert-info">Tidak ada data PML pada filter ini.</div>
+  <?php endif; ?>
+
+  <h5 class="mb-2">Card PCL</h5>
+  <?php if ($pclCards): ?>
+    <div class="status-view-grid">
+      <?php foreach ($pclCards as $card): ?>
+        <?php $progressCount = status_view_progress_count($card); $progressPct = status_view_progress_pct($card); ?>
+        <div class="status-summary-card">
+          <div class="card-body">
+            <div class="status-person-title"><?= e(petugas_label($card['email'], $card['petugas_name'] ?? '')) ?></div>
+            <div class="status-person-supervisor"><?= e(status_view_card_subtitle($card)) ?></div>
+            <div class="status-person-meta"><?= number_format((int)$card['pcl_count'], 0, ',', '.') ?> PCL - <?= number_format((int)$card['subsls_count'], 0, ',', '.') ?> SubSLS</div>
+            <div class="status-metric-block">
+            <div class="status-card-row"><span>Open</span><strong><?= number_format((int)$card['open_count'], 0, ',', '.') ?></strong></div>
+            <div class="status-card-row"><span>Draft</span><strong><?= number_format((int)$card['draft_count'], 0, ',', '.') ?></strong></div>
+            <div class="status-card-row"><span>Submitted</span><strong><?= number_format((int)$card['submitted_by_pencacah'], 0, ',', '.') ?></strong></div>
+            <div class="status-card-row"><span>Rejected</span><strong><?= number_format((int)$card['rejected_by_pengawas'], 0, ',', '.') ?></strong></div>
+            <div class="status-card-row"><span>Pending</span><strong><?= number_format((int)$card['pending_count'], 0, ',', '.') ?></strong></div>
+            <div class="status-card-row"><span>Approved</span><strong><?= number_format((int)$card['approved_by_pengawas'], 0, ',', '.') ?></strong></div>
+            <div class="status-card-rule"></div>
+            <div class="status-card-row"><span>Progress</span><span class="status-progress-value">(<?= number_format($progressPct, 2, ',', '.') ?>%) <?= number_format($progressCount, 0, ',', '.') ?></span></div>
+            <div class="status-card-rule"></div>
+            <div class="status-card-row"><span>Total Assignment</span><strong><?= number_format((int)$card['target'], 0, ',', '.') ?></strong></div>
+            </div>
+            <div class="status-area-list"><strong>Wilayah Kerja Desa:</strong> <?= e($card['desa_names'] ?: '-') ?></div>
+          </div>
+        </div>
+      <?php endforeach; ?>
+    </div>
+  <?php else: ?>
+    <div class="alert alert-info">Tidak ada data PCL pada filter ini.</div>
+  <?php endif; ?>
+<?php endif; ?>
+<?php if ($canShowStatus && $filters['view_mode'] === 'table' && $rows): ?>
 <div class="card">
   <div class="card-header py-2 d-flex justify-content-between align-items-center">
     <span>Menampilkan <?= number_format(count($rows), 0, ',', '.') ?> dari <?= number_format($totalRows, 0, ',', '.') ?> SubSLS</span>
     <div>
       <?php
-        $exportQuery = ['filter' => 1, 'kab_id' => $filters['kab_id'], 'kec_id' => $filters['kec_id'], 'desa_id' => $filters['desa_id'], 'action' => 'export'];
+        $exportQuery = ['filter' => 1, 'kab_id' => $filters['kab_id'], 'kec_id' => $filters['kec_id'], 'desa_id' => $filters['desa_id'], 'view_mode' => $filters['view_mode'], 'action' => 'export'];
       ?>
       <a class="btn btn-outline-success btn-sm mr-2" href="?<?= e(http_build_query($exportQuery + ['format' => 'csv'])) ?>"><i class="fas fa-file-csv mr-1"></i>Download CSV</a>
       <a class="btn btn-outline-success btn-sm" href="?<?= e(http_build_query($exportQuery + ['format' => 'xlsx'])) ?>"><i class="fas fa-file-excel mr-1"></i>Download Excel</a>
@@ -322,7 +570,7 @@ render_header('Status Terupdate');
       <?php
         $start = max(1, $page - 2);
         $end = min($totalPages, $page + 2);
-        $baseQuery = ['filter' => 1, 'kab_id' => $filters['kab_id'], 'kec_id' => $filters['kec_id'], 'desa_id' => $filters['desa_id']];
+        $baseQuery = ['filter' => 1, 'kab_id' => $filters['kab_id'], 'kec_id' => $filters['kec_id'], 'desa_id' => $filters['desa_id'], 'view_mode' => $filters['view_mode']];
       ?>
       <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>"><a class="page-link" href="?<?= e(http_build_query($baseQuery + ['page' => max(1, $page - 1)])) ?>">Prev</a></li>
       <?php for ($p = $start; $p <= $end; $p++): ?>
@@ -332,21 +580,39 @@ render_header('Status Terupdate');
     </ul>
   </nav>
 <?php endif; ?>
-<?php elseif (isset($_GET['filter']) && !$error): ?>
-  <div class="alert alert-info">Tidak ada data status pada desa ini.</div>
+<?php elseif ($canShowStatus && $filters['view_mode'] === 'table' && !$error): ?>
+  <div class="alert alert-info">Tidak ada data status pada filter ini.</div>
 <?php endif; ?>
 <script>
 const kabupaten = document.getElementById('kab_id');
 if (kabupaten) {
   kabupaten.addEventListener('change', function () {
-    document.getElementById('kec_id').value = '';
-    document.getElementById('desa_id').value = '';
+    const kec = document.getElementById('kec_id');
+    const desa = document.getElementById('desa_id');
+    if (kec) kec.value = '';
+    if (desa) desa.value = '';
     this.form.submit();
   });
 }
-document.getElementById('kec_id').addEventListener('change', function () {
-  document.getElementById('desa_id').value = '';
-  this.form.submit();
-});
+const kecamatan = document.getElementById('kec_id');
+if (kecamatan) {
+  kecamatan.addEventListener('change', function () {
+    const desa = document.getElementById('desa_id');
+    if (desa) desa.value = '';
+    this.form.submit();
+  });
+}
+const desa = document.getElementById('desa_id');
+if (desa) {
+  desa.addEventListener('change', function () {
+    this.form.submit();
+  });
+}
+const viewMode = document.getElementById('view_mode');
+if (viewMode) {
+  viewMode.addEventListener('change', function () {
+    this.form.submit();
+  });
+}
 </script>
 <?php render_footer(); ?>
