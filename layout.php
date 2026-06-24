@@ -168,6 +168,7 @@ function render_header(string $title): void {
               <li class="nav-item"><a class="nav-link<?= $isActive(['public_dashboard_update.php']) ?>" href="public_dashboard_update.php"><i class="nav-icon fas fa-globe"></i><p>Update Dashboard Publik</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['mobile_update.php']) ?>" href="mobile_update.php"><i class="nav-icon fas fa-bullhorn"></i><p>Edit Pop-up Login</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['user_passwords.php']) ?>" href="user_passwords.php"><i class="nav-icon fas fa-key"></i><p>Ganti Password User</p></a></li>
+              <li class="nav-item"><a class="nav-link<?= $isActive(['export_daily.php']) ?>" href="export_daily.php"><i class="nav-icon fas fa-file-csv"></i><p>Export Data Daily</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['backup_database.php']) ?>" href="backup_database.php"><i class="nav-icon fas fa-database"></i><p>Backup Database</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['import.php']) ?>" href="import.php"><i class="nav-icon fas fa-file-import"></i><p>Import Master</p></a></li>
             <?php endif; ?>
