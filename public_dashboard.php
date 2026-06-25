@@ -67,12 +67,14 @@ if (!$cache || empty($cache['dashboards'][$code])) {
     $statusColors = [];
     $rangeColors = [];
     $rows = [];
+    $trendRows = [];
     $totals = [];
 } else {
     $cacheMissing = false;
     $dashboard = $cache['dashboards'][$code];
     $context = $dashboard['context'];
     $rows = $dashboard['rows'];
+    $trendRows = $dashboard['trend_rows'] ?? [];
     $totals = $dashboard['totals'];
     $topPengawas = $dashboard['top_pengawas'] ?? [];
     $topPencacah = $dashboard['top_pencacah'] ?? [];
@@ -82,6 +84,7 @@ if (!$cache || empty($cache['dashboards'][$code])) {
 }
 if (!isset($topPengawas)) $topPengawas = [];
 if (!isset($topPencacah)) $topPencacah = [];
+if (!isset($trendRows)) $trendRows = [];
 
 $targetTotal = (int)($totals['target'] ?? 0);
 $submitApproveCount = public_pendataan_count($totals);
@@ -114,6 +117,7 @@ $cards = [
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
   <style>
     body { background: #f3f4f6; }
     .public-header {
@@ -161,6 +165,26 @@ $cards = [
     }
     .content-wrap { margin: 0 auto; max-width: 1380px; padding: 18px; }
     .small-box .inner h4 { font-weight: 700; }
+    .dashboard-stat-card {
+      background: linear-gradient(180deg, #fff3df 0%, #fffaf2 64%) !important;
+      border: 1px solid #f0b35c;
+      border-left: 5px solid #f59e0b;
+      border-radius: 8px;
+      box-shadow: 0 8px 18px rgba(180, 83, 9, .12);
+      color: #374151;
+    }
+    .dashboard-stat-card .inner {
+      padding: 14px;
+    }
+    .dashboard-stat-card h4 {
+      color: #111827;
+      font-weight: 800;
+    }
+    .dashboard-stat-card p {
+      color: #92400e;
+      font-weight: 700;
+      margin-bottom: 0;
+    }
     .range-legend {
       display: flex;
       flex-wrap: wrap;
@@ -262,7 +286,7 @@ $cards = [
   <div class="row">
     <?php foreach ($cards as $card): ?>
       <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6">
-        <div class="small-box bg-white">
+        <div class="small-box dashboard-stat-card">
           <div class="inner">
             <h4 class="mb-1"><?= $card['value'] ?></h4>
             <p><?= e($card['label']) ?></p>
@@ -277,23 +301,13 @@ $cards = [
   </div>
 
   <div class="card">
-    <div class="card-header"><strong>Progress By Status per <?= e($context['group_label']) ?></strong></div>
-    <div class="card-body"><div class="public-chart-wrap public-chart-wide"><canvas id="statusChart"></canvas></div></div>
+    <div class="card-header"><strong>Progress Pendataan per <?= e($context['group_label']) ?> (submit+reject+pending+approve)</strong></div>
+    <div class="card-body"><div class="public-chart-wrap public-chart-wide"><canvas id="submitApproveChart"></canvas></div></div>
   </div>
 
-  <div class="row">
-    <div class="col-lg-6">
-      <div class="card">
-        <div class="card-header"><strong>Progress Pendataan per <?= e($context['group_label']) ?> (submit+reject+pending+approve)</strong></div>
-        <div class="card-body"><div class="public-chart-wrap"><canvas id="submitApproveChart"></canvas></div></div>
-      </div>
-    </div>
-    <div class="col-lg-6">
-      <div class="card">
-        <div class="card-header"><strong>Progress Selesai SubSLS per <?= e($context['group_label']) ?></strong></div>
-        <div class="card-body"><div class="public-chart-wrap"><canvas id="completionChart"></canvas></div></div>
-      </div>
-    </div>
+  <div class="card">
+    <div class="card-header"><strong>Pergerakan Harian Progress Pendataan per <?= e($context['group_label']) ?></strong></div>
+    <div class="card-body"><div class="public-chart-wrap public-chart-wide"><canvas id="dailyPendataanChart"></canvas></div></div>
   </div>
 
   <div class="row">
@@ -306,6 +320,7 @@ $cards = [
               <thead>
                 <tr>
                   <th>Peringkat</th>
+                  <th>Kode Kab</th>
                   <th>Nama</th>
                   <th class="text-right">Progress Pendataan</th>
                   <th class="text-right">Selesai SubSLS</th>
@@ -317,6 +332,7 @@ $cards = [
                 <?php foreach ($rankTable['rows'] as $rankIndex => $rankRow): ?>
                   <tr>
                     <td><?= public_rank_badge($rankIndex + 1) ?></td>
+                    <td><?= e($rankRow['kab_codes'] ?? '-') ?></td>
                     <td><?= e($rankRow['display_name'] ?? ($rankRow['petugas_name'] ?? $rankRow['email'])) ?></td>
                     <td class="text-right"><?= number_format((float)$rankRow['progress_pendataan_pct'], 2, ',', '.') ?>%</td>
                     <td class="text-right"><?= number_format((float)$rankRow['selesai_pct'], 2, ',', '.') ?>%</td>
@@ -325,7 +341,7 @@ $cards = [
                   </tr>
                 <?php endforeach; ?>
                 <?php if (!$rankTable['rows']): ?>
-                  <tr><td colspan="6" class="text-center text-muted">Belum ada data.</td></tr>
+                  <tr><td colspan="7" class="text-center text-muted">Belum ada data.</td></tr>
                 <?php endif; ?>
               </tbody>
             </table>
@@ -333,6 +349,21 @@ $cards = [
         </div>
       </div>
     <?php endforeach; ?>
+  </div>
+
+  <div class="row">
+    <div class="col-lg-6">
+      <div class="card">
+        <div class="card-header"><strong>Progress By Status per <?= e($context['group_label']) ?></strong></div>
+        <div class="card-body"><div class="public-chart-wrap"><canvas id="statusChart"></canvas></div></div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="card">
+        <div class="card-header"><strong>Progress Selesai SubSLS per <?= e($context['group_label']) ?></strong></div>
+        <div class="card-body"><div class="public-chart-wrap"><canvas id="completionChart"></canvas></div></div>
+      </div>
+    </div>
   </div>
 
   <div class="card">
@@ -419,12 +450,29 @@ const rows = <?= json_encode($rows) ?>;
 const fields = <?= json_encode(array_keys($fields)) ?>;
 const labels = <?= json_encode(array_values($fields)) ?>;
 const statusColors = <?= json_encode($statusColors) ?>;
+const trendRows = <?= json_encode($trendRows) ?>;
+if (window.ChartDataLabels) {
+  Chart.register(ChartDataLabels);
+  Chart.defaults.set('plugins.datalabels', { display: false });
+}
 
 function pctColor(value) {
   if (value < 20) return '#dc2626';
   if (value < 40) return '#f59e0b';
   if (value < 75) return '#2563eb';
   return '#16a34a';
+}
+
+function yAxisMax(value) {
+  if (value <= 10) return 10;
+  if (value <= 25) return 25;
+  if (value <= 50) return 50;
+  if (value <= 75) return 75;
+  return 100;
+}
+
+function pctLabel(value) {
+  return Number(value || 0).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
 }
 
 const chartLabels = rows.map(row => row.label || '-');
@@ -437,7 +485,8 @@ const completion = rows.map(row => {
   return total ? Math.round(Number(row.selesai_count || 0) / total * 10000) / 100 : 0;
 });
 
-new Chart(document.getElementById('submitApproveChart'), {
+const submitApproveCanvas = document.getElementById('submitApproveChart');
+if (submitApproveCanvas) new Chart(submitApproveCanvas, {
   type: 'bar',
   data: {
     labels: chartLabels,
@@ -447,10 +496,65 @@ new Chart(document.getElementById('submitApproveChart'), {
       backgroundColor: submitApprove.map(pctColor)
     }]
   },
-  options: { animation: false, maintainAspectRatio: false, responsive: true, scales: { y: { min: 0, max: 100, ticks: { callback: value => value + '%' } } } }
+  options: {
+    animation: false,
+    maintainAspectRatio: false,
+    responsive: true,
+    plugins: {
+      datalabels: {
+        display: true,
+        anchor: 'end',
+        align: 'start',
+        clamp: true,
+        color: '#fff',
+        font: { weight: '700' },
+        formatter: pctLabel
+      }
+    },
+    scales: { y: { min: 0, max: 100, ticks: { callback: value => value + '%' } } }
+  }
 });
 
-new Chart(document.getElementById('completionChart'), {
+const trendDates = [...new Set(trendRows.map(row => row.tanggal))];
+const trendLabels = [...new Set(trendRows.map(row => row.label || '-'))];
+const trendPalette = ['#2563eb', '#16a34a', '#f59e0b', '#dc2626', '#7c3aed', '#0f766e', '#db2777', '#0891b2', '#65a30d', '#ea580c', '#4f46e5', '#be123c'];
+const trendMap = {};
+let trendMax = 0;
+trendRows.forEach(row => {
+  const target = Number(row.target || 0);
+  const progress = Number(row.submitted_by_pencacah || 0) + Number(row.rejected_by_pengawas || 0) + Number(row.pending_count || 0) + Number(row.approved_by_pengawas || 0);
+  const pct = target ? Math.round(progress / target * 10000) / 100 : 0;
+  trendMax = Math.max(trendMax, pct);
+  trendMap[(row.label || '-') + '|' + row.tanggal] = pct;
+});
+
+const dailyPendataanCanvas = document.getElementById('dailyPendataanChart');
+if (dailyPendataanCanvas) new Chart(dailyPendataanCanvas, {
+  type: 'line',
+  data: {
+    labels: trendDates,
+    datasets: trendLabels.map((label, index) => ({
+      label,
+      data: trendDates.map(date => trendMap[label + '|' + date] ?? null),
+      borderColor: trendPalette[index % trendPalette.length],
+      backgroundColor: trendPalette[index % trendPalette.length],
+      borderWidth: 2,
+      pointRadius: 2,
+      tension: 0.2,
+      spanGaps: true
+    }))
+  },
+  options: {
+    animation: false,
+    maintainAspectRatio: false,
+    responsive: true,
+    plugins: { legend: { position: 'bottom' } },
+    scales: { y: { min: 0, max: yAxisMax(trendMax), ticks: { callback: value => value + '%' } } }
+  }
+});
+
+const completionCanvas = document.getElementById('completionChart');
+if (completionCanvas) new Chart(completionCanvas, {
   type: 'bar',
   data: {
     labels: chartLabels,
@@ -463,7 +567,8 @@ new Chart(document.getElementById('completionChart'), {
   options: { animation: false, maintainAspectRatio: false, responsive: true, scales: { y: { min: 0, max: 100, ticks: { callback: value => value + '%' } } } }
 });
 
-new Chart(document.getElementById('statusChart'), {
+const statusCanvas = document.getElementById('statusChart');
+if (statusCanvas) new Chart(statusCanvas, {
   type: 'bar',
   data: {
     labels: chartLabels,

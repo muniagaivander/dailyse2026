@@ -82,10 +82,33 @@ function public_dashboard_totals(array $rows, array $fields): array
     return $totals;
 }
 
+function public_dashboard_trend_rows(array $context): array
+{
+    $stmt = db()->prepare("SELECT ds.tanggal,
+            {$context['label_expr']} label,
+            COALESCE(SUM(ds.target),0) target,
+            COALESCE(SUM(ds.submitted_by_pencacah),0) submitted_by_pencacah,
+            COALESCE(SUM(ds.rejected_by_pengawas),0) rejected_by_pengawas,
+            COALESCE(SUM(ds.pending_count),0) pending_count,
+            COALESCE(SUM(ds.approved_by_pengawas),0) approved_by_pengawas
+        FROM daily_status ds
+        JOIN master_subsls ms ON ms.id=ds.subsls_id
+        JOIN master_sls sl ON sl.id=ms.sls_id
+        JOIN master_desa d ON d.id=sl.desa_id
+        JOIN master_kec kc ON kc.id=d.kec_id
+        JOIN master_kab k ON k.id=kc.kab_id
+        {$context['where']}
+        GROUP BY ds.tanggal, {$context['group_expr']}
+        ORDER BY ds.tanggal, {$context['order_expr']}");
+    $stmt->execute($context['params']);
+    return $stmt->fetchAll();
+}
+
 function public_dashboard_performance_rows(string $roleField, array $context): array
 {
-    $stmt = db()->prepare("SELECT ms.$roleField email,
+        $stmt = db()->prepare("SELECT ms.$roleField email,
             u.name petugas_name,
+            GROUP_CONCAT(DISTINCT k.id ORDER BY k.id SEPARATOR ', ') kab_codes,
             GROUP_CONCAT(DISTINCT d.nmdesa ORDER BY d.nmdesa SEPARATOR ', ') desa_names,
             GROUP_CONCAT(DISTINCT k.nmkab ORDER BY k.nmkab SEPARATOR ', ') kab_names,
             COALESCE(SUM(ss.target),0) target,
@@ -173,6 +196,7 @@ function public_dashboard_generate_cache(string $email): array
             'context' => $context,
             'rows' => $rows,
             'totals' => public_dashboard_totals($rows, $fields),
+            'trend_rows' => public_dashboard_trend_rows($queryContext),
             'top_pengawas' => public_dashboard_performance_rows('pengawas_email', $queryContext),
             'top_pencacah' => public_dashboard_performance_rows('pencacah_email', $queryContext),
         ];

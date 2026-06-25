@@ -276,8 +276,9 @@ function performance_rows(string $roleField, string $kabId, string $direction): 
     $order = $direction === 'desc' ? 'DESC' : 'ASC';
     $limit = $direction === 'desc' ? 'LIMIT 10' : '';
     $whereKab = $kabId === '6400' ? '' : 'kc.kab_id=? AND';
-    $stmt = db()->prepare("SELECT ms.$roleField email,
+        $stmt = db()->prepare("SELECT ms.$roleField email,
             u.name petugas_name,
+            GROUP_CONCAT(DISTINCT kc.kab_id ORDER BY kc.kab_id SEPARATOR ', ') kab_codes,
             GROUP_CONCAT(DISTINCT d.nmdesa ORDER BY kc.kdkec, d.kddesa SEPARATOR ', ') wilayah_kerja,
             COALESCE(SUM(ss.target),0) target,
             COALESCE(SUM(ss.submitted_by_pencacah),0) submitted_by_pencacah,
@@ -509,13 +510,14 @@ if (($_GET['action'] ?? '') === 'export_attention' && $canSeePerformance) {
             $row['draft_count'],
             $row['pending_count'],
             $row['approved_by_pengawas'],
+            $row['kab_codes'] ?? '',
             $row['wilayah_kerja'] ?? '',
             $row['subsls_total'],
             $row['selesai_count'],
         ];
     }
     dashboard_export_rows(
-        ['petugas', 'progress_pendataan_pct', 'selesai_subsls_pct', 'threshold_selesai_pct', 'batas_tanggal', 'target', 'submitted_by_pencacah', 'rejected_by_pengawas', 'draft_count', 'pending_count', 'approved_by_pengawas', 'wilayah_kerja', 'subsls_total', 'selesai_count'],
+        ['petugas', 'progress_pendataan_pct', 'selesai_subsls_pct', 'threshold_selesai_pct', 'batas_tanggal', 'target', 'submitted_by_pencacah', 'rejected_by_pengawas', 'draft_count', 'pending_count', 'approved_by_pengawas', 'kode_kab', 'wilayah_kerja', 'subsls_total', 'selesai_count'],
         $exportRows,
         'perlu_perhatian_' . $type . '_' . $kabId . '_' . date('Ymd'),
         $format
@@ -898,11 +900,18 @@ const fields = <?= json_encode(array_keys($fields)) ?>;
 const labels = <?= json_encode(array_values($fields)) ?>;
 const statusColors = <?= json_encode($statusColors) ?>;
 const activeTab = <?= json_encode($activeTab) ?>;
+if (window.ChartDataLabels) {
+  Chart.register(ChartDataLabels);
+  Chart.defaults.set('plugins.datalabels', { display: false });
+}
 function pctColor(value) {
   if (value < 20) return '#dc2626';
   if (value < 40) return '#f59e0b';
   if (value < 75) return '#2563eb';
   return '#16a34a';
+}
+function pctLabel(value) {
+  return Number(value || 0).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
 }
 const percentRows = rows.map(r => {
   const target = Number(r.target || 0);
@@ -933,7 +942,23 @@ const config = activeTab === 'status'
           backgroundColor: percentRows.map(r => pctColor(activeTab === 'selesai' ? r.selesai : r.submitApprove))
         }]
       },
-      options: { animation:false, maintainAspectRatio:false, responsive:true, scales:{ y:{min:0,max:100,ticks:{callback:v=>v+'%'}} } }
+      options: {
+        animation:false,
+        maintainAspectRatio:false,
+        responsive:true,
+        plugins: {
+          datalabels: {
+            display: activeTab === 'submit_approve',
+            anchor: 'end',
+            align: 'start',
+            clamp: true,
+            color: '#fff',
+            font: { weight: '700' },
+            formatter: pctLabel
+          }
+        },
+        scales:{ y:{min:0,max:100,ticks:{callback:v=>v+'%'}} }
+      }
     };
 new Chart(document.getElementById('dashboardChart'), config);
 
@@ -1000,10 +1025,10 @@ if (pengawas) {
           <h5>10 <?= e($labelRole) ?> Terbaik</h5>
           <div class="table-responsive mb-4">
             <table class="table table-sm table-bordered table-striped mb-0">
-              <thead><tr><th>Peringkat</th><th>Email</th><th>Wilayah Kerja</th><th>Progress Pendataan</th><th>Selesai SubSLS</th><th>Target</th><th>Total SubSLS</th></tr></thead>
+              <thead><tr><th>Peringkat</th><th>Email</th><th>Kode Kab</th><th>Wilayah Kerja</th><th>Progress Pendataan</th><th>Selesai SubSLS</th><th>Target</th><th>Total SubSLS</th></tr></thead>
               <tbody>
               <?php foreach ($topRows as $rankIndex => $r): ?>
-                <tr><td><?= dashboard_rank_badge($rankIndex + 1) ?></td><td><?= e(petugas_label($r['email'], $r['petugas_name'] ?? '')) ?></td><td><?= e($r['wilayah_kerja'] ?: '-') ?></td><td><?= number_format((float)$r['submit_approve_pct'],2,',','.') ?>%</td><td><?= number_format((float)$r['selesai_pct'],2,',','.') ?>%</td><td><?= number_format((int)$r['target'],0,',','.') ?></td><td><?= number_format((int)$r['subsls_total'],0,',','.') ?></td></tr>
+                <tr><td><?= dashboard_rank_badge($rankIndex + 1) ?></td><td><?= e(petugas_label($r['email'], $r['petugas_name'] ?? '')) ?></td><td><?= e($r['kab_codes'] ?: '-') ?></td><td><?= e($r['wilayah_kerja'] ?: '-') ?></td><td><?= number_format((float)$r['submit_approve_pct'],2,',','.') ?>%</td><td><?= number_format((float)$r['selesai_pct'],2,',','.') ?>%</td><td><?= number_format((int)$r['target'],0,',','.') ?></td><td><?= number_format((int)$r['subsls_total'],0,',','.') ?></td></tr>
               <?php endforeach; ?>
               </tbody>
             </table>
@@ -1020,13 +1045,13 @@ if (pengawas) {
           </div>
           <div class="table-responsive">
             <table class="table table-sm table-bordered table-striped mb-0 attention-table" data-page-size="25">
-              <thead><tr><th>Email</th><th>Wilayah Kerja</th><th>Progress Pendataan</th><th>Selesai SubSLS</th><th>Target</th><th>Total SubSLS</th></tr></thead>
+              <thead><tr><th>Email</th><th>Kode Kab</th><th>Wilayah Kerja</th><th>Progress Pendataan</th><th>Selesai SubSLS</th><th>Target</th><th>Total SubSLS</th></tr></thead>
               <tbody>
               <?php foreach ($attentionRows as $r): ?>
-                <tr class="attention-row"><td><?= e(petugas_label($r['email'], $r['petugas_name'] ?? '')) ?></td><td><?= e($r['wilayah_kerja'] ?: '-') ?></td><td><?= number_format((float)$r['submit_approve_pct'],2,',','.') ?>%</td><td><?= number_format((float)$r['selesai_pct'],2,',','.') ?>%</td><td><?= number_format((int)$r['target'],0,',','.') ?></td><td><?= number_format((int)$r['subsls_total'],0,',','.') ?></td></tr>
+                <tr class="attention-row"><td><?= e(petugas_label($r['email'], $r['petugas_name'] ?? '')) ?></td><td><?= e($r['kab_codes'] ?: '-') ?></td><td><?= e($r['wilayah_kerja'] ?: '-') ?></td><td><?= number_format((float)$r['submit_approve_pct'],2,',','.') ?>%</td><td><?= number_format((float)$r['selesai_pct'],2,',','.') ?>%</td><td><?= number_format((int)$r['target'],0,',','.') ?></td><td><?= number_format((int)$r['subsls_total'],0,',','.') ?></td></tr>
               <?php endforeach; ?>
               <?php if (!$attentionRows): ?>
-                <tr><td colspan="6" class="text-center text-muted">Tidak ada <?= e(strtolower($labelRole)) ?> yang masuk kategori perlu perhatian.</td></tr>
+                <tr><td colspan="7" class="text-center text-muted">Tidak ada <?= e(strtolower($labelRole)) ?> yang masuk kategori perlu perhatian.</td></tr>
               <?php endif; ?>
               </tbody>
             </table>
