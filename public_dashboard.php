@@ -104,7 +104,7 @@ $cards = [
     ['label' => 'Pending', 'value' => public_count_pct_text((int)($totals['pending_count'] ?? 0), $targetTotal ? (int)($totals['pending_count'] ?? 0) / $targetTotal * 100 : 0)],
     ['label' => 'Approve', 'value' => public_count_pct_text((int)($totals['approved_by_pengawas'] ?? 0), $targetTotal ? (int)($totals['approved_by_pengawas'] ?? 0) / $targetTotal * 100 : 0)],
     ['label' => 'Progress Pendataan', 'value' => public_count_pct_text($submitApproveCount, $submitApprovePct)],
-    ['label' => 'Selesai', 'value' => public_count_pct_text((int)($totals['selesai_count'] ?? 0), $completionPct)],
+    ['label' => 'SubSLS Selesai', 'value' => public_count_pct_text((int)($totals['selesai_count'] ?? 0), $completionPct)],
     ['label' => 'Total SubSLS', 'value' => public_count_only_text((int)($totals['subsls_total'] ?? 0))],
 ];
 ?>
