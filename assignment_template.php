@@ -210,9 +210,11 @@ function import_assignment_template(string $path, array $user): array
 
     $processed = 0;
     $skipped = 0;
+    $assignmentChanged = 0;
+    $nameOnlyChanged = 0;
     db()->beginTransaction();
     try {
-        $stmtExists = db()->prepare("SELECT COUNT(*)
+        $stmtCurrent = db()->prepare("SELECT ms.pengawas_email, ms.pencacah_email
             FROM master_subsls ms
             JOIN master_sls sl ON sl.id=ms.sls_id
             JOIN master_desa d ON d.id=sl.desa_id
@@ -239,13 +241,24 @@ function import_assignment_template(string $path, array $user): array
             if ($user['role'] === 'admin_kab') {
                 $existsParams[] = $user['kab_id'];
             }
-            $stmtExists->execute($existsParams);
-            if (!$stmtExists->fetchColumn()) {
+            $stmtCurrent->execute($existsParams);
+            $current = $stmtCurrent->fetch();
+            if (!$current) {
                 $skipped++;
                 continue;
             }
-            $stmtMaster->execute([$pengawas, $pencacah, $subslsId]);
-            $stmtDaily->execute([$pengawas, $pencacah, $subslsId]);
+            $emailChanged = normalize_email($current['pengawas_email'] ?? '') !== $pengawas
+                || normalize_email($current['pencacah_email'] ?? '') !== $pencacah;
+            if ($emailChanged) {
+                $stmtMaster->execute([$pengawas, $pencacah, $subslsId]);
+                $stmtDaily->execute([$pengawas, $pencacah, $subslsId]);
+                $assignmentChanged++;
+            } elseif ($pengawasName !== '' || $pencacahName !== '') {
+                $nameOnlyChanged++;
+            } else {
+                $skipped++;
+                continue;
+            }
             if ($pengawas !== '') {
                 $stmtPengawasUser->execute([$pengawas, $hash, $pengawasName !== '' ? $pengawasName : $pengawas]);
             }
@@ -260,7 +273,13 @@ function import_assignment_template(string $path, array $user): array
         db()->rollBack();
         throw $e;
     }
-    return ['processed' => $processed, 'skipped' => $skipped, 'read' => max(count($rows) - 1, 0)];
+    return [
+        'processed' => $processed,
+        'skipped' => $skipped,
+        'read' => max(count($rows) - 1, 0),
+        'assignment_changed' => $assignmentChanged,
+        'name_only_changed' => $nameOnlyChanged,
+    ];
 }
 
 if (($_GET['action'] ?? '') === 'download') {
@@ -278,7 +297,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             throw new RuntimeException('File harus berformat .xlsx.');
         }
         $result = import_assignment_template($_FILES['template']['tmp_name'], $user);
-        flash('success', 'Template berhasil diproses. Baris dibaca: ' . $result['read'] . ', baris valid diproses: ' . $result['processed'] . ', skip: ' . $result['skipped'] . '.');
+        flash('success', 'Template berhasil diproses. Baris dibaca: ' . $result['read'] . ', baris valid diproses: ' . $result['processed'] . ', ganti email petugas: ' . $result['assignment_changed'] . ', update nama saja: ' . $result['name_only_changed'] . ', skip: ' . $result['skipped'] . '.');
     } catch (Throwable $e) {
         flash('error', $e->getMessage());
     }

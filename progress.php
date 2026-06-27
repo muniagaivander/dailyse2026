@@ -241,6 +241,17 @@ function progress_current_cards(array $user, string $type, array $filters): arra
     return $cards;
 }
 
+function progress_card_value(array $cards, string $field): string
+{
+    $count = (int)($cards[$field] ?? 0);
+    $target = (int)($cards['target'] ?? 0);
+    if ($field === 'target') {
+        return '<span class="d-block">' . number_format($count, 0, ',', '.') . '</span><span class="d-block">&nbsp;</span>';
+    }
+    $pct = $target > 0 ? $count / $target * 100 : 0;
+    return '<span class="d-block">' . number_format($count, 0, ',', '.') . '</span><span class="d-block">(' . number_format($pct, 2, ',', '.') . '%)</span>';
+}
+
 $kabupatenOptions = progress_kabupaten_options($user);
 $emails = progress_email_options($user, $type, $filters);
 if ($filters['email'] && !in_array($filters['email'], array_column($emails, 'value'), true)) {
@@ -391,7 +402,7 @@ render_header('Progress ' . ucfirst($type));
 <?php endif; ?>
 
 <?php if ($showProgress): ?>
-<div class="row"><?php foreach (array_merge(['target'=>'Target'], status_fields()) as $field=>$label): ?><div class="col-md"><div class="small-box progress-stat-card"><div class="inner"><h3><?= number_format((int)$cards[$field],0,',','.') ?></h3><p><?= e($label) ?></p></div></div></div><?php endforeach; ?></div>
+<div class="row"><?php foreach (array_merge(['target'=>'Target'], status_fields()) as $field=>$label): ?><div class="col-md"><div class="small-box progress-stat-card"><div class="inner"><h3><?= progress_card_value($cards, $field) ?></h3><p><?= e($label) ?></p></div></div></div><?php endforeach; ?></div>
 <div class="progress-section-title">Progress by Pendataan</div>
 <div class="card"><div class="card-body"><div class="progress-chart-wrap"><canvas id="pendataanChart"></canvas></div></div></div>
 <div class="progress-section-title">Progress by Status</div>

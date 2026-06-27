@@ -150,6 +150,17 @@ function progress_area_current_cards(array $user, array $filters): array
     return $cards;
 }
 
+function progress_area_card_value(array $cards, string $field): string
+{
+    $count = (int)($cards[$field] ?? 0);
+    $target = (int)($cards['target'] ?? 0);
+    if ($field === 'target') {
+        return '<span class="d-block">' . number_format($count, 0, ',', '.') . '</span><span class="d-block">&nbsp;</span>';
+    }
+    $pct = $target > 0 ? $count / $target * 100 : 0;
+    return '<span class="d-block">' . number_format($count, 0, ',', '.') . '</span><span class="d-block">(' . number_format($pct, 2, ',', '.') . '%)</span>';
+}
+
 $options = progress_area_filter_options($user, $filters);
 if ($filters['kec_id'] && !in_array($filters['kec_id'], array_column($options['kecamatan'], 'value'), true)) {
     $filters['kec_id'] = '';
@@ -254,7 +265,7 @@ render_header('Progress By Daerah');
 <?php if (!$showProgress): ?>
   <div class="alert alert-info">Atur filter wilayah, lalu klik tombol Filter untuk menampilkan progress.</div>
 <?php else: ?>
-  <div class="row"><?php foreach (array_merge(['target'=>'Target'], status_fields()) as $field=>$label): ?><div class="col-md"><div class="small-box progress-stat-card"><div class="inner"><h3><?= number_format((int)$cards[$field],0,',','.') ?></h3><p><?= e($label) ?></p></div></div></div><?php endforeach; ?></div>
+  <div class="row"><?php foreach (array_merge(['target'=>'Target'], status_fields()) as $field=>$label): ?><div class="col-md"><div class="small-box progress-stat-card"><div class="inner"><h3><?= progress_area_card_value($cards, $field) ?></h3><p><?= e($label) ?></p></div></div></div><?php endforeach; ?></div>
   <div class="card">
     <div class="card-header"><strong>Progress Pendataan per <?= e($groupLabel) ?></strong></div>
     <div class="card-body"><div class="progress-chart-wrap"><canvas id="lineChart"></canvas></div></div>

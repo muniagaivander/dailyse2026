@@ -90,6 +90,11 @@ function render_header(string $title): void {
       max-width: 170px;
       object-fit: contain;
     }
+    .app-footer {
+      color: #6b7280;
+      font-size: .9rem;
+      text-align: center;
+    }
     @media (max-width: 767.98px) {
       .header-logo-bps { max-width: 145px; }
       .header-logo-se { max-width: 88px; }
@@ -158,7 +163,11 @@ function render_header(string $title): void {
             <?php endif; ?>
             <?php if ($user['role'] === 'superadmin'): ?>
               <li class="nav-item"><a class="nav-link<?= $isActive(['assignment.php']) ?>" href="assignment.php"><i class="nav-icon fas fa-user-gear"></i><p>Ganti Petugas</p></a></li>
+            <?php endif; ?>
+            <?php if (in_array($user['role'], ['superadmin','admin_kab'], true)): ?>
               <li class="nav-item"><a class="nav-link<?= $isActive(['export_daily.php']) ?>" href="export_daily.php"><i class="nav-icon fas fa-file-csv"></i><p>Export Data Daily</p></a></li>
+            <?php endif; ?>
+            <?php if ($user['role'] === 'superadmin'): ?>
               <li class="nav-item"><a class="nav-link<?= $isActive(['snapshot.php']) ?>" href="snapshot.php"><i class="nav-icon fas fa-calendar-check"></i><p>Isi Snapshot Tanggal</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['public_dashboard_update.php']) ?>" href="public_dashboard_update.php"><i class="nav-icon fas fa-globe"></i><p>Dashboard Publik</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['mobile_update.php']) ?>" href="mobile_update.php"><i class="nav-icon fas fa-bullhorn"></i><p>Edit Pop-up Login</p></a></li>
@@ -194,6 +203,9 @@ $mobileUpdateContent = $showMobileUpdateModal ? mobile_update_content() : [];
 ?>
     </div></section>
   </div>
+  <footer class="main-footer app-footer">
+    <i class="far fa-copyright mr-1"></i>2026 Tim SPBE BPS Provinsi Kalimantan Timur
+  </footer>
 </div>
 <?php if (current_user()): ?>
 <div class="modal fade" id="changePasswordModal" tabindex="-1" role="dialog" aria-labelledby="changePasswordModalLabel" aria-hidden="true">

@@ -30,6 +30,7 @@ $error = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $ids = $_POST['subsls_id'] ?? [];
     $updated = 0;
+    $nameOnly = 0;
     $skipped = 0;
     db()->beginTransaction();
     try {
@@ -49,23 +50,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $skipped++;
                 continue;
             }
-            if (normalize_email($current['pengawas_email']) === $pengawas && normalize_email($current['pencacah_email']) === $pencacah && $pengawasName === '' && $pencacahName === '') {
+            $emailChanged = normalize_email($current['pengawas_email']) !== $pengawas || normalize_email($current['pencacah_email']) !== $pencacah;
+            if (!$emailChanged && $pengawasName === '' && $pencacahName === '') {
                 $skipped++;
                 continue;
             }
-            $stmtMaster->execute([$pengawas,$pencacah,$id]);
-            $stmtDaily->execute([$pengawas,$pencacah,$id]);
+            if ($emailChanged) {
+                $stmtMaster->execute([$pengawas,$pencacah,$id]);
+                $stmtDaily->execute([$pengawas,$pencacah,$id]);
+                $updated++;
+            } else {
+                $nameOnly++;
+            }
             if ($pengawas) {
                 $stmtPengawasUser->execute([$pengawas,password_hash('123', PASSWORD_DEFAULT),$pengawasName !== '' ? $pengawasName : $pengawas]);
             }
             if ($pencacah) {
                 $stmtPencacahUser->execute([$pencacah,password_hash('123', PASSWORD_DEFAULT),$pencacahName !== '' ? $pencacahName : $pencacah]);
             }
-            $updated++;
         }
         sync_petugas_user_active_status();
         db()->commit();
-        flash('success', 'Master petugas berhasil diperbarui. Berubah: ' . $updated . ', dilewati karena sama/tidak ditemukan: ' . $skipped . '.');
+        flash('success', 'Master petugas berhasil diperbarui. Ganti email petugas: ' . $updated . ', update nama saja: ' . $nameOnly . ', dilewati karena sama/tidak ditemukan: ' . $skipped . '.');
     } catch (Throwable $e) {
         db()->rollBack();
         flash('error', $e->getMessage());

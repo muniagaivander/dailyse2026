@@ -1,6 +1,6 @@
 <?php
 require __DIR__ . '/layout.php';
-$user = require_role(['superadmin']);
+$user = require_role(['superadmin', 'admin_kab']);
 
 $filters = [
     'tanggal' => $_GET['tanggal'] ?? today(),
@@ -10,6 +10,9 @@ $filters = [
     'pengawas_email' => normalize_email($_GET['pengawas_email'] ?? ''),
     'pencacah_email' => normalize_email($_GET['pencacah_email'] ?? ''),
 ];
+if ($user['role'] === 'admin_kab') {
+    $filters['kab_id'] = $user['kab_id'];
+}
 
 function export_daily_filter_options(array $filters): array
 {
@@ -332,13 +335,17 @@ render_header('Export Data Daily');
       <label>Tanggal</label>
       <input class="form-control" type="date" name="tanggal" value="<?= e($filters['tanggal']) ?>" required>
     </div>
-    <div class="form-group col-md-2">
-      <label>Kabupaten</label>
-      <select class="form-control" name="kab_id" id="kab_id">
-        <option value="">Semua Kabupaten</option>
-        <?php foreach ($opts['kabupaten'] as $o): ?><option value="<?= e($o['value']) ?>" <?= $filters['kab_id']===$o['value']?'selected':'' ?>><?= e($o['label']) ?></option><?php endforeach; ?>
-      </select>
-    </div>
+    <?php if ($user['role'] === 'superadmin'): ?>
+      <div class="form-group col-md-2">
+        <label>Kabupaten</label>
+        <select class="form-control" name="kab_id" id="kab_id">
+          <option value="">Semua Kabupaten</option>
+          <?php foreach ($opts['kabupaten'] as $o): ?><option value="<?= e($o['value']) ?>" <?= $filters['kab_id']===$o['value']?'selected':'' ?>><?= e($o['label']) ?></option><?php endforeach; ?>
+        </select>
+      </div>
+    <?php else: ?>
+      <input type="hidden" name="kab_id" value="<?= e($filters['kab_id']) ?>">
+    <?php endif; ?>
     <div class="form-group col-md-2">
       <label>Kecamatan</label>
       <select class="form-control" name="kec_id" id="kec_id" <?= $filters['kab_id'] ? '' : 'disabled' ?>>

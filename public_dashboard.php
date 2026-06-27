@@ -245,6 +245,12 @@ $cards = [
     .low-progress .public-table-pct {
       color: inherit;
     }
+    .public-footer {
+      color: #6b7280;
+      font-size: .92rem;
+      padding: 4px 18px 22px;
+      text-align: center;
+    }
     @media (max-width: 767.98px) {
       .public-header {
         grid-template-columns: 1fr;
@@ -444,6 +450,9 @@ $cards = [
 </div>
 <?php endif; ?>
 </main>
+<footer class="public-footer">
+  <i class="far fa-copyright mr-1"></i>2026 Tim SPBE BPS Provinsi Kalimantan Timur
+</footer>
 
 <script>
 const rows = <?= json_encode($rows) ?>;

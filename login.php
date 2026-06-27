@@ -30,6 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Login Daily SE 2026</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
   <style>
     .login-box { width: 720px; max-width: calc(100% - 32px); }
     .login-logo-wrap {
@@ -48,6 +49,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       max-height: 102px;
       max-width: 42%;
       object-fit: contain;
+    }
+    .login-footer {
+      color: #6b7280;
+      font-size: .9rem;
+      margin-top: 12px;
+      text-align: center;
     }
     @media (max-width: 575.98px) {
       .login-logo-wrap {
@@ -78,6 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       </form>
     </div>
   </div>
+  <div class="login-footer"><i class="far fa-copyright mr-1"></i>2026 Tim SPBE BPS Provinsi Kalimantan Timur</div>
 </div>
 </body>
 </html>

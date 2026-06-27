@@ -181,7 +181,7 @@ function wr_email_html(string $email): string
 function wr_rank_table_html(string $title, string $labelHeader, array $rows): string
 {
     $html = '<div class="card"><h2>' . e($title) . '</h2>';
-    $html .= '<table><thead><tr><th>' . e($labelHeader) . '</th><th class="right">Progress Pendataan</th><th class="right">Kenaikan</th><th class="right">Selesai</th></tr></thead><tbody>';
+    $html .= '<table><thead><tr><th>' . e($labelHeader) . '</th><th class="right">Progress Pendataan</th><th class="right">Kenaikan dari Minggu Lalu</th><th class="right">SubSLS Selesai</th></tr></thead><tbody>';
     foreach ($rows as $row) {
         $html .= '<tr><td>' . wr_email_html((string)$row['label']) . '</td>'
             . '<td class="right">' . number_format((float)$row['submit_approve_pct'], 2, ',', '.') . '%</td>'
@@ -356,13 +356,13 @@ function wr_build_html(array $user, string $referenceDate): string
   <div class="grid2">
     <div class="card">
       <h2>5 <?= e($scope['group_label']) ?> Tertinggi</h2>
-      <table><thead><tr><th><?= e($scope['group_label']) ?></th><th class="right">Progress Pendataan</th><th class="right">Kenaikan</th><th class="right">Selesai</th></tr></thead><tbody>
+      <table><thead><tr><th><?= e($scope['group_label']) ?></th><th class="right">Progress Pendataan</th><th class="right">Kenaikan dari Minggu Lalu</th><th class="right">SubSLS Selesai</th></tr></thead><tbody>
       <?php foreach ($topRows as $row): ?><tr><td><?= e($row['label']) ?></td><td class="right"><?= number_format((float)$row['submit_approve_pct'], 2, ',', '.') ?>%</td><td class="right"><?= number_format((float)$row['weekly_delta_pct'], 2, ',', '.') ?> poin</td><td class="right"><?= number_format((float)$row['selesai_pct'], 2, ',', '.') ?>%</td></tr><?php endforeach; ?>
       </tbody></table>
     </div>
     <div class="card">
       <h2>5 <?= e($scope['group_label']) ?> Perlu Perhatian</h2>
-      <table><thead><tr><th><?= e($scope['group_label']) ?></th><th class="right">Progress Pendataan</th><th class="right">Kenaikan</th><th class="right">Selesai</th></tr></thead><tbody>
+      <table><thead><tr><th><?= e($scope['group_label']) ?></th><th class="right">Progress Pendataan</th><th class="right">Kenaikan dari Minggu Lalu</th><th class="right">SubSLS Selesai</th></tr></thead><tbody>
       <?php foreach ($attentionRows as $row): ?><tr><td><?= e($row['label']) ?></td><td class="right"><?= number_format((float)$row['submit_approve_pct'], 2, ',', '.') ?>%</td><td class="right"><?= number_format((float)$row['weekly_delta_pct'], 2, ',', '.') ?> poin</td><td class="right"><?= number_format((float)$row['selesai_pct'], 2, ',', '.') ?>%</td></tr><?php endforeach; ?>
       </tbody></table>
     </div>

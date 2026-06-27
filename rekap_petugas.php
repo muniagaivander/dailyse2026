@@ -101,6 +101,20 @@ function rekap_petugas_rows(array $user, array $filters): array
     return $stmt->fetchAll();
 }
 
+function rekap_petugas_pendataan_count(array $row): int
+{
+    return (int)($row['submitted_by_pencacah'] ?? 0)
+        + (int)($row['rejected_by_pengawas'] ?? 0)
+        + (int)($row['pending_count'] ?? 0)
+        + (int)($row['approved_by_pengawas'] ?? 0);
+}
+
+function rekap_petugas_count_pct_text(int $count, int $target): string
+{
+    $pct = $target > 0 ? $count / $target * 100 : 0;
+    return e(number_format($count, 0, ',', '.')) . ' <span class="rekap-pct">(' . e(number_format($pct, 2, ',', '.')) . '%)</span>';
+}
+
 function rekap_petugas_xlsx_col(int $index): string
 {
     $name = '';
@@ -203,6 +217,7 @@ if (($_GET['action'] ?? '') === 'export') {
     foreach ($fields as $label) {
         $headers[] = $label;
     }
+    $headers[] = 'Progress Pendataan';
     $exportRows = [];
     foreach ($rows as $r) {
         $row = [
@@ -219,6 +234,10 @@ if (($_GET['action'] ?? '') === 'export') {
         foreach (array_keys($fields) as $field) {
             $row[] = (string)(int)$r[$field];
         }
+        $pendataanCount = rekap_petugas_pendataan_count($r);
+        $target = (int)$r['target'];
+        $pendataanPct = $target > 0 ? $pendataanCount / $target * 100 : 0;
+        $row[] = number_format($pendataanCount, 0, ',', '.') . ' (' . number_format($pendataanPct, 2, ',', '.') . '%)';
         $exportRows[] = $row;
     }
     rekap_petugas_export($headers, $exportRows, $format, $filters['petugas_type']);
@@ -226,6 +245,21 @@ if (($_GET['action'] ?? '') === 'export') {
 
 render_header('Rekap Petugas');
 ?>
+<style>
+  .rekap-info-section {
+    background: linear-gradient(90deg, #fff7ed 0%, #fffbeb 100%);
+    border-left: 5px solid #f59e0b;
+    border-radius: 8px;
+    color: #92400e;
+    font-weight: 800;
+    margin-bottom: 16px;
+    padding: 10px 14px;
+  }
+  .rekap-pct {
+    color: #2563eb;
+    font-weight: 700;
+  }
+</style>
 <form class="card card-body mb-3" method="get">
   <div class="form-row align-items-end">
     <div class="form-group col-12 col-md-2">
@@ -263,6 +297,7 @@ render_header('Rekap Petugas');
     <div class="form-group col-12 col-md-1"><button class="btn btn-primary btn-block">Filter</button></div>
   </div>
 </form>
+<div class="rekap-info-section"><em>Progress Pendataan = Submit+Reject+Pending+Approve</em></div>
 
 <div class="card">
   <div class="card-header py-2 d-flex justify-content-between align-items-center">
@@ -293,6 +328,7 @@ render_header('Rekap Petugas');
           <th class="text-right">Jumlah SubSLS</th>
           <th class="text-right">Target</th>
           <?php foreach ($fields as $label): ?><th class="text-right"><?= e($label) ?></th><?php endforeach; ?>
+          <th class="text-right">Progress Pendataan</th>
         </tr>
       </thead>
       <tbody>
@@ -306,10 +342,11 @@ render_header('Rekap Petugas');
             <td class="text-right"><?= number_format((int)$r['subsls_total'], 0, ',', '.') ?></td>
             <td class="text-right"><?= number_format((int)$r['target'], 0, ',', '.') ?></td>
             <?php foreach (array_keys($fields) as $field): ?><td class="text-right"><?= number_format((int)$r[$field], 0, ',', '.') ?></td><?php endforeach; ?>
+            <td class="text-right"><?= rekap_petugas_count_pct_text(rekap_petugas_pendataan_count($r), (int)$r['target']) ?></td>
           </tr>
         <?php endforeach; ?>
         <?php if (!$displayRows): ?>
-          <tr><td colspan="<?= 6 + count($fields) + ($filters['petugas_type'] === 'pcl' ? 1 : 0) ?>" class="text-center text-muted">Tidak ada data petugas pada filter ini.</td></tr>
+          <tr><td colspan="<?= 7 + count($fields) + ($filters['petugas_type'] === 'pcl' ? 1 : 0) ?>" class="text-center text-muted">Tidak ada data petugas pada filter ini.</td></tr>
         <?php endif; ?>
       </tbody>
     </table>
