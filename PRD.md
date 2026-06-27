@@ -238,6 +238,16 @@ Dashboard harus menampilkan label persen pada bar Progress Pendataan.
 
 Dashboard harus menyediakan export CSV/XLSX untuk data grafik/tabel.
 
+Dashboard harus menampilkan maksimal 10 Performa Sementara dan 10 Performa Mingguan untuk PML maupun PCL.
+
+Performa Sementara menggunakan target internal 15 Agustus 2026 dan menggabungkan Indeks Ketepatan Laju, Konsistensi Harian, serta Momentum 7 Hari.
+
+Performa Mingguan hanya menggunakan periode terakhir yang sudah selesai, dimulai dari minggu 15-21 Juni 2026. Perhitungan menggabungkan Pencapaian Target Mingguan, Konsistensi Harian, dan Kemampuan Mengejar Sisa Target.
+
+Hari tanpa tambahan progress harus bernilai nol. Petugas yang telah selesai sebelum awal minggu tidak boleh masuk ranking mingguan.
+
+Superadmin dan admin kabupaten harus dapat mengekspor seluruh Performa Sementara sesuai jenis petugas pada tab aktif. Cakupan export harus mengikuti wilayah akun.
+
 ### FR-04 Dashboard Publik
 
 Sistem harus menyediakan URL publik `/6400` dan `/64xx`.

@@ -366,18 +366,48 @@ SubSLS Selesai / Total SubSLS * 100
 
 ### Performa Pengawas dan Pencacah
 
-Menampilkan:
+Setiap tab PML/PCL menampilkan dua peringkat, masing-masing maksimal 10 petugas:
 
-- Peringkat terbaik.
-- Daftar perlu perhatian.
+1. Performa Sementara.
+2. Performa Mingguan.
+
+Performa Sementara dihitung sejak 15 Juni 2026 sampai tanggal data berjalan, dengan target internal selesai 15 Agustus 2026:
+
+```text
+50% Indeks Ketepatan Laju
+30% Konsistensi Harian
+20% Momentum 7 Hari
+```
+
+Performa Mingguan hanya memakai minggu terakhir yang sudah selesai. Minggu pertama adalah 15-21 Juni, minggu kedua 22-28 Juni, dan seterusnya sampai periode final 31 Agustus.
+
+```text
+50% Pencapaian Target Mingguan
+30% Konsistensi Harian dalam Minggu
+20% Kemampuan Mengejar Sisa Target
+```
+
+Hari tanpa tambahan progress tetap dihitung nol. Petugas yang sudah selesai sebelum awal periode tidak dimasukkan ke peringkat mingguan.
+
+Tombol Excel pada Performa Sementara mengikuti tab aktif. Tab Pengawas mengekspor seluruh pengawas dan tab Pencacah mengekspor seluruh pencacah. Superadmin mendapat cakupan provinsi, sedangkan admin kabupaten hanya mendapat wilayah kabupatennya.
+
+Kolom performa mencakup:
+
 - Kode kabupaten.
 - Wilayah kerja.
-- Progress Pendataan.
-- Progress selesai SubSLS.
 - Target.
-- Total SubSLS.
+- Progress atau tambahan mingguan.
+- Ekspektasi/target periode.
+- Rata-rata harian.
+- Standar deviasi.
+- Konsistensi.
+- Momentum.
+- Prediksi selesai.
+- Skor.
 
 Untuk superadmin dan viewer provinsi, tersedia tab `6400` untuk Kalimantan Timur dan tab kabupaten.
+
+Daftar perlu perhatian tetap ditampilkan setelah tabel performa.
 
 Kriteria perlu perhatian mengikuti target tanggal:
 

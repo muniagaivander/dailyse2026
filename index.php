@@ -231,6 +231,7 @@ function dashboard_pendataan_count(array $row): int
 
 function dashboard_datetime_label(?string $datetime): string
 {
+    global $APP_TIMEZONE, $DB_TIMEZONE;
     if (!$datetime) {
         return '-';
     }
@@ -248,11 +249,18 @@ function dashboard_datetime_label(?string $datetime): string
         '11' => 'November',
         '12' => 'Desember',
     ];
-    $time = strtotime($datetime);
-    if (!$time) {
+    try {
+        $sourceTimezone = new DateTimeZone($DB_TIMEZONE ?: 'UTC');
+        $targetTimezone = new DateTimeZone($APP_TIMEZONE ?: 'Asia/Makassar');
+        $date = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $datetime, $sourceTimezone);
+        if (!$date) {
+            $date = new DateTimeImmutable($datetime, $sourceTimezone);
+        }
+        $date = $date->setTimezone($targetTimezone);
+    } catch (Throwable $e) {
         return '-';
     }
-    return date('d', $time) . ' ' . $months[date('m', $time)] . ' ' . date('Y H:i', $time) . ' WITA';
+    return $date->format('d') . ' ' . $months[$date->format('m')] . ' ' . $date->format('Y H:i') . ' WITA';
 }
 
 function dashboard_latest_daily_status_label(): string
@@ -264,10 +272,10 @@ function dashboard_latest_daily_status_label(): string
 function dashboard_rank_badge(int $rank): string
 {
     return match ($rank) {
-        1 => '<span class="rank-badge rank-1"><i class="fas fa-trophy mr-1"></i>Peringkat 1</span>',
-        2 => '<span class="rank-badge rank-2"><i class="fas fa-medal mr-1"></i>Peringkat 2</span>',
-        3 => '<span class="rank-badge rank-3"><i class="fas fa-award mr-1"></i>Peringkat 3</span>',
-        default => '<span class="rank-badge">#' . $rank . '</span>',
+        1 => '<span class="rank-badge rank-1"><i class="fas fa-trophy mr-1"></i>Rank 1</span>',
+        2 => '<span class="rank-badge rank-2"><i class="fas fa-medal mr-1"></i>Rank 2</span>',
+        3 => '<span class="rank-badge rank-3"><i class="fas fa-award mr-1"></i>Rank 3</span>',
+        default => '<span class="rank-badge">Rank ' . $rank . '</span>',
     };
 }
 
@@ -325,6 +333,375 @@ function performance_attention_rows(string $roleField, string $kabId, float $thr
 {
     $rows = performance_rows($roleField, $kabId, 'asc');
     return array_values(array_filter($rows, fn($row) => (float)$row['selesai_pct'] < $threshold));
+}
+
+function performance_date_label(string $date): string
+{
+    static $months = [
+        '01' => 'Januari', '02' => 'Februari', '03' => 'Maret', '04' => 'April',
+        '05' => 'Mei', '06' => 'Juni', '07' => 'Juli', '08' => 'Agustus',
+        '09' => 'September', '10' => 'Oktober', '11' => 'November', '12' => 'Desember',
+    ];
+    [$year, $month, $day] = explode('-', $date);
+    return (int)$day . ' ' . ($months[$month] ?? $month) . ' ' . $year;
+}
+
+function performance_date_count(string $start, string $end): int
+{
+    if ($end < $start) {
+        return 0;
+    }
+    return (int)((strtotime($end) - strtotime($start)) / 86400) + 1;
+}
+
+function performance_date_add(string $date, int $days): string
+{
+    return date('Y-m-d', strtotime($date . ' ' . ($days >= 0 ? '+' : '') . $days . ' days'));
+}
+
+function performance_period_overlap_days(string $start, string $end, string $rangeStart, string $rangeEnd): int
+{
+    $overlapStart = max($start, $rangeStart);
+    $overlapEnd = min($end, $rangeEnd);
+    return performance_date_count($overlapStart, $overlapEnd);
+}
+
+function performance_latest_completed_week(string $currentDate): ?array
+{
+    $campaignStart = '2026-06-15';
+    $campaignEnd = '2026-08-31';
+    $cursor = $campaignStart;
+    $latest = null;
+    $week = 1;
+    while ($cursor <= $campaignEnd) {
+        $end = min(performance_date_add($cursor, 6), $campaignEnd);
+        if ($end >= $currentDate) {
+            break;
+        }
+        $latest = ['number' => $week, 'start' => $cursor, 'end' => $end];
+        $cursor = performance_date_add($end, 1);
+        $week++;
+    }
+    return $latest;
+}
+
+function performance_series(string $start, string $end, array $daily): array
+{
+    $series = [];
+    if ($end < $start) {
+        return $series;
+    }
+    for ($date = $start; $date <= $end; $date = performance_date_add($date, 1)) {
+        $series[$date] = (float)($daily[$date] ?? 0);
+    }
+    return $series;
+}
+
+function performance_standard_deviation(array $values): float
+{
+    if (!$values) {
+        return 0;
+    }
+    $mean = array_sum($values) / count($values);
+    $variance = 0.0;
+    foreach ($values as $value) {
+        $variance += ($value - $mean) ** 2;
+    }
+    return sqrt($variance / count($values));
+}
+
+function performance_consistency_score(array $values): array
+{
+    if (!$values) {
+        return ['average' => 0.0, 'stddev' => 0.0, 'score' => 0.0];
+    }
+    $average = array_sum($values) / count($values);
+    $stddev = performance_standard_deviation($values);
+    $score = $average > 0 ? 100 / (1 + ($stddev / $average)) : 0;
+    return ['average' => $average, 'stddev' => $stddev, 'score' => $score];
+}
+
+function performance_completion_date(array $daily, int $target, string $start, string $end): ?string
+{
+    if ($target <= 0) {
+        return null;
+    }
+    $cumulative = 0.0;
+    foreach (performance_series($start, $end, $daily) as $date => $delta) {
+        $cumulative += $delta;
+        if ($cumulative >= $target) {
+            return $date;
+        }
+    }
+    return null;
+}
+
+function performance_projected_finish(int $progress, int $target, float $recentAverage, string $asOf): string
+{
+    if ($target <= 0) {
+        return '-';
+    }
+    if ($progress >= $target) {
+        return 'Selesai';
+    }
+    if ($recentAverage <= 0) {
+        return 'Belum dapat diproyeksikan';
+    }
+    $days = (int)ceil(($target - $progress) / $recentAverage);
+    return performance_date_label(performance_date_add($asOf, max(1, $days)));
+}
+
+function performance_metric_row(array $meta, array $daily, string $asOf): array
+{
+    $campaignStart = '2026-06-15';
+    $internalDeadline = '2026-08-15';
+    $campaignEnd = '2026-08-31';
+    $target = (int)$meta['target'];
+    $progress = min($target, max(0, (int)$meta['progress_count']));
+    $planEnd = min($asOf, $internalDeadline);
+    $elapsedPlanDays = performance_date_count($campaignStart, $planEnd);
+    $totalPlanDays = performance_date_count($campaignStart, $internalDeadline);
+    $expected = $totalPlanDays > 0 ? $target * $elapsedPlanDays / $totalPlanDays : 0;
+    $pace = $expected > 0 ? min(120, $progress / $expected * 100) : 0;
+
+    $completionDate = performance_completion_date($daily, $target, $campaignStart, $asOf);
+    $observationEnd = $completionDate ?: $asOf;
+    $observationDays = max(1, performance_date_count($campaignStart, $observationEnd));
+    $outputs = array_map(fn($value) => max(0, $value), array_values(performance_series($campaignStart, $observationEnd, $daily)));
+    $consistency = performance_consistency_score($outputs);
+    $averagePerDay = $progress / $observationDays;
+    $reliability = min(1, $observationDays / 7);
+
+    $recentStart = max($campaignStart, performance_date_add($asOf, -6));
+    $recentOutputs = array_map(fn($value) => max(0, $value), array_values(performance_series($recentStart, $asOf, $daily)));
+    $recentAverage = $recentOutputs ? array_sum($recentOutputs) / count($recentOutputs) : 0;
+    $remaining = max(0, $target - $progress);
+    $paceDeadline = $asOf <= $internalDeadline ? $internalDeadline : $campaignEnd;
+    $remainingDays = max(1, performance_date_count(performance_date_add($asOf, 1), $paceDeadline));
+    $requiredDaily = $remaining / $remainingDays;
+    $momentum = $remaining <= 0 ? 120 : ($requiredDaily > 0 ? min(120, $recentAverage / $requiredDaily * 100) : 0);
+
+    $score = min(100, ($pace * 0.50 + $consistency['score'] * 0.30 + $momentum * 0.20) * $reliability);
+    if ($progress >= $target && $target > 0) {
+        $status = $completionDate && $completionDate <= $internalDeadline ? 'Selesai sebelum target' : 'Selesai';
+    } elseif ($pace >= 100) {
+        $status = 'On Track';
+    } elseif ($pace >= 85) {
+        $status = 'Perlu Didorong';
+    } else {
+        $status = 'Tertinggal';
+    }
+
+    return $meta + [
+        'progress_count' => $progress,
+        'expected_count' => $expected,
+        'pace_score' => $pace,
+        'average_per_day' => $averagePerDay,
+        'stddev' => $consistency['stddev'],
+        'consistency_score' => $consistency['score'],
+        'momentum_score' => $momentum,
+        'projected_finish' => $completionDate ? performance_date_label($completionDate) : performance_projected_finish($progress, $target, $recentAverage, $asOf),
+        'performance_score' => $score,
+        'performance_status' => $status,
+        'observation_days' => $observationDays,
+    ];
+}
+
+function performance_weekly_metric_row(array $meta, array $daily, array $period): ?array
+{
+    $campaignStart = '2026-06-15';
+    $internalDeadline = '2026-08-15';
+    $campaignEnd = '2026-08-31';
+    $target = (int)$meta['target'];
+    $progressBefore = 0.0;
+    foreach ($daily as $date => $delta) {
+        if ($date < $period['start']) {
+            $progressBefore += $delta;
+        }
+    }
+    $progressBefore = min($target, max(0, $progressBefore));
+    $remainingAtStart = max(0, $target - $progressBefore);
+    if ($target <= 0 || $remainingAtStart <= 0) {
+        return null;
+    }
+
+    $weeklySeries = performance_series($period['start'], $period['end'], $daily);
+    $weeklyOutputs = array_map(fn($value) => max(0, $value), array_values($weeklySeries));
+    $weeklyCount = max(0, array_sum($weeklySeries));
+    $weeklyDays = max(1, count($weeklySeries));
+    $weeklyAverage = $weeklyCount / $weeklyDays;
+    $consistency = performance_consistency_score($weeklyOutputs);
+
+    $plannedDays = performance_period_overlap_days($period['start'], $period['end'], $campaignStart, $internalDeadline);
+    if ($plannedDays > 0) {
+        $weeklyTarget = $target / performance_date_count($campaignStart, $internalDeadline) * $plannedDays;
+        $paceDeadline = $internalDeadline;
+    } else {
+        $recoveryDays = max(1, performance_date_count($period['start'], $campaignEnd));
+        $weeklyTarget = $remainingAtStart / $recoveryDays * $weeklyDays;
+        $paceDeadline = $campaignEnd;
+    }
+    $pace = $weeklyTarget > 0 ? min(120, $weeklyCount / $weeklyTarget * 100) : 0;
+    $requiredDays = max(1, performance_date_count($period['start'], $paceDeadline));
+    $requiredDaily = $remainingAtStart / $requiredDays;
+    $momentum = $requiredDaily > 0 ? min(120, $weeklyAverage / $requiredDaily * 100) : 120;
+    $score = min(100, $pace * 0.50 + $consistency['score'] * 0.30 + $momentum * 0.20);
+
+    return $meta + [
+        'progress_before' => (int)round($progressBefore),
+        'weekly_count' => (int)round($weeklyCount),
+        'weekly_target' => $weeklyTarget,
+        'average_per_day' => $weeklyAverage,
+        'stddev' => $consistency['stddev'],
+        'consistency_score' => $consistency['score'],
+        'momentum_score' => $momentum,
+        'performance_score' => $score,
+    ];
+}
+
+function performance_metric_dataset(string $roleField, array $user, bool $limitTop = true): array
+{
+    if (!in_array($roleField, ['pengawas_email', 'pencacah_email'], true)) {
+        throw new InvalidArgumentException('Role petugas tidak valid.');
+    }
+    $campaignStart = '2026-06-15';
+    $asOf = min(max(today(), $campaignStart), '2026-08-31');
+    $weekPeriod = performance_latest_completed_week(today());
+    $restrictKab = in_array($user['role'], ['admin_kab', 'viewer_kab'], true);
+    $kabWhere = $restrictKab ? ' AND k.id=?' : '';
+    $metaParams = $restrictKab ? [$user['kab_id']] : [];
+
+    $stmt = db()->prepare("SELECT
+            k.id kab_id,
+            ms.$roleField email,
+            u.name petugas_name,
+            GROUP_CONCAT(DISTINCT d.nmdesa ORDER BY kc.kdkec, d.kddesa SEPARATOR ', ') wilayah_kerja,
+            COUNT(ms.id) subsls_total,
+            COALESCE(SUM(ss.target),0) target,
+            COALESCE(SUM(ss.submitted_by_pencacah + ss.rejected_by_pengawas + ss.pending_count + ss.approved_by_pengawas),0) progress_count
+        FROM master_subsls ms
+        JOIN master_sls sl ON sl.id=ms.sls_id
+        JOIN master_desa d ON d.id=sl.desa_id
+        JOIN master_kec kc ON kc.id=d.kec_id
+        JOIN master_kab k ON k.id=kc.kab_id
+        LEFT JOIN users u ON u.email=ms.$roleField
+        LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
+        WHERE ms.$roleField IS NOT NULL AND ms.$roleField <> '' $kabWhere
+        GROUP BY k.id, ms.$roleField, u.name
+        ORDER BY k.id, u.name, ms.$roleField");
+    $stmt->execute($metaParams);
+    $metaRows = $stmt->fetchAll();
+
+    $scopes = [];
+    foreach ($metaRows as $row) {
+        $email = normalize_email((string)$row['email']);
+        $kabId = (string)$row['kab_id'];
+        $meta = [
+            'email' => $email,
+            'petugas_name' => $row['petugas_name'] ?? '',
+            'kab_codes' => $kabId,
+            'wilayah_kerja' => $row['wilayah_kerja'] ?? '',
+            'subsls_total' => (int)$row['subsls_total'],
+            'target' => (int)$row['target'],
+            'progress_count' => (int)$row['progress_count'],
+        ];
+        $scopes[$kabId][$email] = $meta;
+        if (!$restrictKab) {
+            if (!isset($scopes['6400'][$email])) {
+                $scopes['6400'][$email] = $meta;
+            } else {
+                $province =& $scopes['6400'][$email];
+                $province['kab_codes'] .= ', ' . $kabId;
+                $province['wilayah_kerja'] .= ($province['wilayah_kerja'] !== '' && $row['wilayah_kerja'] !== '' ? ', ' : '') . ($row['wilayah_kerja'] ?? '');
+                $province['subsls_total'] += (int)$row['subsls_total'];
+                $province['target'] += (int)$row['target'];
+                $province['progress_count'] += (int)$row['progress_count'];
+                unset($province);
+            }
+        }
+    }
+
+    $dailyKabFilter = $restrictKab ? ' AND ds.kab_id=?' : '';
+    $dailyParams = [$campaignStart, $asOf];
+    if ($restrictKab) {
+        $dailyParams[] = $user['kab_id'];
+    }
+    $stmt = db()->prepare("WITH status_history AS (
+            SELECT
+                ds.kab_id,
+                ds.$roleField email,
+                ds.tanggal,
+                (
+                    ds.submitted_by_pencacah + ds.rejected_by_pengawas + ds.pending_count + ds.approved_by_pengawas
+                ) - LAG(
+                    ds.submitted_by_pencacah + ds.rejected_by_pengawas + ds.pending_count + ds.approved_by_pengawas,
+                    1,
+                    0
+                ) OVER (PARTITION BY ds.subsls_id ORDER BY ds.tanggal, ds.id) daily_delta
+            FROM daily_status ds
+            WHERE ds.tanggal BETWEEN ? AND ?
+              AND ds.$roleField IS NOT NULL
+              AND ds.$roleField <> ''
+              $dailyKabFilter
+        )
+        SELECT kab_id, email, tanggal, SUM(daily_delta) daily_delta
+        FROM status_history
+        GROUP BY kab_id, email, tanggal
+        ORDER BY tanggal, kab_id, email");
+    $stmt->execute($dailyParams);
+    $dailyScopes = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $kabId = (string)$row['kab_id'];
+        $email = normalize_email((string)$row['email']);
+        $date = (string)$row['tanggal'];
+        $delta = (float)$row['daily_delta'];
+        $dailyScopes[$kabId][$email][$date] = ($dailyScopes[$kabId][$email][$date] ?? 0) + $delta;
+        if (!$restrictKab) {
+            $dailyScopes['6400'][$email][$date] = ($dailyScopes['6400'][$email][$date] ?? 0) + $delta;
+        }
+    }
+
+    $overall = [];
+    $weekly = [];
+    foreach ($scopes as $scope => $petugasRows) {
+        foreach ($petugasRows as $email => $meta) {
+            $daily = $dailyScopes[$scope][$email] ?? [];
+            $overall[$scope][] = performance_metric_row($meta, $daily, $asOf);
+            if ($weekPeriod) {
+                $weeklyRow = performance_weekly_metric_row($meta, $daily, $weekPeriod);
+                if ($weeklyRow) {
+                    $weekly[$scope][] = $weeklyRow;
+                }
+            }
+        }
+        usort($overall[$scope], fn($a, $b) =>
+            ($b['performance_score'] <=> $a['performance_score'])
+            ?: ($b['consistency_score'] <=> $a['consistency_score'])
+            ?: ($b['average_per_day'] <=> $a['average_per_day'])
+            ?: strcmp($a['email'], $b['email'])
+        );
+        if ($limitTop) {
+            $overall[$scope] = array_slice($overall[$scope], 0, 10);
+        }
+        if (isset($weekly[$scope])) {
+            usort($weekly[$scope], fn($a, $b) =>
+                ($b['performance_score'] <=> $a['performance_score'])
+                ?: ($b['consistency_score'] <=> $a['consistency_score'])
+                ?: ($b['weekly_count'] <=> $a['weekly_count'])
+                ?: strcmp($a['email'], $b['email'])
+            );
+            if ($limitTop) {
+                $weekly[$scope] = array_slice($weekly[$scope], 0, 10);
+            }
+        }
+    }
+
+    return [
+        'as_of' => $asOf,
+        'week_period' => $weekPeriod,
+        'overall' => $overall,
+        'weekly' => $weekly,
+    ];
 }
 
 function dashboard_kab_options_for_performance(array $user): array
@@ -485,6 +862,41 @@ function dashboard_chart_export_payload(array $rows, array $fields, string $tab)
     return [$headers, $out];
 }
 
+if (($_GET['action'] ?? '') === 'export_performance_temporary'
+    && in_array($user['role'], ['superadmin', 'admin_kab'], true)) {
+    $type = ($_GET['type'] ?? '') === 'pencacah' ? 'pencacah' : 'pengawas';
+    $scopeId = $user['role'] === 'superadmin' ? '6400' : (string)$user['kab_id'];
+    $roleField = $type === 'pencacah' ? 'pencacah_email' : 'pengawas_email';
+    $metricData = performance_metric_dataset($roleField, $user, false);
+    $rows = $metricData['overall'][$scopeId] ?? [];
+    $exportRows = [];
+    foreach ($rows as $rankIndex => $row) {
+        $exportRows[] = [
+            $rankIndex + 1,
+            petugas_label($row['email'], $row['petugas_name'] ?? ''),
+            $row['kab_codes'] ?? '',
+            $row['wilayah_kerja'] ?? '',
+            $row['target'],
+            $row['progress_count'],
+            round((float)$row['expected_count'], 2),
+            round((float)$row['pace_score'], 2),
+            round((float)$row['average_per_day'], 2),
+            round((float)$row['stddev'], 2),
+            round((float)$row['consistency_score'], 2),
+            round((float)$row['momentum_score'], 2),
+            $row['projected_finish'],
+            $row['performance_status'],
+            round((float)$row['performance_score'], 2),
+        ];
+    }
+    dashboard_export_rows(
+        ['rank', 'petugas', 'kode_kab', 'wilayah_kerja', 'target', 'progress', 'ekspektasi_hari_ini', 'indeks_laju_pct', 'rata_rata_per_hari', 'standar_deviasi', 'konsistensi_pct', 'momentum_7_hari_pct', 'prediksi_selesai', 'status', 'skor'],
+        $exportRows,
+        'performa_sementara_' . $type . '_' . $scopeId . '_' . date('Ymd_His'),
+        'xlsx'
+    );
+}
+
 if (($_GET['action'] ?? '') === 'export_attention' && $canSeePerformance) {
     $kabId = (string)($_GET['kab_id'] ?? '');
     $type = ($_GET['type'] ?? '') === 'pencacah' ? 'pencacah' : 'pengawas';
@@ -544,6 +956,11 @@ $completionPct = $totals['subsls_total'] > 0 ? round($totals['selesai_count'] / 
 $submitApproveCount = dashboard_pendataan_count($totals);
 $submitApprovePct = $totals['target'] > 0 ? round($submitApproveCount / (int)$totals['target'] * 100, 2) : 0;
 $performanceKabOptions = $canSeePerformance ? dashboard_kab_options_for_performance($user) : [];
+$performanceMetricData = null;
+if ($canSeePerformance && in_array($activeTab, ['performa_pengawas', 'performa_pencacah'], true)) {
+    $metricRoleField = $activeTab === 'performa_pengawas' ? 'pengawas_email' : 'pencacah_email';
+    $performanceMetricData = performance_metric_dataset($metricRoleField, $user);
+}
 
 function dashboard_count_pct_text(int $count, float $pct): string
 {
@@ -630,6 +1047,27 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
 .rank-1 { background: #fef3c7; color: #92400e; }
 .rank-2 { background: #e5e7eb; color: #374151; }
 .rank-3 { background: #ffedd5; color: #9a3412; }
+.performance-section-title {
+  align-items: center;
+  background: #eff6ff;
+  border-left: 5px solid #2563eb;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+  margin: 0 0 10px;
+  padding: 9px 12px;
+}
+.performance-status {
+  background: #e5e7eb;
+  border-radius: 999px;
+  color: #374151;
+  display: inline-block;
+  font-size: .78rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
 .data-update-dot {
   background: #22c55e;
   border-radius: 999px;
@@ -792,7 +1230,7 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
       ['label' => 'Pending', 'value' => dashboard_count_pct_text((int)$totals['pending_count'], $targetTotal ? (int)$totals['pending_count'] / $targetTotal * 100 : 0)],
       ['label' => 'Approve', 'value' => dashboard_count_pct_text((int)$totals['approved_by_pengawas'], $targetTotal ? (int)$totals['approved_by_pengawas'] / $targetTotal * 100 : 0)],
       ['label' => 'Progress Pendataan', 'value' => dashboard_count_pct_text($submitApproveCount, $submitApprovePct)],
-      ['label' => 'Selesai', 'value' => dashboard_count_pct_text((int)$totals['selesai_count'], $completionPct)],
+      ['label' => 'SubSLS Selesai', 'value' => dashboard_count_pct_text((int)$totals['selesai_count'], $completionPct)],
       ['label' => 'Total SubSLS', 'value' => dashboard_count_only_text((int)$totals['subsls_total'])],
   ];
 ?>
@@ -1020,16 +1458,119 @@ if (pengawas) {
   <div class="card-body">
     <div class="tab-content">
       <?php foreach ($performanceKabOptions as $i => $kab): ?>
-        <?php $topRows = performance_rows($roleField, $kab['value'], 'desc'); $attentionRows = performance_attention_rows($roleField, $kab['value'], (float)$attentionThreshold['pct']); ?>
+        <?php
+          $topRows = $performanceMetricData['overall'][$kab['value']] ?? [];
+          $weeklyRows = $performanceMetricData['weekly'][$kab['value']] ?? [];
+          $weeklyPeriod = $performanceMetricData['week_period'] ?? null;
+          $attentionRows = performance_attention_rows($roleField, $kab['value'], (float)$attentionThreshold['pct']);
+        ?>
         <div class="tab-pane fade <?= $i===0?'show active':'' ?>" id="kab-<?= e($kab['value']) ?>" role="tabpanel">
-          <h5>10 <?= e($labelRole) ?> Terbaik</h5>
+          <h5 class="performance-section-title">
+            <span>
+              10 Performa Sementara <?= e($labelRole) ?>
+              <small class="text-muted ml-2">Data sampai <?= e(performance_date_label($performanceMetricData['as_of'])) ?></small>
+            </span>
+            <?php if (in_array($user['role'], ['superadmin', 'admin_kab'], true)): ?>
+              <a class="btn btn-success btn-sm" href="?action=export_performance_temporary&type=<?= e($attentionType) ?>">
+                <i class="fas fa-file-excel mr-1"></i>Download Semua <?= e($labelRole) ?>
+              </a>
+            <?php endif; ?>
+          </h5>
           <div class="table-responsive mb-4">
             <table class="table table-sm table-bordered table-striped mb-0">
-              <thead><tr><th>Peringkat</th><th>Email</th><th>Kode Kab</th><th>Wilayah Kerja</th><th>Progress Pendataan</th><th>Selesai SubSLS</th><th>Target</th><th>Total SubSLS</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Petugas</th>
+                  <th>Kode Kab</th>
+                  <th>Wilayah Kerja</th>
+                  <th>Target</th>
+                  <th>Progress</th>
+                  <th>Ekspektasi Hari Ini</th>
+                  <th>Indeks Laju</th>
+                  <th>Rata-rata/Hari</th>
+                  <th>Standar Deviasi</th>
+                  <th>Konsistensi</th>
+                  <th>Momentum 7 Hari</th>
+                  <th>Prediksi Selesai</th>
+                  <th>Status</th>
+                  <th>Skor</th>
+                </tr>
+              </thead>
               <tbody>
               <?php foreach ($topRows as $rankIndex => $r): ?>
-                <tr><td><?= dashboard_rank_badge($rankIndex + 1) ?></td><td><?= e(petugas_label($r['email'], $r['petugas_name'] ?? '')) ?></td><td><?= e($r['kab_codes'] ?: '-') ?></td><td><?= e($r['wilayah_kerja'] ?: '-') ?></td><td><?= number_format((float)$r['submit_approve_pct'],2,',','.') ?>%</td><td><?= number_format((float)$r['selesai_pct'],2,',','.') ?>%</td><td><?= number_format((int)$r['target'],0,',','.') ?></td><td><?= number_format((int)$r['subsls_total'],0,',','.') ?></td></tr>
+                <tr>
+                  <td><?= dashboard_rank_badge($rankIndex + 1) ?></td>
+                  <td><?= e(petugas_label($r['email'], $r['petugas_name'] ?? '')) ?></td>
+                  <td><?= e($r['kab_codes'] ?: '-') ?></td>
+                  <td><?= e($r['wilayah_kerja'] ?: '-') ?></td>
+                  <td class="text-right"><?= number_format((int)$r['target'],0,',','.') ?></td>
+                  <td class="text-right"><?= number_format((int)$r['progress_count'],0,',','.') ?></td>
+                  <td class="text-right"><?= number_format((float)$r['expected_count'],2,',','.') ?></td>
+                  <td class="text-right"><?= number_format((float)$r['pace_score'],2,',','.') ?>%</td>
+                  <td class="text-right"><?= number_format((float)$r['average_per_day'],2,',','.') ?></td>
+                  <td class="text-right"><?= number_format((float)$r['stddev'],2,',','.') ?></td>
+                  <td class="text-right"><?= number_format((float)$r['consistency_score'],2,',','.') ?>%</td>
+                  <td class="text-right"><?= number_format((float)$r['momentum_score'],2,',','.') ?>%</td>
+                  <td><?= e($r['projected_finish']) ?></td>
+                  <td><span class="performance-status"><?= e($r['performance_status']) ?></span></td>
+                  <td class="text-right font-weight-bold"><?= number_format((float)$r['performance_score'],2,',','.') ?></td>
+                </tr>
               <?php endforeach; ?>
+              <?php if (!$topRows): ?>
+                <tr><td colspan="15" class="text-center text-muted">Belum ada data performa sementara.</td></tr>
+              <?php endif; ?>
+              </tbody>
+            </table>
+          </div>
+          <h5 class="performance-section-title">
+            <span>10 Performa Mingguan <?= e($labelRole) ?></span>
+            <?php if ($weeklyPeriod): ?>
+              <small class="text-muted">Minggu <?= (int)$weeklyPeriod['number'] ?>: <?= e(performance_date_label($weeklyPeriod['start'])) ?> - <?= e(performance_date_label($weeklyPeriod['end'])) ?></small>
+            <?php else: ?>
+              <small class="text-muted">Belum ada periode mingguan yang selesai.</small>
+            <?php endif; ?>
+          </h5>
+          <div class="table-responsive mb-4">
+            <table class="table table-sm table-bordered table-striped mb-0">
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Petugas</th>
+                  <th>Kode Kab</th>
+                  <th>Wilayah Kerja</th>
+                  <th>Target</th>
+                  <th>Progress Awal Minggu</th>
+                  <th>Tambahan Mingguan</th>
+                  <th>Target Mingguan</th>
+                  <th>Rata-rata/Hari</th>
+                  <th>Standar Deviasi</th>
+                  <th>Konsistensi</th>
+                  <th>Kemampuan Mengejar</th>
+                  <th>Skor</th>
+                </tr>
+              </thead>
+              <tbody>
+              <?php foreach ($weeklyRows as $rankIndex => $r): ?>
+                <tr>
+                  <td><?= dashboard_rank_badge($rankIndex + 1) ?></td>
+                  <td><?= e(petugas_label($r['email'], $r['petugas_name'] ?? '')) ?></td>
+                  <td><?= e($r['kab_codes'] ?: '-') ?></td>
+                  <td><?= e($r['wilayah_kerja'] ?: '-') ?></td>
+                  <td class="text-right"><?= number_format((int)$r['target'],0,',','.') ?></td>
+                  <td class="text-right"><?= number_format((int)$r['progress_before'],0,',','.') ?></td>
+                  <td class="text-right"><?= number_format((int)$r['weekly_count'],0,',','.') ?></td>
+                  <td class="text-right"><?= number_format((float)$r['weekly_target'],2,',','.') ?></td>
+                  <td class="text-right"><?= number_format((float)$r['average_per_day'],2,',','.') ?></td>
+                  <td class="text-right"><?= number_format((float)$r['stddev'],2,',','.') ?></td>
+                  <td class="text-right"><?= number_format((float)$r['consistency_score'],2,',','.') ?>%</td>
+                  <td class="text-right"><?= number_format((float)$r['momentum_score'],2,',','.') ?>%</td>
+                  <td class="text-right font-weight-bold"><?= number_format((float)$r['performance_score'],2,',','.') ?></td>
+                </tr>
+              <?php endforeach; ?>
+              <?php if (!$weeklyRows): ?>
+                <tr><td colspan="13" class="text-center text-muted"><?= $weeklyPeriod ? 'Belum ada data petugas aktif pada periode ini.' : 'Performa mingguan akan tampil setelah minggu pertama selesai.' ?></td></tr>
+              <?php endif; ?>
               </tbody>
             </table>
           </div>
