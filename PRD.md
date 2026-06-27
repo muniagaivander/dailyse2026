@@ -339,6 +339,14 @@ Tabel harus dipaginasi 100 row.
 
 Sistem harus menyediakan export CSV/XLSX.
 
+### FR-12A Rekap Petugas Daily
+
+Sistem harus menampilkan rekap PML/PCL per tanggal untuk periode Juni sampai Agustus 2026.
+
+Setiap tanggal harus memiliki subkolom Count dan Persen. Count dihitung dari Submit, Reject, Pending, dan Approved. Persen dihitung terhadap Target pada tanggal yang sama.
+
+Filter wilayah serta export CSV/XLSX harus tersedia. Halaman bersifat export-only dan query rekap hanya dijalankan ketika pengguna menekan tombol download.
+
 ### FR-13 Weekly Report
 
 Sistem harus generate report periode 7 hari.
@@ -546,4 +554,3 @@ Ide pengembangan berikutnya:
 - Export PDF dashboard publik.
 - Unit test untuk validasi template.
 - Migrasi database formal per versi.
-

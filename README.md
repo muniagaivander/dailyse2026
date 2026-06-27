@@ -666,6 +666,30 @@ Tabel dipaginasi 100 row per halaman dan dapat diekspor:
 
 Urutan data superadmin mengikuti kode kabupaten.
 
+## Rekap Petugas Daily
+
+Menu untuk membandingkan Progress Pendataan setiap PML atau PCL per tanggal.
+
+Akses:
+
+- Superadmin.
+- Admin kabupaten.
+- Viewer provinsi.
+- Viewer kabupaten.
+
+Filter:
+
+```text
+Semua Bulan/Juni/Juli/Agustus -> PML/PCL -> Kabupaten/Kecamatan/Desa
+```
+
+File hasil export memuat kolom identitas mengikuti Rekap Petugas sampai Jumlah SubSLS. Setiap tanggal yang sudah memiliki data ditampilkan sebagai dua subkolom:
+
+- Count: `Submit + Reject + Pending + Approved`.
+- Persen: Count dibagi Target pada tanggal tersebut.
+
+Halaman tidak menjalankan query rekap saat dibuka atau ketika filter berubah. Query diproses hanya ketika pengguna menekan Download CSV atau Download Excel.
+
 ## Daftar Petugas
 
 Menu untuk melihat daftar SubSLS dan petugas.
