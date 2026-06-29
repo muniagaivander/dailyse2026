@@ -1,5 +1,6 @@
 <?php
 require __DIR__ . '/layout.php';
+require_once __DIR__ . '/performance_cache.php';
 $user = require_login();
 ensure_completion_status_table();
 
@@ -862,13 +863,82 @@ function dashboard_chart_export_payload(array $rows, array $fields, string $tab)
     return [$headers, $out];
 }
 
+if (($_GET['action'] ?? '') === 'generate_performance_cache'
+    && $_SERVER['REQUEST_METHOD'] === 'POST'
+    && $user['role'] === 'superadmin') {
+    @set_time_limit(0);
+    $pdo = db();
+    try {
+        $snapshotAt = date('c');
+        $pdo->exec('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+        $pdo->beginTransaction();
+
+        $roleConfigs = [
+            'pengawas' => 'pengawas_email',
+            'pencacah' => 'pencacah_email',
+        ];
+        $roles = [];
+        $threshold = performance_attention_threshold();
+        foreach ($roleConfigs as $type => $roleField) {
+            $dataset = performance_metric_dataset($roleField, $user, false);
+            foreach ($dataset['weekly'] as $scopeId => $weeklyRows) {
+                $dataset['weekly'][$scopeId] = array_slice($weeklyRows, 0, 10);
+            }
+            $attention = [];
+            foreach (array_keys($dataset['overall']) as $scopeId) {
+                $attention[$scopeId] = performance_attention_rows($roleField, $scopeId, (float)$threshold['pct']);
+            }
+            $dataset['attention'] = $attention;
+            $roles[$type] = $dataset;
+        }
+        $pdo->commit();
+
+        $weekPeriod = $roles['pengawas']['week_period'] ?? null;
+        $weekLabel = $weekPeriod
+            ? 'Minggu ' . $weekPeriod['number'] . ': '
+                . performance_date_label($weekPeriod['start']) . ' - '
+                . performance_date_label($weekPeriod['end'])
+            : 'Belum ada minggu yang selesai';
+        $payload = [
+            'version' => 1,
+            'generated_at' => $snapshotAt,
+            'generated_by' => $user['email'],
+            'week_label' => $weekLabel,
+            'attention_threshold' => $threshold,
+            'summary' => [
+                'pengawas' => count($roles['pengawas']['overall']['6400'] ?? []),
+                'pencacah' => count($roles['pencacah']['overall']['6400'] ?? []),
+            ],
+            'roles' => $roles,
+        ];
+        performance_cache_write($payload);
+        flash(
+            'success',
+            'Data performa berhasil diperbarui. Pengawas: '
+            . number_format($payload['summary']['pengawas'], 0, ',', '.')
+            . ', Pencacah: '
+            . number_format($payload['summary']['pencacah'], 0, ',', '.')
+            . '. Periode mingguan: ' . $weekLabel . '.'
+        );
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        flash('error', 'Update data performa gagal: ' . $e->getMessage());
+    }
+    redirect('performance_update.php');
+}
+
 if (($_GET['action'] ?? '') === 'export_performance_temporary'
     && in_array($user['role'], ['superadmin', 'admin_kab'], true)) {
     $type = ($_GET['type'] ?? '') === 'pencacah' ? 'pencacah' : 'pengawas';
     $scopeId = $user['role'] === 'superadmin' ? '6400' : (string)$user['kab_id'];
-    $roleField = $type === 'pencacah' ? 'pencacah_email' : 'pengawas_email';
-    $metricData = performance_metric_dataset($roleField, $user, false);
-    $rows = $metricData['overall'][$scopeId] ?? [];
+    $cache = performance_cache_read();
+    if (!$cache) {
+        http_response_code(503);
+        exit('Data performa belum tersedia. Superadmin perlu menjalankan Update Data Performa.');
+    }
+    $rows = $cache['roles'][$type]['overall'][$scopeId] ?? [];
     $exportRows = [];
     foreach ($rows as $rankIndex => $row) {
         $exportRows[] = [
@@ -878,19 +948,16 @@ if (($_GET['action'] ?? '') === 'export_performance_temporary'
             $row['wilayah_kerja'] ?? '',
             $row['target'],
             $row['progress_count'],
-            round((float)$row['expected_count'], 2),
-            round((float)$row['pace_score'], 2),
             round((float)$row['average_per_day'], 2),
             round((float)$row['stddev'], 2),
             round((float)$row['consistency_score'], 2),
-            round((float)$row['momentum_score'], 2),
             $row['projected_finish'],
             $row['performance_status'],
             round((float)$row['performance_score'], 2),
         ];
     }
     dashboard_export_rows(
-        ['rank', 'petugas', 'kode_kab', 'wilayah_kerja', 'target', 'progress', 'ekspektasi_hari_ini', 'indeks_laju_pct', 'rata_rata_per_hari', 'standar_deviasi', 'konsistensi_pct', 'momentum_7_hari_pct', 'prediksi_selesai', 'status', 'skor'],
+        ['rank', 'petugas', 'kode_kab', 'wilayah_kerja', 'target', 'progress', 'rata_rata_per_hari', 'standar_deviasi', 'konsistensi_pct', 'prediksi_selesai', 'status', 'skor'],
         $exportRows,
         'performa_sementara_' . $type . '_' . $scopeId . '_' . date('Ymd_His'),
         'xlsx'
@@ -905,9 +972,13 @@ if (($_GET['action'] ?? '') === 'export_attention' && $canSeePerformance) {
         http_response_code(403);
         exit('Akses ditolak');
     }
-    $threshold = performance_attention_threshold();
-    $roleField = $type === 'pencacah' ? 'pencacah_email' : 'pengawas_email';
-    $rows = performance_attention_rows($roleField, $kabId, (float)$threshold['pct']);
+    $cache = performance_cache_read();
+    if (!$cache) {
+        http_response_code(503);
+        exit('Data performa belum tersedia. Superadmin perlu menjalankan Update Data Performa.');
+    }
+    $threshold = $cache['attention_threshold'] ?? performance_attention_threshold();
+    $rows = $cache['roles'][$type]['attention'][$kabId] ?? [];
     $exportRows = [];
     foreach ($rows as $row) {
         $exportRows[] = [
@@ -956,10 +1027,12 @@ $completionPct = $totals['subsls_total'] > 0 ? round($totals['selesai_count'] / 
 $submitApproveCount = dashboard_pendataan_count($totals);
 $submitApprovePct = $totals['target'] > 0 ? round($submitApproveCount / (int)$totals['target'] * 100, 2) : 0;
 $performanceKabOptions = $canSeePerformance ? dashboard_kab_options_for_performance($user) : [];
+$performanceCache = null;
 $performanceMetricData = null;
 if ($canSeePerformance && in_array($activeTab, ['performa_pengawas', 'performa_pencacah'], true)) {
-    $metricRoleField = $activeTab === 'performa_pengawas' ? 'pengawas_email' : 'pencacah_email';
-    $performanceMetricData = performance_metric_dataset($metricRoleField, $user);
+    $performanceCache = performance_cache_read();
+    $metricType = $activeTab === 'performa_pengawas' ? 'pengawas' : 'pencacah';
+    $performanceMetricData = $performanceCache['roles'][$metricType] ?? null;
 }
 
 function dashboard_count_pct_text(int $count, float $pct): string
@@ -1442,10 +1515,23 @@ if (pengawas) {
 <?php endif; ?>
 
 <?php if (in_array($activeTab, ['performa_pengawas', 'performa_pencacah'], true) && $canSeePerformance): ?>
-<?php $roleField = $activeTab === 'performa_pengawas' ? 'pengawas_email' : 'pencacah_email'; $labelRole = $activeTab === 'performa_pengawas' ? 'Pengawas' : 'Pencacah'; ?>
-<?php $attentionThreshold = performance_attention_threshold(); $attentionType = $activeTab === 'performa_pengawas' ? 'pengawas' : 'pencacah'; ?>
+<?php $labelRole = $activeTab === 'performa_pengawas' ? 'Pengawas' : 'Pencacah'; ?>
+<?php $attentionThreshold = $performanceCache['attention_threshold'] ?? performance_attention_threshold(); $attentionType = $activeTab === 'performa_pengawas' ? 'pengawas' : 'pencacah'; ?>
 <div class="card card-body py-2 mb-3">
   <div><strong><em>Progress Pendataan = Submit+Reject+Pending+Approve</em></strong></div>
+</div>
+<?php if (!$performanceMetricData): ?>
+  <div class="alert alert-warning">
+    Data performa belum tersedia. Superadmin perlu menjalankan menu <strong>Update Data Performa</strong>.
+    <?php if ($user['role'] === 'superadmin'): ?>
+      <a class="btn btn-sm btn-primary ml-2" href="performance_update.php">Buka Menu Update</a>
+    <?php endif; ?>
+  </div>
+<?php else: ?>
+<div class="alert <?= performance_cache_is_today($performanceCache) ? 'alert-info' : 'alert-warning' ?> py-2">
+  <span class="data-update-dot"></span>
+  Data Performa Terakhir Diperbarui: <strong><?= e(performance_cache_generated_label($performanceCache)) ?></strong>.
+  <?php if (!performance_cache_is_today($performanceCache)): ?> Data performa belum diperbarui hari ini.<?php endif; ?>
 </div>
 <div class="card">
   <div class="card-header p-2">
@@ -1459,10 +1545,10 @@ if (pengawas) {
     <div class="tab-content">
       <?php foreach ($performanceKabOptions as $i => $kab): ?>
         <?php
-          $topRows = $performanceMetricData['overall'][$kab['value']] ?? [];
-          $weeklyRows = $performanceMetricData['weekly'][$kab['value']] ?? [];
+          $topRows = array_slice($performanceMetricData['overall'][$kab['value']] ?? [], 0, 10);
+          $weeklyRows = array_slice($performanceMetricData['weekly'][$kab['value']] ?? [], 0, 10);
           $weeklyPeriod = $performanceMetricData['week_period'] ?? null;
-          $attentionRows = performance_attention_rows($roleField, $kab['value'], (float)$attentionThreshold['pct']);
+          $attentionRows = $performanceMetricData['attention'][$kab['value']] ?? [];
         ?>
         <div class="tab-pane fade <?= $i===0?'show active':'' ?>" id="kab-<?= e($kab['value']) ?>" role="tabpanel">
           <h5 class="performance-section-title">
@@ -1486,12 +1572,9 @@ if (pengawas) {
                   <th>Wilayah Kerja</th>
                   <th>Target</th>
                   <th>Progress</th>
-                  <th>Ekspektasi Hari Ini</th>
-                  <th>Indeks Laju</th>
                   <th>Rata-rata/Hari</th>
                   <th>Standar Deviasi</th>
                   <th>Konsistensi</th>
-                  <th>Momentum 7 Hari</th>
                   <th>Prediksi Selesai</th>
                   <th>Status</th>
                   <th>Skor</th>
@@ -1506,19 +1589,16 @@ if (pengawas) {
                   <td><?= e($r['wilayah_kerja'] ?: '-') ?></td>
                   <td class="text-right"><?= number_format((int)$r['target'],0,',','.') ?></td>
                   <td class="text-right"><?= number_format((int)$r['progress_count'],0,',','.') ?></td>
-                  <td class="text-right"><?= number_format((float)$r['expected_count'],2,',','.') ?></td>
-                  <td class="text-right"><?= number_format((float)$r['pace_score'],2,',','.') ?>%</td>
                   <td class="text-right"><?= number_format((float)$r['average_per_day'],2,',','.') ?></td>
                   <td class="text-right"><?= number_format((float)$r['stddev'],2,',','.') ?></td>
                   <td class="text-right"><?= number_format((float)$r['consistency_score'],2,',','.') ?>%</td>
-                  <td class="text-right"><?= number_format((float)$r['momentum_score'],2,',','.') ?>%</td>
                   <td><?= e($r['projected_finish']) ?></td>
                   <td><span class="performance-status"><?= e($r['performance_status']) ?></span></td>
                   <td class="text-right font-weight-bold"><?= number_format((float)$r['performance_score'],2,',','.') ?></td>
                 </tr>
               <?php endforeach; ?>
               <?php if (!$topRows): ?>
-                <tr><td colspan="15" class="text-center text-muted">Belum ada data performa sementara.</td></tr>
+                <tr><td colspan="12" class="text-center text-muted">Belum ada data performa sementara.</td></tr>
               <?php endif; ?>
               </tbody>
             </table>
@@ -1609,6 +1689,7 @@ if (pengawas) {
     </div>
   </div>
 </div>
+<?php endif; ?>
 <?php endif; ?>
 
 <script>

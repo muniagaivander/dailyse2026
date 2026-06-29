@@ -248,6 +248,10 @@ Hari tanpa tambahan progress harus bernilai nol. Petugas yang telah selesai sebe
 
 Superadmin dan admin kabupaten harus dapat mengekspor seluruh Performa Sementara sesuai jenis petugas pada tab aktif. Cakupan export harus mengikuti wilayah akun.
 
+Perhitungan performa harus dijalankan manual oleh superadmin melalui `Update Data Performa`. Satu proses harus memakai snapshot database yang konsisten untuk PML, PCL, 6400, dan seluruh kabupaten.
+
+Dashboard performa, tabel perlu perhatian, dan export harus membaca cache privat serta tidak menjalankan ulang agregasi `daily_status`. Sistem harus menampilkan timestamp cache dan peringatan apabila cache belum diperbarui hari ini.
+
 ### FR-04 Dashboard Publik
 
 Sistem harus menyediakan URL publik `/6400` dan `/64xx`.
@@ -388,6 +392,7 @@ Superadmin harus dapat download backup SQL dari aplikasi.
 ### Performa
 
 - Dashboard login membaca `subsls_status`, bukan menghitung seluruh `daily_status` setiap load.
+- Tab performa membaca cache privat yang dibuat manual oleh superadmin.
 - Dashboard publik membaca cache JSON.
 - Tabel besar memakai pagination.
 - Upload dan proses panjang menampilkan progress overlay.

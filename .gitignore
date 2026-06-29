@@ -2,4 +2,7 @@
 *.log
 tmp/
 uploads/
-cache/
+cache/*
+!cache/private/
+cache/private/*
+!cache/private/.htaccess

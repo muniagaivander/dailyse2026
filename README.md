@@ -417,6 +417,25 @@ Kriteria perlu perhatian mengikuti target tanggal:
 
 Tabel perlu perhatian dapat diekspor CSV dan Excel.
 
+### Cache Data Performa
+
+Performa Pengawas dan Pencacah tidak dihitung ulang ketika dashboard dibuka. Superadmin menjalankan menu `Update Data Performa` setelah data harian diperbarui.
+
+Satu kali generate menghitung dalam satu snapshot database:
+
+- Performa Sementara Pengawas dan Pencacah.
+- Performa Mingguan Pengawas dan Pencacah.
+- Daftar Pengawas dan Pencacah Perlu Perhatian.
+- Scope 6400 dan seluruh kabupaten.
+
+Hasil disimpan di:
+
+```text
+cache/private/performance_dashboard.json
+```
+
+Folder privat dilindungi `.htaccess`. Dashboard, tab kabupaten, dan export Excel/CSV hanya membaca cache tersebut. Seluruh scope mempunyai timestamp update yang sama. Jika cache belum tersedia atau belum diperbarui hari ini, dashboard menampilkan peringatan.
+
 ## Dashboard Publik
 
 Dashboard publik adalah halaman read-only tanpa login.
