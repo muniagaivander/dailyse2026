@@ -416,7 +416,7 @@ $cards = [
               <td><?= e($row['label']) ?></td>
               <td class="text-right"><?= number_format((int)$row['target'], 0, ',', '.') ?></td>
               <td class="text-right"><?= number_format((int)$row['open_count'], 0, ',', '.') ?></td>
-              <td class="text-right"><?= number_format((int)$row['draft_count'], 0, ',', '.') ?></td>
+              <td class="text-right"><?= public_table_count_pct_text((int)$row['draft_count'], $rowTarget) ?></td>
               <td class="text-right"><?= public_table_count_pct_text((int)$row['submitted_by_pencacah'], $rowTarget) ?></td>
               <td class="text-right"><?= number_format((int)$row['rejected_by_pengawas'], 0, ',', '.') ?></td>
               <td class="text-right"><?= number_format((int)($row['pending_count'] ?? 0), 0, ',', '.') ?></td>
@@ -435,7 +435,7 @@ $cards = [
             <td><?= e($context['total_label']) ?></td>
             <td class="text-right"><?= number_format((int)$totals['target'], 0, ',', '.') ?></td>
             <td class="text-right"><?= number_format((int)$totals['open_count'], 0, ',', '.') ?></td>
-            <td class="text-right"><?= number_format((int)$totals['draft_count'], 0, ',', '.') ?></td>
+            <td class="text-right"><?= public_table_count_pct_text((int)$totals['draft_count'], $totalTarget) ?></td>
             <td class="text-right"><?= public_table_count_pct_text((int)$totals['submitted_by_pencacah'], $totalTarget) ?></td>
             <td class="text-right"><?= number_format((int)$totals['rejected_by_pengawas'], 0, ',', '.') ?></td>
             <td class="text-right"><?= number_format((int)($totals['pending_count'] ?? 0), 0, ',', '.') ?></td>

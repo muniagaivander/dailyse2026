@@ -389,7 +389,7 @@ Performa Mingguan hanya memakai minggu terakhir yang sudah selesai. Minggu perta
 
 Hari tanpa tambahan progress tetap dihitung nol. Petugas yang sudah selesai sebelum awal periode tidak dimasukkan ke peringkat mingguan.
 
-Tombol Excel pada Performa Sementara mengikuti tab aktif. Tab Pengawas mengekspor seluruh pengawas dan tab Pencacah mengekspor seluruh pencacah. Superadmin mendapat cakupan provinsi, sedangkan admin kabupaten hanya mendapat wilayah kabupatennya.
+Tombol Excel pada Performa Sementara mengikuti tab aktif. Tab Pengawas mengekspor seluruh pengawas dan tab Pencacah mengekspor seluruh pencacah. Superadmin dan viewer provinsi mendapat cakupan Kalimantan Timur, sedangkan admin serta viewer kabupaten hanya mendapat wilayah kabupatennya.
 
 Kolom performa mencakup:
 
@@ -404,6 +404,16 @@ Kolom performa mencakup:
 - Momentum.
 - Prediksi selesai.
 - Skor.
+
+`Rata-rata/Hari` dan `Target Hari Ini` ditampilkan sebagai bilangan bulat dengan pembulatan ke atas. Target Hari Ini dihitung dari sisa pekerjaan dibagi jumlah hari setelah tanggal snapshot sampai 15 Agustus. Setelah melewati 15 Agustus dan pekerjaan belum selesai, nilainya ditampilkan sebagai `Lewat Target`.
+
+Status Performa Sementara mengikuti prediksi selesai berdasarkan rata-rata progress tujuh hari terakhir:
+
+- `Selesai`: progress telah mencapai target.
+- `On Track`: diproyeksikan selesai paling lambat 15 Agustus 2026.
+- `Perlu Didorong`: diproyeksikan selesai pada 16-31 Agustus 2026.
+- `Tertinggal`: diproyeksikan selesai setelah 31 Agustus 2026.
+- `Tidak Ada Momentum`: belum selesai dan tidak ada rata-rata penambahan progress dalam tujuh hari terakhir.
 
 Untuk superadmin dan viewer provinsi, tersedia tab `6400` untuk Kalimantan Timur dan tab kabupaten.
 

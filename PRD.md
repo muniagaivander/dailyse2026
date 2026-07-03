@@ -242,11 +242,15 @@ Dashboard harus menampilkan maksimal 10 Performa Sementara dan 10 Performa Mingg
 
 Performa Sementara menggunakan target internal 15 Agustus 2026 dan menggabungkan Indeks Ketepatan Laju, Konsistensi Harian, serta Momentum 7 Hari.
 
+Performa Sementara harus menampilkan Target Hari Ini berdasarkan sisa pekerjaan dan sisa hari menuju 15 Agustus. Rata-rata/Hari dan Target Hari Ini harus dibulatkan ke atas.
+
+Status Performa Sementara harus mengikuti prediksi selesai dari rata-rata progress tujuh hari terakhir: `On Track` hingga 15 Agustus, `Perlu Didorong` pada 16-31 Agustus, `Tertinggal` setelah 31 Agustus, dan `Tidak Ada Momentum` apabila pekerjaan belum selesai tetapi tidak ada laju progress yang dapat diproyeksikan.
+
 Performa Mingguan hanya menggunakan periode terakhir yang sudah selesai, dimulai dari minggu 15-21 Juni 2026. Perhitungan menggabungkan Pencapaian Target Mingguan, Konsistensi Harian, dan Kemampuan Mengejar Sisa Target.
 
 Hari tanpa tambahan progress harus bernilai nol. Petugas yang telah selesai sebelum awal minggu tidak boleh masuk ranking mingguan.
 
-Superadmin dan admin kabupaten harus dapat mengekspor seluruh Performa Sementara sesuai jenis petugas pada tab aktif. Cakupan export harus mengikuti wilayah akun.
+Superadmin, admin kabupaten, viewer provinsi, dan viewer kabupaten harus dapat mengekspor seluruh Performa Sementara sesuai jenis petugas pada tab aktif. Cakupan export harus mengikuti wilayah akun.
 
 Perhitungan performa harus dijalankan manual oleh superadmin melalui `Update Data Performa`. Satu proses harus memakai snapshot database yang konsisten untuk PML, PCL, 6400, dan seluruh kabupaten.
 

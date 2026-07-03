@@ -316,6 +316,7 @@ if (($_GET['action'] ?? '') === 'export' && isset($_GET['filter'])) {
     foreach ($fields as $label) {
         $headers[] = $label;
     }
+    $headers[] = 'Progress';
     $headers[] = 'Last Update';
     $headers[] = 'Updated By';
     $headers[] = 'Status Selesai';
@@ -335,6 +336,7 @@ if (($_GET['action'] ?? '') === 'export' && isset($_GET['filter'])) {
         foreach (array_keys($fields) as $field) {
             $row[] = (string)(int)$r[$field];
         }
+        $row[] = (string)status_view_progress_count($r);
         $row[] = $r['last_update'] ?: '';
         $row[] = $r['updated_by'] ?: '';
         $row[] = $r['status_selesai'];
@@ -622,7 +624,7 @@ render_header('Status Terupdate');
         <tr>
           <th>Kode SubSLS</th><th>Desa</th><th>SLS</th><th>SubSLS</th><th>Pengawas</th><th>Pencacah</th><th>Target</th>
           <?php foreach ($fields as $label): ?><th><?= e($label) ?></th><?php endforeach; ?>
-          <th>Last Update</th><th>Updated By</th><th>Status Selesai</th>
+          <th>Progress</th><th>Last Update</th><th>Updated By</th><th>Status Selesai</th>
         </tr>
       </thead>
       <tbody>
@@ -636,6 +638,7 @@ render_header('Status Terupdate');
           <td><?= e(petugas_label($r['pencacah_email'], $r['pencacah_name'] ?? '')) ?></td>
           <td><?= number_format((int)$r['target'], 0, ',', '.') ?></td>
           <?php foreach (array_keys($fields) as $field): ?><td><?= number_format((int)$r[$field], 0, ',', '.') ?></td><?php endforeach; ?>
+          <td><?= number_format(status_view_progress_count($r), 0, ',', '.') ?></td>
           <td><?= e($r['last_update'] ?: '-') ?></td>
           <td><?= e($r['updated_by'] ?: '-') ?></td>
           <td><?= e($r['status_selesai']) ?></td>

@@ -437,6 +437,15 @@ function performance_completion_date(array $daily, int $target, string $start, s
     return null;
 }
 
+function performance_projected_finish_date(int $progress, int $target, float $recentAverage, string $asOf): ?string
+{
+    if ($target <= 0 || $progress >= $target || $recentAverage <= 0) {
+        return null;
+    }
+    $days = (int)ceil(($target - $progress) / $recentAverage);
+    return performance_date_add($asOf, max(1, $days));
+}
+
 function performance_projected_finish(int $progress, int $target, float $recentAverage, string $asOf): string
 {
     if ($target <= 0) {
@@ -445,11 +454,8 @@ function performance_projected_finish(int $progress, int $target, float $recentA
     if ($progress >= $target) {
         return 'Selesai';
     }
-    if ($recentAverage <= 0) {
-        return 'Belum dapat diproyeksikan';
-    }
-    $days = (int)ceil(($target - $progress) / $recentAverage);
-    return performance_date_label(performance_date_add($asOf, max(1, $days)));
+    $projectedDate = performance_projected_finish_date($progress, $target, $recentAverage, $asOf);
+    return $projectedDate ? performance_date_label($projectedDate) : 'Belum dapat diproyeksikan';
 }
 
 function performance_metric_row(array $meta, array $daily, string $asOf): array
@@ -481,13 +487,21 @@ function performance_metric_row(array $meta, array $daily, string $asOf): array
     $remainingDays = max(1, performance_date_count(performance_date_add($asOf, 1), $paceDeadline));
     $requiredDaily = $remaining / $remainingDays;
     $momentum = $remaining <= 0 ? 120 : ($requiredDaily > 0 ? min(120, $recentAverage / $requiredDaily * 100) : 0);
+    $requiredDailyTarget = $remaining <= 0
+        ? 0
+        : ($asOf > $internalDeadline ? null : (int)ceil($requiredDaily));
+    $projectedFinishDate = performance_projected_finish_date($progress, $target, $recentAverage, $asOf);
 
     $score = min(100, ($pace * 0.50 + $consistency['score'] * 0.30 + $momentum * 0.20) * $reliability);
     if ($progress >= $target && $target > 0) {
-        $status = $completionDate && $completionDate <= $internalDeadline ? 'Selesai sebelum target' : 'Selesai';
-    } elseif ($pace >= 100) {
+        $status = 'Selesai';
+    } elseif ($target <= 0) {
+        $status = 'Tidak Ada Target';
+    } elseif (!$projectedFinishDate) {
+        $status = 'Tidak Ada Momentum';
+    } elseif ($projectedFinishDate <= $internalDeadline) {
         $status = 'On Track';
-    } elseif ($pace >= 85) {
+    } elseif ($projectedFinishDate <= $campaignEnd) {
         $status = 'Perlu Didorong';
     } else {
         $status = 'Tertinggal';
@@ -498,10 +512,13 @@ function performance_metric_row(array $meta, array $daily, string $asOf): array
         'expected_count' => $expected,
         'pace_score' => $pace,
         'average_per_day' => $averagePerDay,
+        'required_daily_target' => $requiredDailyTarget,
         'stddev' => $consistency['stddev'],
         'consistency_score' => $consistency['score'],
         'momentum_score' => $momentum,
-        'projected_finish' => $completionDate ? performance_date_label($completionDate) : performance_projected_finish($progress, $target, $recentAverage, $asOf),
+        'projected_finish' => $completionDate
+            ? performance_date_label($completionDate)
+            : ($projectedFinishDate ? performance_date_label($projectedFinishDate) : performance_projected_finish($progress, $target, $recentAverage, $asOf)),
         'performance_score' => $score,
         'performance_status' => $status,
         'observation_days' => $observationDays,
@@ -900,7 +917,7 @@ if (($_GET['action'] ?? '') === 'generate_performance_cache'
                 . performance_date_label($weekPeriod['end'])
             : 'Belum ada minggu yang selesai';
         $payload = [
-            'version' => 1,
+            'version' => 3,
             'generated_at' => $snapshotAt,
             'generated_by' => $user['email'],
             'week_label' => $weekLabel,
@@ -930,13 +947,15 @@ if (($_GET['action'] ?? '') === 'generate_performance_cache'
 }
 
 if (($_GET['action'] ?? '') === 'export_performance_temporary'
-    && in_array($user['role'], ['superadmin', 'admin_kab'], true)) {
+    && in_array($user['role'], ['superadmin', 'admin_kab', 'viewer_prov', 'viewer_kab'], true)) {
     $type = ($_GET['type'] ?? '') === 'pencacah' ? 'pencacah' : 'pengawas';
-    $scopeId = $user['role'] === 'superadmin' ? '6400' : (string)$user['kab_id'];
+    $scopeId = in_array($user['role'], ['superadmin', 'viewer_prov'], true)
+        ? '6400'
+        : (string)$user['kab_id'];
     $cache = performance_cache_read();
-    if (!$cache) {
+    if (!$cache || (int)($cache['version'] ?? 0) < 3) {
         http_response_code(503);
-        exit('Data performa belum tersedia. Superadmin perlu menjalankan Update Data Performa.');
+        exit('Data performa belum tersedia atau memakai format lama. Superadmin perlu menjalankan Update Data Performa.');
     }
     $rows = $cache['roles'][$type]['overall'][$scopeId] ?? [];
     $exportRows = [];
@@ -948,7 +967,8 @@ if (($_GET['action'] ?? '') === 'export_performance_temporary'
             $row['wilayah_kerja'] ?? '',
             $row['target'],
             $row['progress_count'],
-            round((float)$row['average_per_day'], 2),
+            (int)ceil((float)$row['average_per_day']),
+            $row['required_daily_target'] === null ? 'Lewat Target' : (int)$row['required_daily_target'],
             round((float)$row['stddev'], 2),
             round((float)$row['consistency_score'], 2),
             $row['projected_finish'],
@@ -957,7 +977,7 @@ if (($_GET['action'] ?? '') === 'export_performance_temporary'
         ];
     }
     dashboard_export_rows(
-        ['rank', 'petugas', 'kode_kab', 'wilayah_kerja', 'target', 'progress', 'rata_rata_per_hari', 'standar_deviasi', 'konsistensi_pct', 'prediksi_selesai', 'status', 'skor'],
+        ['rank', 'petugas', 'kode_kab', 'wilayah_kerja', 'target', 'progress', 'rata_rata_per_hari', 'target_hari_ini', 'standar_deviasi', 'konsistensi_pct', 'prediksi_selesai', 'status', 'skor'],
         $exportRows,
         'performa_sementara_' . $type . '_' . $scopeId . '_' . date('Ymd_His'),
         'xlsx'
@@ -973,9 +993,9 @@ if (($_GET['action'] ?? '') === 'export_attention' && $canSeePerformance) {
         exit('Akses ditolak');
     }
     $cache = performance_cache_read();
-    if (!$cache) {
+    if (!$cache || (int)($cache['version'] ?? 0) < 3) {
         http_response_code(503);
-        exit('Data performa belum tersedia. Superadmin perlu menjalankan Update Data Performa.');
+        exit('Data performa belum tersedia atau memakai format lama. Superadmin perlu menjalankan Update Data Performa.');
     }
     $threshold = $cache['attention_threshold'] ?? performance_attention_threshold();
     $rows = $cache['roles'][$type]['attention'][$kabId] ?? [];
@@ -1032,7 +1052,9 @@ $performanceMetricData = null;
 if ($canSeePerformance && in_array($activeTab, ['performa_pengawas', 'performa_pencacah'], true)) {
     $performanceCache = performance_cache_read();
     $metricType = $activeTab === 'performa_pengawas' ? 'pengawas' : 'pencacah';
-    $performanceMetricData = $performanceCache['roles'][$metricType] ?? null;
+    if ((int)($performanceCache['version'] ?? 0) >= 3) {
+        $performanceMetricData = $performanceCache['roles'][$metricType] ?? null;
+    }
 }
 
 function dashboard_count_pct_text(int $count, float $pct): string
@@ -1372,7 +1394,7 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
             <td><?= e($row['label']) ?></td>
             <td class="text-right"><?= number_format($rowTarget, 0, ',', '.') ?></td>
             <td class="text-right"><?= number_format((int)$row['open_count'], 0, ',', '.') ?></td>
-            <td class="text-right"><?= number_format((int)$row['draft_count'], 0, ',', '.') ?></td>
+            <td class="text-right"><?= dashboard_table_count_pct_text((int)$row['draft_count'], $rowTarget) ?></td>
             <td class="text-right"><?= dashboard_table_count_pct_text((int)$row['submitted_by_pencacah'], $rowTarget) ?></td>
             <td class="text-right"><?= number_format((int)$row['rejected_by_pengawas'], 0, ',', '.') ?></td>
             <td class="text-right"><?= number_format((int)$row['pending_count'], 0, ',', '.') ?></td>
@@ -1391,7 +1413,7 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
           <td>Total</td>
           <td class="text-right"><?= number_format($totalTarget, 0, ',', '.') ?></td>
           <td class="text-right"><?= number_format((int)$totals['open_count'], 0, ',', '.') ?></td>
-          <td class="text-right"><?= number_format((int)$totals['draft_count'], 0, ',', '.') ?></td>
+          <td class="text-right"><?= dashboard_table_count_pct_text((int)$totals['draft_count'], $totalTarget) ?></td>
           <td class="text-right"><?= dashboard_table_count_pct_text((int)$totals['submitted_by_pencacah'], $totalTarget) ?></td>
           <td class="text-right"><?= number_format((int)$totals['rejected_by_pengawas'], 0, ',', '.') ?></td>
           <td class="text-right"><?= number_format((int)$totals['pending_count'], 0, ',', '.') ?></td>
@@ -1556,7 +1578,7 @@ if (pengawas) {
               10 Performa Sementara <?= e($labelRole) ?>
               <small class="text-muted ml-2">Data sampai <?= e(performance_date_label($performanceMetricData['as_of'])) ?></small>
             </span>
-            <?php if (in_array($user['role'], ['superadmin', 'admin_kab'], true)): ?>
+            <?php if (in_array($user['role'], ['superadmin', 'admin_kab', 'viewer_prov', 'viewer_kab'], true)): ?>
               <a class="btn btn-success btn-sm" href="?action=export_performance_temporary&type=<?= e($attentionType) ?>">
                 <i class="fas fa-file-excel mr-1"></i>Download Semua <?= e($labelRole) ?>
               </a>
@@ -1573,6 +1595,7 @@ if (pengawas) {
                   <th>Target</th>
                   <th>Progress</th>
                   <th>Rata-rata/Hari</th>
+                  <th>Target Hari Ini</th>
                   <th>Standar Deviasi</th>
                   <th>Konsistensi</th>
                   <th>Prediksi Selesai</th>
@@ -1589,7 +1612,8 @@ if (pengawas) {
                   <td><?= e($r['wilayah_kerja'] ?: '-') ?></td>
                   <td class="text-right"><?= number_format((int)$r['target'],0,',','.') ?></td>
                   <td class="text-right"><?= number_format((int)$r['progress_count'],0,',','.') ?></td>
-                  <td class="text-right"><?= number_format((float)$r['average_per_day'],2,',','.') ?></td>
+                  <td class="text-right"><?= number_format((int)ceil((float)$r['average_per_day']),0,',','.') ?></td>
+                  <td class="text-right"><?= $r['required_daily_target'] === null ? 'Lewat Target' : number_format((int)$r['required_daily_target'],0,',','.') ?></td>
                   <td class="text-right"><?= number_format((float)$r['stddev'],2,',','.') ?></td>
                   <td class="text-right"><?= number_format((float)$r['consistency_score'],2,',','.') ?>%</td>
                   <td><?= e($r['projected_finish']) ?></td>
@@ -1598,7 +1622,7 @@ if (pengawas) {
                 </tr>
               <?php endforeach; ?>
               <?php if (!$topRows): ?>
-                <tr><td colspan="12" class="text-center text-muted">Belum ada data performa sementara.</td></tr>
+                <tr><td colspan="13" class="text-center text-muted">Belum ada data performa sementara.</td></tr>
               <?php endif; ?>
               </tbody>
             </table>
@@ -1641,7 +1665,7 @@ if (pengawas) {
                   <td class="text-right"><?= number_format((int)$r['progress_before'],0,',','.') ?></td>
                   <td class="text-right"><?= number_format((int)$r['weekly_count'],0,',','.') ?></td>
                   <td class="text-right"><?= number_format((float)$r['weekly_target'],2,',','.') ?></td>
-                  <td class="text-right"><?= number_format((float)$r['average_per_day'],2,',','.') ?></td>
+                  <td class="text-right"><?= number_format((int)ceil((float)$r['average_per_day']),0,',','.') ?></td>
                   <td class="text-right"><?= number_format((float)$r['stddev'],2,',','.') ?></td>
                   <td class="text-right"><?= number_format((float)$r['consistency_score'],2,',','.') ?>%</td>
                   <td class="text-right"><?= number_format((float)$r['momentum_score'],2,',','.') ?>%</td>
