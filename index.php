@@ -1744,13 +1744,22 @@ if (pengawas) {
           </div>
           <div class="table-responsive">
             <table class="table table-sm table-bordered table-striped mb-0 attention-table" data-page-size="25">
-              <thead><tr><th>Email</th><th>Kode Kab</th><th>Wilayah Kerja</th><th>Progress Pendataan</th><th>Selesai SubSLS</th><th>Target</th><th>Total SubSLS</th></tr></thead>
+              <thead><tr><th>Email</th><th>Kode Kab</th><th>Wilayah Kerja</th><th>Draft</th><th>Progress Pendataan</th><th>Selesai SubSLS</th><th>Target</th><th>Total SubSLS</th></tr></thead>
               <tbody>
               <?php foreach ($attentionRows as $r): ?>
-                <tr class="attention-row"><td><?= e(petugas_label($r['email'], $r['petugas_name'] ?? '')) ?></td><td><?= e($r['kab_codes'] ?: '-') ?></td><td><?= e($r['wilayah_kerja'] ?: '-') ?></td><td><?= number_format((float)$r['submit_approve_pct'],2,',','.') ?>%</td><td><?= number_format((float)$r['selesai_pct'],2,',','.') ?>%</td><td><?= number_format((int)$r['target'],0,',','.') ?></td><td><?= number_format((int)$r['subsls_total'],0,',','.') ?></td></tr>
+                <tr class="attention-row">
+                  <td><?= e(petugas_label($r['email'], $r['petugas_name'] ?? '')) ?></td>
+                  <td><?= e($r['kab_codes'] ?: '-') ?></td>
+                  <td><?= e($r['wilayah_kerja'] ?: '-') ?></td>
+                  <td class="text-right"><?= dashboard_table_count_pct_text((int)$r['draft_count'], (int)$r['target']) ?></td>
+                  <td class="text-right"><?= dashboard_table_count_pct_text(dashboard_pendataan_count($r), (int)$r['target']) ?></td>
+                  <td class="text-right"><?= number_format((float)$r['selesai_pct'],2,',','.') ?>%</td>
+                  <td class="text-right"><?= number_format((int)$r['target'],0,',','.') ?></td>
+                  <td class="text-right"><?= number_format((int)$r['subsls_total'],0,',','.') ?></td>
+                </tr>
               <?php endforeach; ?>
               <?php if (!$attentionRows): ?>
-                <tr><td colspan="7" class="text-center text-muted">Tidak ada <?= e(strtolower($labelRole)) ?> yang masuk kategori perlu perhatian.</td></tr>
+                <tr><td colspan="8" class="text-center text-muted">Tidak ada <?= e(strtolower($labelRole)) ?> yang masuk kategori perlu perhatian.</td></tr>
               <?php endif; ?>
               </tbody>
             </table>
