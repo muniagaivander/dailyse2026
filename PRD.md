@@ -242,7 +242,9 @@ Dashboard harus menampilkan maksimal 10 Performa Sementara dan 10 Performa Mingg
 
 Performa Sementara menggunakan target internal 15 Agustus 2026 dan menggabungkan Indeks Ketepatan Laju, Konsistensi Harian, serta Momentum 7 Hari.
 
-Performa Sementara harus menampilkan Target Hari Ini berdasarkan sisa pekerjaan dan sisa hari menuju 15 Agustus. Rata-rata/Hari dan Target Hari Ini harus dibulatkan ke atas.
+Performa Sementara harus menampilkan `Capaian Hari Ini dibanding Kemarin (Assignment)` yang dihitung dari Progress Pendataan kondisi H dikurangi kondisi H-1. `Target Hari Ini (Assignment)` dihitung berdasarkan sisa pekerjaan dan sisa hari menuju 15 Agustus. Rata-rata/Hari (Assignment) dan Target Hari Ini harus dibulatkan ke atas.
+
+Wilayah Kerja Performa Sementara harus menampilkan daftar desa diikuti total SubSLS petugas pada akhir teks.
 
 Status Performa Sementara harus mengikuti prediksi selesai dari rata-rata progress tujuh hari terakhir: `On Track` hingga 15 Agustus, `Perlu Didorong` pada 16-31 Agustus, `Tertinggal` setelah 31 Agustus, dan `Tidak Ada Momentum` apabila pekerjaan belum selesai tetapi tidak ada laju progress yang dapat diproyeksikan.
 
@@ -253,6 +255,8 @@ Hari tanpa tambahan progress harus bernilai nol. Petugas yang telah selesai sebe
 Superadmin, admin kabupaten, viewer provinsi, dan viewer kabupaten harus dapat mengekspor seluruh Performa Sementara sesuai jenis petugas pada tab aktif. Cakupan export harus mengikuti wilayah akun.
 
 Perhitungan performa harus dijalankan manual oleh superadmin melalui `Update Data Performa`. Satu proses harus memakai snapshot database yang konsisten untuk PML, PCL, 6400, dan seluruh kabupaten.
+
+Dashboard publik harus mengambil 10 Performa Sementara Pengawas dan Pencacah dari cache performa terakhir, dengan kolom Rank, Petugas, Kode Kab, Target, Progress, Rata-rata/Hari (Assignment), Prediksi Selesai, Status, dan Skor.
 
 Dashboard performa, tabel perlu perhatian, dan export harus membaca cache privat serta tidak menjalankan ulang agregasi `daily_status`. Sistem harus menampilkan timestamp cache dan peringatan apabila cache belum diperbarui hari ini.
 

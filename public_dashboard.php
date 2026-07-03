@@ -42,11 +42,21 @@ function public_pendataan_count(array $row): int
 function public_rank_badge(int $rank): string
 {
     return match ($rank) {
-        1 => '<span class="rank-badge rank-1"><i class="fas fa-trophy mr-1"></i>Peringkat 1</span>',
-        2 => '<span class="rank-badge rank-2"><i class="fas fa-medal mr-1"></i>Peringkat 2</span>',
-        3 => '<span class="rank-badge rank-3"><i class="fas fa-award mr-1"></i>Peringkat 3</span>',
-        default => '<span class="rank-badge">#' . $rank . '</span>',
+        1 => '<span class="rank-badge rank-1"><i class="fas fa-trophy mr-1"></i>Rank 1</span>',
+        2 => '<span class="rank-badge rank-2"><i class="fas fa-medal mr-1"></i>Rank 2</span>',
+        3 => '<span class="rank-badge rank-3"><i class="fas fa-award mr-1"></i>Rank 3</span>',
+        default => '<span class="rank-badge">Rank ' . $rank . '</span>',
     };
+}
+
+function public_petugas_label(array $row): string
+{
+    $name = trim((string)($row['petugas_name'] ?? ''));
+    $email = trim((string)($row['email'] ?? ''));
+    if ($name === '' || strcasecmp($name, $email) === 0) {
+        return $email ?: '-';
+    }
+    return $name . ' (' . $email . ')';
 }
 
 $cache = is_file(public_dashboard_cache_path())
@@ -216,6 +226,17 @@ $cards = [
     .public-summary-table tfoot td {
       font-weight: 800;
     }
+    .public-summary-table th.performance-compact-header {
+      line-height: 1.2;
+      min-width: 92px;
+      text-align: left;
+      vertical-align: middle;
+      white-space: normal;
+    }
+    .public-summary-table td.performance-progress-cell {
+      min-width: 118px;
+      white-space: nowrap !important;
+    }
     .public-table-pct {
       color: #2563eb;
       font-weight: 700;
@@ -316,38 +337,42 @@ $cards = [
     <div class="card-body"><div class="public-chart-wrap public-chart-wide"><canvas id="dailyPendataanChart"></canvas></div></div>
   </div>
 
-  <div class="row">
+  <div>
     <?php foreach ([['title' => '10 Pengawas Terbaik', 'rows' => $topPengawas], ['title' => '10 Pencacah Terbaik', 'rows' => $topPencacah]] as $rankTable): ?>
-      <div class="col-lg-6">
+      <div>
         <div class="card">
           <div class="card-header"><strong><?= e($rankTable['title']) ?></strong></div>
           <div class="card-body table-responsive p-0">
             <table class="table table-sm table-bordered table-striped mb-0 public-summary-table">
               <thead>
                 <tr>
-                  <th>Peringkat</th>
+                  <th>Rank</th>
+                  <th>Petugas</th>
                   <th>Kode Kab</th>
-                  <th>Nama</th>
-                  <th class="text-right">Progress Pendataan</th>
-                  <th class="text-right">Selesai SubSLS</th>
                   <th class="text-right">Target</th>
-                  <th class="text-right">Total SubSLS</th>
+                  <th class="text-right">Progress</th>
+                  <th class="performance-compact-header">Rata-rata/<br>Hari<br>(Assignment)</th>
+                  <th>Prediksi Selesai</th>
+                  <th>Status</th>
+                  <th class="text-right">Skor</th>
                 </tr>
               </thead>
               <tbody>
                 <?php foreach ($rankTable['rows'] as $rankIndex => $rankRow): ?>
                   <tr>
                     <td><?= public_rank_badge($rankIndex + 1) ?></td>
+                    <td><?= e(public_petugas_label($rankRow)) ?></td>
                     <td><?= e($rankRow['kab_codes'] ?? '-') ?></td>
-                    <td><?= e($rankRow['display_name'] ?? ($rankRow['petugas_name'] ?? $rankRow['email'])) ?></td>
-                    <td class="text-right"><?= number_format((float)$rankRow['progress_pendataan_pct'], 2, ',', '.') ?>%</td>
-                    <td class="text-right"><?= number_format((float)$rankRow['selesai_pct'], 2, ',', '.') ?>%</td>
-                    <td class="text-right"><?= number_format((int)$rankRow['target'], 0, ',', '.') ?></td>
-                    <td class="text-right"><?= number_format((int)$rankRow['subsls_total'], 0, ',', '.') ?></td>
+                    <td class="text-right"><?= number_format((int)($rankRow['target'] ?? 0), 0, ',', '.') ?></td>
+                    <td class="text-right performance-progress-cell"><?= public_table_count_pct_text((int)($rankRow['progress_count'] ?? 0), (int)($rankRow['target'] ?? 0)) ?></td>
+                    <td class="text-right"><?= number_format((int)ceil((float)($rankRow['average_per_day'] ?? 0)), 0, ',', '.') ?></td>
+                    <td><?= e($rankRow['projected_finish'] ?? '-') ?></td>
+                    <td><?= e($rankRow['performance_status'] ?? '-') ?></td>
+                    <td class="text-right font-weight-bold"><?= number_format((float)($rankRow['performance_score'] ?? 0), 2, ',', '.') ?></td>
                   </tr>
                 <?php endforeach; ?>
                 <?php if (!$rankTable['rows']): ?>
-                  <tr><td colspan="7" class="text-center text-muted">Belum ada data.</td></tr>
+                  <tr><td colspan="9" class="text-center text-muted">Belum ada data.</td></tr>
                 <?php endif; ?>
               </tbody>
             </table>

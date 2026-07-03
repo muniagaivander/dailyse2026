@@ -405,7 +405,9 @@ Kolom performa mencakup:
 - Prediksi selesai.
 - Skor.
 
-`Rata-rata/Hari` dan `Target Hari Ini` ditampilkan sebagai bilangan bulat dengan pembulatan ke atas. Target Hari Ini dihitung dari sisa pekerjaan dibagi jumlah hari setelah tanggal snapshot sampai 15 Agustus. Setelah melewati 15 Agustus dan pekerjaan belum selesai, nilainya ditampilkan sebagai `Lewat Target`.
+`Capaian Hari Ini dibanding Kemarin (Assignment)` dihitung sebagai selisih Progress Pendataan kondisi H dengan kondisi H-1. `Rata-rata/Hari (Assignment)` dan `Target Hari Ini (Assignment)` ditampilkan sebagai bilangan bulat dengan pembulatan ke atas. Target Hari Ini dihitung dari sisa pekerjaan dibagi jumlah hari setelah tanggal snapshot sampai 15 Agustus. Setelah melewati 15 Agustus dan pekerjaan belum selesai, nilainya ditampilkan sebagai `Lewat Target`.
+
+Kolom Wilayah Kerja pada Performa Sementara menampilkan daftar desa dan total SubSLS petugas pada bagian akhir, misalnya `NYARIBUNGAN, LONG GELAWANG, LAHAM (10 SubSLS)`.
 
 Status Performa Sementara mengikuti prediksi selesai berdasarkan rata-rata progress tujuh hari terakhir:
 
@@ -414,6 +416,8 @@ Status Performa Sementara mengikuti prediksi selesai berdasarkan rata-rata progr
 - `Perlu Didorong`: diproyeksikan selesai pada 16-31 Agustus 2026.
 - `Tertinggal`: diproyeksikan selesai setelah 31 Agustus 2026.
 - `Tidak Ada Momentum`: belum selesai dan tidak ada rata-rata penambahan progress dalam tujuh hari terakhir.
+
+Dashboard publik menampilkan 10 Performa Sementara Pengawas dan Pencacah dari cache performa terakhir. Jalankan `Update Data Performa` sebelum `Dashboard Publik` agar peringkat, prediksi selesai, status, dan skor memakai snapshot terbaru.
 
 Untuk superadmin dan viewer provinsi, tersedia tab `6400` untuk Kalimantan Timur dan tab kabupaten.
 

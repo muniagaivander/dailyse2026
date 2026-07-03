@@ -1,5 +1,6 @@
 <?php
 require __DIR__ . '/layout.php';
+require_once __DIR__ . '/performance_cache.php';
 $user = require_role(['superadmin']);
 ensure_completion_status_table();
 
@@ -104,55 +105,6 @@ function public_dashboard_trend_rows(array $context): array
     return $stmt->fetchAll();
 }
 
-function public_dashboard_performance_rows(string $roleField, array $context): array
-{
-        $stmt = db()->prepare("SELECT ms.$roleField email,
-            u.name petugas_name,
-            GROUP_CONCAT(DISTINCT k.id ORDER BY k.id SEPARATOR ', ') kab_codes,
-            GROUP_CONCAT(DISTINCT d.nmdesa ORDER BY d.nmdesa SEPARATOR ', ') desa_names,
-            GROUP_CONCAT(DISTINCT k.nmkab ORDER BY k.nmkab SEPARATOR ', ') kab_names,
-            COALESCE(SUM(ss.target),0) target,
-            COALESCE(SUM(ss.submitted_by_pencacah),0) submitted_by_pencacah,
-            COALESCE(SUM(ss.rejected_by_pengawas),0) rejected_by_pengawas,
-            COALESCE(SUM(ss.draft_count),0) draft_count,
-            COALESCE(SUM(ss.pending_count),0) pending_count,
-            COALESCE(SUM(ss.approved_by_pengawas),0) approved_by_pengawas,
-            COUNT(ms.id) subsls_total,
-            COALESCE(SUM(CASE WHEN cs.status_selesai='Selesai' THEN 1 ELSE 0 END),0) selesai_count,
-            CASE WHEN COALESCE(SUM(ss.target),0)>0
-                THEN ROUND((COALESCE(SUM(ss.submitted_by_pencacah),0)+COALESCE(SUM(ss.rejected_by_pengawas),0)+COALESCE(SUM(ss.pending_count),0)+COALESCE(SUM(ss.approved_by_pengawas),0))/COALESCE(SUM(ss.target),0)*100,2)
-                ELSE 0 END progress_pendataan_pct,
-            CASE WHEN COUNT(ms.id)>0
-                THEN ROUND(COALESCE(SUM(CASE WHEN cs.status_selesai='Selesai' THEN 1 ELSE 0 END),0)/COUNT(ms.id)*100,2)
-                ELSE 0 END selesai_pct
-        FROM master_subsls ms
-        JOIN master_sls sl ON sl.id=ms.sls_id
-        JOIN master_desa d ON d.id=sl.desa_id
-        JOIN master_kec kc ON kc.id=d.kec_id
-        JOIN master_kab k ON k.id=kc.kab_id
-        LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
-        LEFT JOIN subsls_completion_status cs ON cs.subsls_id=ms.id
-        LEFT JOIN users u ON u.email=ms.$roleField
-        {$context['where']}
-        " . ($context['where'] ? 'AND' : 'WHERE') . " ms.$roleField IS NOT NULL AND ms.$roleField <> ''
-        GROUP BY ms.$roleField, u.name
-        ORDER BY progress_pendataan_pct DESC, selesai_pct DESC, petugas_name ASC, email ASC
-        LIMIT 10");
-    $stmt->execute($context['params']);
-    $rows = $stmt->fetchAll();
-    foreach ($rows as &$row) {
-        $area = trim((string)($row['desa_names'] ?? ''));
-        if ($area === '') {
-            $area = trim((string)($row['kab_names'] ?? ''));
-        } elseif (!empty($row['kab_names']) && substr_count($area, ',') === 0) {
-            $area .= ', ' . $row['kab_names'];
-        }
-        $row['display_name'] = petugas_short_area_label($row['petugas_name'] ?: $row['email'], $area);
-    }
-    unset($row);
-    return $rows;
-}
-
 function public_dashboard_cache_path(): string
 {
     return __DIR__ . '/cache/public_dashboard.json';
@@ -186,6 +138,10 @@ function public_dashboard_wita_label(string $datetime): string
 function public_dashboard_generate_cache(string $email): array
 {
     $fields = status_fields();
+    $performanceCache = performance_cache_read();
+    if (!$performanceCache || (int)($performanceCache['version'] ?? 0) < 5) {
+        throw new RuntimeException('Data performa belum tersedia atau masih memakai format lama. Jalankan Update Data Performa terlebih dahulu.');
+    }
     $dashboards = [];
     foreach (public_dashboard_codes() as $code) {
         $context = public_dashboard_build_context($code);
@@ -197,8 +153,8 @@ function public_dashboard_generate_cache(string $email): array
             'rows' => $rows,
             'totals' => public_dashboard_totals($rows, $fields),
             'trend_rows' => public_dashboard_trend_rows($queryContext),
-            'top_pengawas' => public_dashboard_performance_rows('pengawas_email', $queryContext),
-            'top_pencacah' => public_dashboard_performance_rows('pencacah_email', $queryContext),
+            'top_pengawas' => array_slice($performanceCache['roles']['pengawas']['overall'][$code] ?? [], 0, 10),
+            'top_pencacah' => array_slice($performanceCache['roles']['pencacah']['overall'][$code] ?? [], 0, 10),
         ];
     }
 

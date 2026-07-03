@@ -490,6 +490,7 @@ function performance_metric_row(array $meta, array $daily, string $asOf): array
     $requiredDailyTarget = $remaining <= 0
         ? 0
         : ($asOf > $internalDeadline ? null : (int)ceil($requiredDaily));
+    $yesterdayAchievement = (int)round($daily[$asOf] ?? 0);
     $projectedFinishDate = performance_projected_finish_date($progress, $target, $recentAverage, $asOf);
 
     $score = min(100, ($pace * 0.50 + $consistency['score'] * 0.30 + $momentum * 0.20) * $reliability);
@@ -512,6 +513,7 @@ function performance_metric_row(array $meta, array $daily, string $asOf): array
         'expected_count' => $expected,
         'pace_score' => $pace,
         'average_per_day' => $averagePerDay,
+        'yesterday_achievement' => $yesterdayAchievement,
         'required_daily_target' => $requiredDailyTarget,
         'stddev' => $consistency['stddev'],
         'consistency_score' => $consistency['score'],
@@ -638,6 +640,15 @@ function performance_metric_dataset(string $roleField, array $user, bool $limitT
             }
         }
     }
+    foreach ($scopes as &$petugasRows) {
+        foreach ($petugasRows as &$meta) {
+            $wilayah = trim((string)$meta['wilayah_kerja']);
+            $jumlahSubSls = number_format((int)$meta['subsls_total'], 0, ',', '.');
+            $meta['wilayah_kerja'] = ($wilayah !== '' ? $wilayah . ' ' : '') . '(' . $jumlahSubSls . ' SubSLS)';
+        }
+        unset($meta);
+    }
+    unset($petugasRows);
 
     $dailyKabFilter = $restrictKab ? ' AND ds.kab_id=?' : '';
     $dailyParams = [$campaignStart, $asOf];
@@ -917,7 +928,7 @@ if (($_GET['action'] ?? '') === 'generate_performance_cache'
                 . performance_date_label($weekPeriod['end'])
             : 'Belum ada minggu yang selesai';
         $payload = [
-            'version' => 3,
+            'version' => 5,
             'generated_at' => $snapshotAt,
             'generated_by' => $user['email'],
             'week_label' => $weekLabel,
@@ -953,7 +964,7 @@ if (($_GET['action'] ?? '') === 'export_performance_temporary'
         ? '6400'
         : (string)$user['kab_id'];
     $cache = performance_cache_read();
-    if (!$cache || (int)($cache['version'] ?? 0) < 3) {
+    if (!$cache || (int)($cache['version'] ?? 0) < 5) {
         http_response_code(503);
         exit('Data performa belum tersedia atau memakai format lama. Superadmin perlu menjalankan Update Data Performa.');
     }
@@ -968,6 +979,7 @@ if (($_GET['action'] ?? '') === 'export_performance_temporary'
             $row['target'],
             $row['progress_count'],
             (int)ceil((float)$row['average_per_day']),
+            (int)$row['yesterday_achievement'],
             $row['required_daily_target'] === null ? 'Lewat Target' : (int)$row['required_daily_target'],
             round((float)$row['stddev'], 2),
             round((float)$row['consistency_score'], 2),
@@ -977,7 +989,7 @@ if (($_GET['action'] ?? '') === 'export_performance_temporary'
         ];
     }
     dashboard_export_rows(
-        ['rank', 'petugas', 'kode_kab', 'wilayah_kerja', 'target', 'progress', 'rata_rata_per_hari', 'target_hari_ini', 'standar_deviasi', 'konsistensi_pct', 'prediksi_selesai', 'status', 'skor'],
+        ['rank', 'petugas', 'kode_kab', 'wilayah_kerja', 'target', 'progress', 'rata_rata_per_hari', 'capaian_kemarin_assignment', 'target_hari_ini_assignment', 'standar_deviasi', 'konsistensi_pct', 'prediksi_selesai', 'status', 'skor'],
         $exportRows,
         'performa_sementara_' . $type . '_' . $scopeId . '_' . date('Ymd_His'),
         'xlsx'
@@ -993,7 +1005,7 @@ if (($_GET['action'] ?? '') === 'export_attention' && $canSeePerformance) {
         exit('Akses ditolak');
     }
     $cache = performance_cache_read();
-    if (!$cache || (int)($cache['version'] ?? 0) < 3) {
+    if (!$cache || (int)($cache['version'] ?? 0) < 5) {
         http_response_code(503);
         exit('Data performa belum tersedia atau memakai format lama. Superadmin perlu menjalankan Update Data Performa.');
     }
@@ -1052,7 +1064,7 @@ $performanceMetricData = null;
 if ($canSeePerformance && in_array($activeTab, ['performa_pengawas', 'performa_pencacah'], true)) {
     $performanceCache = performance_cache_read();
     $metricType = $activeTab === 'performa_pengawas' ? 'pengawas' : 'pencacah';
-    if ((int)($performanceCache['version'] ?? 0) >= 3) {
+    if ((int)($performanceCache['version'] ?? 0) >= 5) {
         $performanceMetricData = $performanceCache['roles'][$metricType] ?? null;
     }
 }
@@ -1071,6 +1083,27 @@ function dashboard_table_count_pct_text(int $count, int $target): string
 {
     $pct = $target > 0 ? $count / $target * 100 : 0;
     return e(number_format($count, 0, ',', '.')) . ' <span class="dashboard-table-pct">(' . e(number_format($pct, 2, ',', '.')) . '%)</span>';
+}
+
+function performance_work_area_html(string $value): string
+{
+    $value = trim($value);
+    if (preg_match('/^(.*?)(?:\s+)?\(([\d.]+ SubSLS)\)$/u', $value, $matches)) {
+        $area = trim($matches[1]);
+        return ($area !== '' ? e($area) . ' ' : '')
+            . '<strong class="performance-subsls-total">(' . e($matches[2]) . ')</strong>';
+    }
+    return e($value ?: '-');
+}
+
+function performance_petugas_html(string $email, string $name): string
+{
+    $email = trim($email);
+    $name = trim($name);
+    if ($name === '' || strcasecmp($name, $email) === 0) {
+        return '<span class="performance-staff-email">' . e($email ?: '-') . '</span>';
+    }
+    return e($name) . ' <span class="performance-staff-email">(' . e($email) . ')</span>';
 }
 
 render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role'] === 'pencacah' ? 'Dashboard Pencacah' : 'Dashboard'));
@@ -1190,6 +1223,25 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
 }
 .dashboard-summary-table tfoot td {
   font-weight: 800;
+}
+.dashboard-summary-table th.performance-compact-header {
+  line-height: 1.2;
+  min-width: 92px;
+  text-align: left;
+  vertical-align: middle;
+  white-space: normal;
+}
+.dashboard-summary-table td.performance-progress-cell {
+  min-width: 118px;
+  white-space: nowrap !important;
+}
+.performance-subsls-total {
+  color: #111827;
+  font-weight: 800;
+}
+.performance-staff-email,
+.performance-work-area {
+  font-size: 9pt;
 }
 .dashboard-table-pct {
   color: #2563eb;
@@ -1594,8 +1646,9 @@ if (pengawas) {
                   <th>Wilayah Kerja</th>
                   <th>Target</th>
                   <th>Progress</th>
-                  <th>Rata-rata/Hari</th>
-                  <th>Target Hari Ini</th>
+                  <th class="performance-compact-header">Rata-rata/<br>Hari<br>(Assignment)</th>
+                  <th class="performance-compact-header">Capaian<br>Hari Ini<br>dibanding<br>Kemarin<br>(Assignment)</th>
+                  <th class="performance-compact-header">Target<br>Hari Ini<br>(Assignment)</th>
                   <th>Standar Deviasi</th>
                   <th>Konsistensi</th>
                   <th>Prediksi Selesai</th>
@@ -1607,12 +1660,13 @@ if (pengawas) {
               <?php foreach ($topRows as $rankIndex => $r): ?>
                 <tr>
                   <td><?= dashboard_rank_badge($rankIndex + 1) ?></td>
-                  <td><?= e(petugas_label($r['email'], $r['petugas_name'] ?? '')) ?></td>
+                  <td><?= performance_petugas_html((string)$r['email'], (string)($r['petugas_name'] ?? '')) ?></td>
                   <td><?= e($r['kab_codes'] ?: '-') ?></td>
-                  <td><?= e($r['wilayah_kerja'] ?: '-') ?></td>
+                  <td class="performance-work-area"><?= performance_work_area_html((string)($r['wilayah_kerja'] ?? '')) ?></td>
                   <td class="text-right"><?= number_format((int)$r['target'],0,',','.') ?></td>
-                  <td class="text-right"><?= number_format((int)$r['progress_count'],0,',','.') ?></td>
+                  <td class="text-right performance-progress-cell"><?= dashboard_table_count_pct_text((int)$r['progress_count'], (int)$r['target']) ?></td>
                   <td class="text-right"><?= number_format((int)ceil((float)$r['average_per_day']),0,',','.') ?></td>
+                  <td class="text-right"><?= number_format((int)$r['yesterday_achievement'],0,',','.') ?></td>
                   <td class="text-right"><?= $r['required_daily_target'] === null ? 'Lewat Target' : number_format((int)$r['required_daily_target'],0,',','.') ?></td>
                   <td class="text-right"><?= number_format((float)$r['stddev'],2,',','.') ?></td>
                   <td class="text-right"><?= number_format((float)$r['consistency_score'],2,',','.') ?>%</td>
@@ -1622,7 +1676,7 @@ if (pengawas) {
                 </tr>
               <?php endforeach; ?>
               <?php if (!$topRows): ?>
-                <tr><td colspan="13" class="text-center text-muted">Belum ada data performa sementara.</td></tr>
+                <tr><td colspan="14" class="text-center text-muted">Belum ada data performa sementara.</td></tr>
               <?php endif; ?>
               </tbody>
             </table>
@@ -1658,9 +1712,9 @@ if (pengawas) {
               <?php foreach ($weeklyRows as $rankIndex => $r): ?>
                 <tr>
                   <td><?= dashboard_rank_badge($rankIndex + 1) ?></td>
-                  <td><?= e(petugas_label($r['email'], $r['petugas_name'] ?? '')) ?></td>
+                  <td><?= performance_petugas_html((string)$r['email'], (string)($r['petugas_name'] ?? '')) ?></td>
                   <td><?= e($r['kab_codes'] ?: '-') ?></td>
-                  <td><?= e($r['wilayah_kerja'] ?: '-') ?></td>
+                  <td class="performance-work-area"><?= performance_work_area_html((string)($r['wilayah_kerja'] ?? '')) ?></td>
                   <td class="text-right"><?= number_format((int)$r['target'],0,',','.') ?></td>
                   <td class="text-right"><?= number_format((int)$r['progress_before'],0,',','.') ?></td>
                   <td class="text-right"><?= number_format((int)$r['weekly_count'],0,',','.') ?></td>
