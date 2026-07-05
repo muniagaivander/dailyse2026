@@ -747,7 +747,7 @@ Filter:
 Rekap/Capaian Per Hari -> Semua Bulan/Juni/Juli/Agustus -> PML/PCL -> Kabupaten/Kecamatan/Desa
 ```
 
-File hasil export memuat kolom identitas mengikuti Rekap Petugas sampai Jumlah SubSLS. Setiap tanggal yang sudah memiliki data ditampilkan sebagai dua subkolom:
+File hasil export memuat kolom identitas mengikuti Rekap Petugas sampai Jumlah SubSLS, termasuk Wilayah Kerja Kecamatan dan Wilayah Kerja Desa. Setiap tanggal yang sudah memiliki data ditampilkan sebagai dua subkolom:
 
 - Mode Rekap: Count adalah kondisi `Submit + Reject + Pending + Approved` pada tanggal H.
 - Mode Capaian Per Hari: Count adalah Progress Pendataan H dikurangi H-1. Jika H-1 tidak tersedia, Count bernilai 0.

@@ -96,6 +96,7 @@ function rekap_daily_petugas_rows(array $user, array $filters): array
                 ELSE up.name
             END ORDER BY up.name, ms.pengawas_email SEPARATOR ', ') pml_names,
             GROUP_CONCAT(DISTINCT CONCAT(k.id,' - ',k.nmkab) ORDER BY k.id SEPARATOR ', ') kabupaten,
+            GROUP_CONCAT(DISTINCT kc.nmkec ORDER BY k.id, kc.kdkec SEPARATOR ', ') wilayah_kerja_kecamatan,
             GROUP_CONCAT(DISTINCT d.nmdesa ORDER BY kc.kdkec, d.kddesa SEPARATOR ', ') wilayah_kerja,
             COUNT(ms.id) subsls_total
         FROM master_subsls ms
@@ -201,7 +202,7 @@ function rekap_daily_export(array $rows, array $dates, array $matrix, array $fil
     if ($filters['petugas_type'] === 'pcl') {
         $fixedHeaders[] = 'Nama PML';
     }
-    $fixedHeaders = array_merge($fixedHeaders, ['Kabupaten', 'Wilayah Kerja Desa', 'Jumlah SubSLS']);
+    $fixedHeaders = array_merge($fixedHeaders, ['Kabupaten', 'Wilayah Kerja Kecamatan', 'Wilayah Kerja Desa', 'Jumlah SubSLS']);
     $headerOne = $fixedHeaders;
     $headerTwo = array_fill(0, count($fixedHeaders), '');
     foreach ($dates as $date) {
@@ -221,6 +222,7 @@ function rekap_daily_export(array $rows, array $dates, array $matrix, array $fil
             $values[] = $row['pml_names'] ?: '-';
         }
         $values[] = $row['kabupaten'] ?: '-';
+        $values[] = $row['wilayah_kerja_kecamatan'] ?: '-';
         $values[] = $row['wilayah_kerja'] ?: '-';
         $values[] = (string)(int)$row['subsls_total'];
         $email = normalize_email((string)$row['email']);
@@ -319,12 +321,14 @@ function rekap_daily_export(array $rows, array $dates, array $matrix, array $fil
     if ($filters['petugas_type'] === 'pcl') {
         $identityColumnsXml .= '<col min="3" max="3" width="30" customWidth="1"/>'
             . '<col min="4" max="4" width="28" customWidth="1"/>'
-            . '<col min="5" max="5" width="42" customWidth="1"/>'
-            . '<col min="6" max="6" width="16" customWidth="1"/>';
+            . '<col min="5" max="5" width="30" customWidth="1"/>'
+            . '<col min="6" max="6" width="42" customWidth="1"/>'
+            . '<col min="7" max="7" width="16" customWidth="1"/>';
     } else {
         $identityColumnsXml .= '<col min="3" max="3" width="28" customWidth="1"/>'
-            . '<col min="4" max="4" width="42" customWidth="1"/>'
-            . '<col min="5" max="5" width="16" customWidth="1"/>';
+            . '<col min="4" max="4" width="30" customWidth="1"/>'
+            . '<col min="5" max="5" width="42" customWidth="1"/>'
+            . '<col min="6" max="6" width="16" customWidth="1"/>';
     }
     $sheet = '<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
         . '<sheetViews><sheetView workbookViewId="0"><pane ySplit="2" topLeftCell="A3" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'

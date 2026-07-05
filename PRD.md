@@ -359,6 +359,8 @@ Sistem harus menyediakan export CSV/XLSX.
 
 Sistem harus menampilkan rekap PML/PCL berdasarkan wilayah kerja.
 
+Rekap dan export harus menampilkan Wilayah Kerja Kecamatan sebelum Wilayah Kerja Desa.
+
 Tabel harus dipaginasi 100 row.
 
 Sistem harus menyediakan export CSV/XLSX.

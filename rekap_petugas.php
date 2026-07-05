@@ -77,6 +77,7 @@ function rekap_petugas_rows(array $user, array $filters): array
                 ELSE up.name
             END ORDER BY up.name, ms.pengawas_email SEPARATOR ', ') pml_names,
             GROUP_CONCAT(DISTINCT CONCAT(k.id,' - ',k.nmkab) ORDER BY k.id SEPARATOR ', ') kabupaten,
+            GROUP_CONCAT(DISTINCT kc.nmkec ORDER BY k.id, kc.kdkec SEPARATOR ', ') wilayah_kerja_kecamatan,
             GROUP_CONCAT(DISTINCT d.nmdesa ORDER BY kc.kdkec, d.kddesa SEPARATOR ', ') wilayah_kerja,
             COUNT(ms.id) subsls_total,
             COALESCE(SUM(ss.target),0) target,
@@ -210,7 +211,7 @@ $displayRows = array_slice($rows, ($page - 1) * $perPage, $perPage);
 
 if (($_GET['action'] ?? '') === 'export') {
     $format = ($_GET['format'] ?? 'csv') === 'xlsx' ? 'xlsx' : 'csv';
-    $headers = ['Nama Petugas', 'Email Petugas', 'Kabupaten', 'Wilayah Kerja Desa', 'Jumlah SubSLS', 'Target'];
+    $headers = ['Nama Petugas', 'Email Petugas', 'Kabupaten', 'Wilayah Kerja Kecamatan', 'Wilayah Kerja Desa', 'Jumlah SubSLS', 'Target'];
     if ($filters['petugas_type'] === 'pcl') {
         array_splice($headers, 2, 0, ['Nama PML']);
     }
@@ -224,6 +225,7 @@ if (($_GET['action'] ?? '') === 'export') {
             trim((string)($r['petugas_name'] ?? '')) ?: '-',
             $r['email'],
             $r['kabupaten'] ?: '-',
+            $r['wilayah_kerja_kecamatan'] ?: '-',
             $r['wilayah_kerja'] ?: '-',
             (string)(int)$r['subsls_total'],
             (string)(int)$r['target'],
@@ -324,6 +326,7 @@ render_header('Rekap Petugas');
           <th>Email Petugas</th>
           <?php if ($filters['petugas_type'] === 'pcl'): ?><th>Nama PML</th><?php endif; ?>
           <th>Kabupaten</th>
+          <th>Wilayah Kerja Kecamatan</th>
           <th>Wilayah Kerja Desa</th>
           <th class="text-right">Jumlah SubSLS</th>
           <th class="text-right">Target</th>
@@ -338,6 +341,7 @@ render_header('Rekap Petugas');
             <td><?= e($r['email']) ?></td>
             <?php if ($filters['petugas_type'] === 'pcl'): ?><td><?= e($r['pml_names'] ?: '-') ?></td><?php endif; ?>
             <td><?= e($r['kabupaten'] ?: '-') ?></td>
+            <td><?= e($r['wilayah_kerja_kecamatan'] ?: '-') ?></td>
             <td><?= e($r['wilayah_kerja'] ?: '-') ?></td>
             <td class="text-right"><?= number_format((int)$r['subsls_total'], 0, ',', '.') ?></td>
             <td class="text-right"><?= number_format((int)$r['target'], 0, ',', '.') ?></td>
