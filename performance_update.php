@@ -4,7 +4,7 @@ require_once __DIR__ . '/performance_cache.php';
 $user = require_role(['superadmin']);
 
 $cache = performance_cache_read();
-$cacheVersionCurrent = (int)($cache['version'] ?? 0) >= 5;
+$cacheVersionCurrent = (int)($cache['version'] ?? 0) >= 6;
 
 render_header('Update Data Performa');
 ?>
@@ -16,7 +16,7 @@ render_header('Update Data Performa');
         Update terakhir: <strong><?= e(performance_cache_generated_label($cache)) ?></strong>
         <?php if (!empty($cache['generated_by'])): ?> oleh <?= e($cache['generated_by']) ?><?php endif; ?>.
         <?php if (!performance_cache_is_today($cache)): ?><br>Data performa belum diperbarui hari ini.<?php endif; ?>
-        <?php if (!$cacheVersionCurrent): ?><br>Format cache lama. Jalankan update agar Capaian Hari Ini, Target Hari Ini, dan jumlah SubSLS pada Wilayah Kerja tersedia.<?php endif; ?>
+        <?php if (!$cacheVersionCurrent): ?><br>Format cache lama. Jalankan update agar kolom Kecamatan dan data performa terbaru tersedia.<?php endif; ?>
       </div>
       <table class="table table-sm table-bordered mb-3">
         <tbody>

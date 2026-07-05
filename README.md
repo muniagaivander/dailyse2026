@@ -409,6 +409,8 @@ Kolom performa mencakup:
 
 Kolom Wilayah Kerja pada Performa Sementara menampilkan daftar desa dan total SubSLS petugas pada bagian akhir, misalnya `NYARIBUNGAN, LONG GELAWANG, LAHAM (10 SubSLS)`.
 
+Ketiga tabel performa menampilkan kolom Kecamatan di antara Kode Kab dan Wilayah Kerja. Kecamatan dan Wilayah Kerja menggunakan ukuran teks yang sama agar daftar wilayah tetap ringkas.
+
 Status Performa Sementara mengikuti prediksi selesai berdasarkan rata-rata progress tujuh hari terakhir:
 
 - `Selesai`: progress telah mencapai target.

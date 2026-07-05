@@ -139,7 +139,7 @@ function public_dashboard_generate_cache(string $email): array
 {
     $fields = status_fields();
     $performanceCache = performance_cache_read();
-    if (!$performanceCache || (int)($performanceCache['version'] ?? 0) < 5) {
+    if (!$performanceCache || (int)($performanceCache['version'] ?? 0) < 6) {
         throw new RuntimeException('Data performa belum tersedia atau masih memakai format lama. Jalankan Update Data Performa terlebih dahulu.');
     }
     $dashboards = [];

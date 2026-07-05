@@ -288,6 +288,7 @@ function performance_rows(string $roleField, string $kabId, string $direction): 
         $stmt = db()->prepare("SELECT ms.$roleField email,
             u.name petugas_name,
             GROUP_CONCAT(DISTINCT kc.kab_id ORDER BY kc.kab_id SEPARATOR ', ') kab_codes,
+            GROUP_CONCAT(DISTINCT kc.nmkec ORDER BY kc.kab_id, kc.kdkec SEPARATOR ', ') wilayah_kerja_kecamatan,
             GROUP_CONCAT(DISTINCT d.nmdesa ORDER BY kc.kdkec, d.kddesa SEPARATOR ', ') wilayah_kerja,
             COALESCE(SUM(ss.target),0) target,
             COALESCE(SUM(ss.submitted_by_pencacah),0) submitted_by_pencacah,
@@ -595,6 +596,7 @@ function performance_metric_dataset(string $roleField, array $user, bool $limitT
             k.id kab_id,
             ms.$roleField email,
             u.name petugas_name,
+            GROUP_CONCAT(DISTINCT kc.nmkec ORDER BY kc.kdkec SEPARATOR ', ') wilayah_kerja_kecamatan,
             GROUP_CONCAT(DISTINCT d.nmdesa ORDER BY kc.kdkec, d.kddesa SEPARATOR ', ') wilayah_kerja,
             COUNT(ms.id) subsls_total,
             COALESCE(SUM(ss.target),0) target,
@@ -620,6 +622,7 @@ function performance_metric_dataset(string $roleField, array $user, bool $limitT
             'email' => $email,
             'petugas_name' => $row['petugas_name'] ?? '',
             'kab_codes' => $kabId,
+            'wilayah_kerja_kecamatan' => $row['wilayah_kerja_kecamatan'] ?? '',
             'wilayah_kerja' => $row['wilayah_kerja'] ?? '',
             'subsls_total' => (int)$row['subsls_total'],
             'target' => (int)$row['target'],
@@ -632,6 +635,7 @@ function performance_metric_dataset(string $roleField, array $user, bool $limitT
             } else {
                 $province =& $scopes['6400'][$email];
                 $province['kab_codes'] .= ', ' . $kabId;
+                $province['wilayah_kerja_kecamatan'] .= ($province['wilayah_kerja_kecamatan'] !== '' && $row['wilayah_kerja_kecamatan'] !== '' ? ', ' : '') . ($row['wilayah_kerja_kecamatan'] ?? '');
                 $province['wilayah_kerja'] .= ($province['wilayah_kerja'] !== '' && $row['wilayah_kerja'] !== '' ? ', ' : '') . ($row['wilayah_kerja'] ?? '');
                 $province['subsls_total'] += (int)$row['subsls_total'];
                 $province['target'] += (int)$row['target'];
@@ -928,7 +932,7 @@ if (($_GET['action'] ?? '') === 'generate_performance_cache'
                 . performance_date_label($weekPeriod['end'])
             : 'Belum ada minggu yang selesai';
         $payload = [
-            'version' => 5,
+            'version' => 6,
             'generated_at' => $snapshotAt,
             'generated_by' => $user['email'],
             'week_label' => $weekLabel,
@@ -964,7 +968,7 @@ if (($_GET['action'] ?? '') === 'export_performance_temporary'
         ? '6400'
         : (string)$user['kab_id'];
     $cache = performance_cache_read();
-    if (!$cache || (int)($cache['version'] ?? 0) < 5) {
+    if (!$cache || (int)($cache['version'] ?? 0) < 6) {
         http_response_code(503);
         exit('Data performa belum tersedia atau memakai format lama. Superadmin perlu menjalankan Update Data Performa.');
     }
@@ -975,6 +979,7 @@ if (($_GET['action'] ?? '') === 'export_performance_temporary'
             $rankIndex + 1,
             petugas_label($row['email'], $row['petugas_name'] ?? ''),
             $row['kab_codes'] ?? '',
+            $row['wilayah_kerja_kecamatan'] ?? '',
             $row['wilayah_kerja'] ?? '',
             $row['target'],
             $row['progress_count'],
@@ -989,7 +994,7 @@ if (($_GET['action'] ?? '') === 'export_performance_temporary'
         ];
     }
     dashboard_export_rows(
-        ['rank', 'petugas', 'kode_kab', 'wilayah_kerja', 'target', 'progress', 'rata_rata_per_hari', 'capaian_kemarin_assignment', 'target_hari_ini_assignment', 'standar_deviasi', 'konsistensi_pct', 'prediksi_selesai', 'status', 'skor'],
+        ['rank', 'petugas', 'kode_kab', 'kecamatan', 'wilayah_kerja', 'target', 'progress', 'rata_rata_per_hari', 'capaian_kemarin_assignment', 'target_hari_ini_assignment', 'standar_deviasi', 'konsistensi_pct', 'prediksi_selesai', 'status', 'skor'],
         $exportRows,
         'performa_sementara_' . $type . '_' . $scopeId . '_' . date('Ymd_His'),
         'xlsx'
@@ -1005,7 +1010,7 @@ if (($_GET['action'] ?? '') === 'export_attention' && $canSeePerformance) {
         exit('Akses ditolak');
     }
     $cache = performance_cache_read();
-    if (!$cache || (int)($cache['version'] ?? 0) < 5) {
+    if (!$cache || (int)($cache['version'] ?? 0) < 6) {
         http_response_code(503);
         exit('Data performa belum tersedia atau memakai format lama. Superadmin perlu menjalankan Update Data Performa.');
     }
@@ -1026,13 +1031,14 @@ if (($_GET['action'] ?? '') === 'export_attention' && $canSeePerformance) {
             $row['pending_count'],
             $row['approved_by_pengawas'],
             $row['kab_codes'] ?? '',
+            $row['wilayah_kerja_kecamatan'] ?? '',
             $row['wilayah_kerja'] ?? '',
             $row['subsls_total'],
             $row['selesai_count'],
         ];
     }
     dashboard_export_rows(
-        ['petugas', 'progress_pendataan_pct', 'selesai_subsls_pct', 'threshold_selesai_pct', 'batas_tanggal', 'target', 'submitted_by_pencacah', 'rejected_by_pengawas', 'draft_count', 'pending_count', 'approved_by_pengawas', 'kode_kab', 'wilayah_kerja', 'subsls_total', 'selesai_count'],
+        ['petugas', 'progress_pendataan_pct', 'selesai_subsls_pct', 'threshold_selesai_pct', 'batas_tanggal', 'target', 'submitted_by_pencacah', 'rejected_by_pengawas', 'draft_count', 'pending_count', 'approved_by_pengawas', 'kode_kab', 'kecamatan', 'wilayah_kerja', 'subsls_total', 'selesai_count'],
         $exportRows,
         'perlu_perhatian_' . $type . '_' . $kabId . '_' . date('Ymd'),
         $format
@@ -1064,7 +1070,7 @@ $performanceMetricData = null;
 if ($canSeePerformance && in_array($activeTab, ['performa_pengawas', 'performa_pencacah'], true)) {
     $performanceCache = performance_cache_read();
     $metricType = $activeTab === 'performa_pengawas' ? 'pengawas' : 'pencacah';
-    if ((int)($performanceCache['version'] ?? 0) >= 5) {
+    if ((int)($performanceCache['version'] ?? 0) >= 6) {
         $performanceMetricData = $performanceCache['roles'][$metricType] ?? null;
     }
 }
@@ -1643,6 +1649,7 @@ if (pengawas) {
                   <th>Rank</th>
                   <th>Petugas</th>
                   <th>Kode Kab</th>
+                  <th>Kecamatan</th>
                   <th>Wilayah Kerja</th>
                   <th>Target</th>
                   <th>Progress</th>
@@ -1662,6 +1669,7 @@ if (pengawas) {
                   <td><?= dashboard_rank_badge($rankIndex + 1) ?></td>
                   <td><?= performance_petugas_html((string)$r['email'], (string)($r['petugas_name'] ?? '')) ?></td>
                   <td><?= e($r['kab_codes'] ?: '-') ?></td>
+                  <td class="performance-work-area"><?= e($r['wilayah_kerja_kecamatan'] ?: '-') ?></td>
                   <td class="performance-work-area"><?= performance_work_area_html((string)($r['wilayah_kerja'] ?? '')) ?></td>
                   <td class="text-right"><?= number_format((int)$r['target'],0,',','.') ?></td>
                   <td class="text-right performance-progress-cell"><?= dashboard_table_count_pct_text((int)$r['progress_count'], (int)$r['target']) ?></td>
@@ -1676,7 +1684,7 @@ if (pengawas) {
                 </tr>
               <?php endforeach; ?>
               <?php if (!$topRows): ?>
-                <tr><td colspan="14" class="text-center text-muted">Belum ada data performa sementara.</td></tr>
+                <tr><td colspan="15" class="text-center text-muted">Belum ada data performa sementara.</td></tr>
               <?php endif; ?>
               </tbody>
             </table>
@@ -1696,6 +1704,7 @@ if (pengawas) {
                   <th>Rank</th>
                   <th>Petugas</th>
                   <th>Kode Kab</th>
+                  <th>Kecamatan</th>
                   <th>Wilayah Kerja</th>
                   <th>Target</th>
                   <th>Progress Awal Minggu</th>
@@ -1714,6 +1723,7 @@ if (pengawas) {
                   <td><?= dashboard_rank_badge($rankIndex + 1) ?></td>
                   <td><?= performance_petugas_html((string)$r['email'], (string)($r['petugas_name'] ?? '')) ?></td>
                   <td><?= e($r['kab_codes'] ?: '-') ?></td>
+                  <td class="performance-work-area"><?= e($r['wilayah_kerja_kecamatan'] ?: '-') ?></td>
                   <td class="performance-work-area"><?= performance_work_area_html((string)($r['wilayah_kerja'] ?? '')) ?></td>
                   <td class="text-right"><?= number_format((int)$r['target'],0,',','.') ?></td>
                   <td class="text-right"><?= number_format((int)$r['progress_before'],0,',','.') ?></td>
@@ -1727,7 +1737,7 @@ if (pengawas) {
                 </tr>
               <?php endforeach; ?>
               <?php if (!$weeklyRows): ?>
-                <tr><td colspan="13" class="text-center text-muted"><?= $weeklyPeriod ? 'Belum ada data petugas aktif pada periode ini.' : 'Performa mingguan akan tampil setelah minggu pertama selesai.' ?></td></tr>
+                <tr><td colspan="14" class="text-center text-muted"><?= $weeklyPeriod ? 'Belum ada data petugas aktif pada periode ini.' : 'Performa mingguan akan tampil setelah minggu pertama selesai.' ?></td></tr>
               <?php endif; ?>
               </tbody>
             </table>
@@ -1744,13 +1754,14 @@ if (pengawas) {
           </div>
           <div class="table-responsive">
             <table class="table table-sm table-bordered table-striped mb-0 attention-table" data-page-size="25">
-              <thead><tr><th>Email</th><th>Kode Kab</th><th>Wilayah Kerja</th><th>Draft</th><th>Progress Pendataan</th><th>Selesai SubSLS</th><th>Target</th><th>Total SubSLS</th></tr></thead>
+              <thead><tr><th>Email</th><th>Kode Kab</th><th>Kecamatan</th><th>Wilayah Kerja</th><th>Draft</th><th>Progress Pendataan</th><th>Selesai SubSLS</th><th>Target</th><th>Total SubSLS</th></tr></thead>
               <tbody>
               <?php foreach ($attentionRows as $r): ?>
                 <tr class="attention-row">
                   <td><?= e(petugas_label($r['email'], $r['petugas_name'] ?? '')) ?></td>
                   <td><?= e($r['kab_codes'] ?: '-') ?></td>
-                  <td><?= e($r['wilayah_kerja'] ?: '-') ?></td>
+                  <td class="performance-work-area"><?= e($r['wilayah_kerja_kecamatan'] ?: '-') ?></td>
+                  <td class="performance-work-area"><?= e($r['wilayah_kerja'] ?: '-') ?></td>
                   <td class="text-right"><?= dashboard_table_count_pct_text((int)$r['draft_count'], (int)$r['target']) ?></td>
                   <td class="text-right"><?= dashboard_table_count_pct_text(dashboard_pendataan_count($r), (int)$r['target']) ?></td>
                   <td class="text-right"><?= number_format((float)$r['selesai_pct'],2,',','.') ?>%</td>
@@ -1759,7 +1770,7 @@ if (pengawas) {
                 </tr>
               <?php endforeach; ?>
               <?php if (!$attentionRows): ?>
-                <tr><td colspan="8" class="text-center text-muted">Tidak ada <?= e(strtolower($labelRole)) ?> yang masuk kategori perlu perhatian.</td></tr>
+                <tr><td colspan="9" class="text-center text-muted">Tidak ada <?= e(strtolower($labelRole)) ?> yang masuk kategori perlu perhatian.</td></tr>
               <?php endif; ?>
               </tbody>
             </table>
