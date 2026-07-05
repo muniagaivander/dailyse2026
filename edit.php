@@ -1,6 +1,6 @@
 <?php
 require __DIR__ . '/layout.php';
-$user = require_role(['superadmin', 'admin_kab', 'pengawas']);
+$user = require_role(['superadmin', 'admin_kab']);
 
 function edit_filters_from_request(): array
 {

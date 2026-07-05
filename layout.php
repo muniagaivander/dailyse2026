@@ -135,7 +135,7 @@ function render_header(string $title): void {
             <?php if (in_array($user['role'], ['superadmin','admin_kab'], true)): ?>
               <li class="nav-item"><a class="nav-link important-input-menu<?= $isActive(['input.php']) ?>" href="input.php"><i class="nav-icon fas fa-pen"></i><p>Input Harian</p></a></li>
             <?php endif; ?>
-            <?php if (in_array($user['role'], ['superadmin','admin_kab','pengawas'], true)): ?>
+            <?php if (in_array($user['role'], ['superadmin','admin_kab'], true)): ?>
               <li class="nav-item"><a class="nav-link<?= $isActive(['edit.php']) ?>" href="edit.php"><i class="nav-icon fas fa-edit"></i><p>Edit Harian</p></a></li>
             <?php endif; ?>
             <?php if (in_array($user['role'], ['admin_kab','superadmin','viewer_prov','viewer_kab'], true)): ?>

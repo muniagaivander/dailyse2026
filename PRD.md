@@ -290,6 +290,8 @@ Jika pengawas/tanggal sudah pernah diinput/upload, sistem harus menampilkan info
 
 ### FR-06 Edit Harian
 
+Edit Harian hanya dapat diakses oleh superadmin dan admin kabupaten. PML/Pengawas tidak boleh melihat menu atau mengakses URL Edit Harian secara langsung.
+
 Sistem harus menampilkan tanggal yang benar-benar ada di `daily_status`.
 
 User harus memilih tanggal tertentu sebelum form edit muncul.

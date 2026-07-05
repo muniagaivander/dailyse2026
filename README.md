@@ -549,7 +549,8 @@ Akses:
 
 - Superadmin.
 - Admin kabupaten.
-- Pengawas.
+
+PML/Pengawas tidak memiliki akses ke menu maupun URL Edit Harian.
 
 Alur:
 
