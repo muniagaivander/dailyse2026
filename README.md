@@ -842,7 +842,7 @@ Validasi:
 - Tanggal tidak boleh setelah hari upload.
 - SubSLS harus ada di master.
 - Admin kabupaten hanya boleh upload wilayah kabupatennya.
-- Jika row valid sebagian, sistem tetap melengkapi SubSLS lain pada pengawas/tanggal itu memakai kondisi terakhir agar menu Edit Harian lengkap.
+- Upload template hanya menyimpan SubSLS yang benar-benar tercantum di file. SubSLS lain tetap kosong pada tanggal tersebut dan dapat dilengkapi melalui menu Isi Snapshot Tanggal.
 
 ### Template Harian PML/PCL
 

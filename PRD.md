@@ -314,7 +314,7 @@ Sistem harus memvalidasi:
 - SubSLS harus ada.
 - Admin kabupaten hanya boleh wilayah kabupatennya.
 
-Jika upload sebagian SubSLS pada pengawas/tanggal, sistem harus melengkapi SubSLS lain memakai kondisi terbaru agar edit harian lengkap.
+Upload template hanya boleh menyimpan SubSLS yang tercantum dalam file. SubSLS yang tidak tercantum harus tetap kosong pada tanggal tersebut agar dapat terdeteksi dan dilengkapi melalui Isi Snapshot Tanggal.
 
 ### FR-08 Status Selesai SubSLS
 

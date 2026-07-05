@@ -290,7 +290,11 @@ function dt_import_template(string $path, array $user): array
             $alias = array_values(array_filter($aliases, fn($name) => array_key_exists($name, $idx)))[0];
             $status[$field] = max(0, (int)($row[$idx[$alias]] ?? 0));
         }
-        $uploads[$tanggal][$master['pengawas_email']][$subslsId] = $status;
+        $uploads[$tanggal][$master['pengawas_email']][$subslsId] = [
+            'status' => $status,
+            'kab_id' => $master['kab_id'],
+            'pencacah_email' => $master['pencacah_email'],
+        ];
         $uploaded++;
     }
 
@@ -305,21 +309,6 @@ function dt_import_template(string $path, array $user): array
 
     db()->beginTransaction();
     try {
-        $stmtPengawasRows = db()->prepare("SELECT ms.id subsls_id, ms.pengawas_email, ms.pencacah_email, k.id kab_id,
-                COALESCE(ss.open_count,0) open_count,
-                COALESCE(ss.draft_count,0) draft_count,
-                COALESCE(ss.submitted_by_pencacah,0) submitted_by_pencacah,
-                COALESCE(ss.approved_by_pengawas,0) approved_by_pengawas,
-                COALESCE(ss.rejected_by_pengawas,0) rejected_by_pengawas,
-                COALESCE(ss.pending_count,0) pending_count
-            FROM master_subsls ms
-            JOIN master_sls sl ON sl.id=ms.sls_id
-            JOIN master_desa d ON d.id=sl.desa_id
-            JOIN master_kec kc ON kc.id=d.kec_id
-            JOIN master_kab k ON k.id=kc.kab_id
-            LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
-            WHERE ms.pengawas_email=? " . ($user['role'] === 'admin_kab' ? 'AND k.id=?' : '') . "
-            ORDER BY ms.id");
         $stmtDaily = db()->prepare("INSERT INTO daily_status
             (tanggal,subsls_id,kab_id,pengawas_email,pencacah_email,target,open_count,draft_count,submitted_by_pencacah,approved_by_pengawas,rejected_by_pengawas,pending_count,submitted_at,updated_by)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
@@ -335,22 +324,9 @@ function dt_import_template(string $path, array $user): array
             ON DUPLICATE KEY UPDATE status=VALUES(status), updated_at=CURRENT_TIMESTAMP");
 
         foreach ($uploads as $tanggal => $byPengawas) {
-            foreach ($byPengawas as $pengawasEmail => $uploadedStatusBySubsls) {
-                $params = [$pengawasEmail];
-                if ($user['role'] === 'admin_kab') {
-                    $params[] = $user['kab_id'];
-                }
-                $stmtPengawasRows->execute($params);
-                $masterRows = $stmtPengawasRows->fetchAll();
-                foreach ($masterRows as $master) {
-                    $status = $uploadedStatusBySubsls[$master['subsls_id']] ?? [
-                        'open_count' => (int)$master['open_count'],
-                        'draft_count' => (int)$master['draft_count'],
-                        'submitted_by_pencacah' => (int)$master['submitted_by_pencacah'],
-                        'approved_by_pengawas' => (int)$master['approved_by_pengawas'],
-                        'rejected_by_pengawas' => (int)$master['rejected_by_pengawas'],
-                        'pending_count' => (int)$master['pending_count'],
-                    ];
+            foreach ($byPengawas as $pengawasEmail => $uploadedRowsBySubsls) {
+                foreach ($uploadedRowsBySubsls as $subslsId => $uploadedRow) {
+                    $status = $uploadedRow['status'];
                     $open = $status['open_count'];
                     $draft = $status['draft_count'];
                     $submitted = $status['submitted_by_pencacah'];
@@ -361,10 +337,10 @@ function dt_import_template(string $path, array $user): array
                     $now = date('Y-m-d H:i:s');
                     $stmtDaily->execute([
                         $tanggal,
-                        $master['subsls_id'],
-                        $master['kab_id'],
+                        $subslsId,
+                        $uploadedRow['kab_id'],
                         $pengawasEmail,
-                        $master['pencacah_email'],
+                        $uploadedRow['pencacah_email'],
                         $target,
                         $open,
                         $draft,
@@ -375,9 +351,9 @@ function dt_import_template(string $path, array $user): array
                         $now,
                         $user['email'],
                     ]);
-                    $stmtNewer->execute([$master['subsls_id'], $tanggal]);
+                    $stmtNewer->execute([$subslsId, $tanggal]);
                     if (!$stmtNewer->fetchColumn()) {
-                        $stmtStatus->execute([$master['subsls_id'], $open, $draft, $submitted, $approved, $rejected, $pending, $target, $now, $user['email']]);
+                        $stmtStatus->execute([$subslsId, $open, $draft, $submitted, $approved, $rejected, $pending, $target, $now, $user['email']]);
                     }
                     $processed++;
                 }
