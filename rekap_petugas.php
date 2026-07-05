@@ -127,10 +127,10 @@ function rekap_petugas_xlsx_col(int $index): string
     return $name;
 }
 
-function rekap_petugas_xlsx_cell(string $value, int $row, int $col): string
+function rekap_petugas_xlsx_cell(string $value, int $row, int $col, int $style = 0): string
 {
     $ref = rekap_petugas_xlsx_col($col) . $row;
-    return '<c r="' . $ref . '" t="inlineStr"><is><t>' . htmlspecialchars($value, ENT_XML1 | ENT_COMPAT, 'UTF-8') . '</t></is></c>';
+    return '<c r="' . $ref . '" s="' . $style . '" t="inlineStr"><is><t>' . htmlspecialchars($value, ENT_XML1 | ENT_COMPAT, 'UTF-8') . '</t></is></c>';
 }
 
 function rekap_petugas_export(array $headers, array $rows, string $format, string $type): void
@@ -159,6 +159,7 @@ function rekap_petugas_export(array $headers, array $rows, string $format, strin
   <Default Extension="xml" ContentType="application/xml"/>
   <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
   <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
 </Types>');
     $zip->addFromString('_rels/.rels', '<?xml version="1.0" encoding="UTF-8"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
@@ -171,13 +172,31 @@ function rekap_petugas_export(array $headers, array $rows, string $format, strin
     $zip->addFromString('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
 </Relationships>');
+    $zip->addFromString('xl/styles.xml', '<?xml version="1.0" encoding="UTF-8"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="2">
+    <font><sz val="11"/><name val="Calibri"/></font>
+    <font><sz val="9"/><name val="Calibri"/></font>
+  </fonts>
+  <fills count="1"><fill><patternFill patternType="none"/></fill></fills>
+  <borders count="1"><border/></borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="2">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0"/>
+  </cellXfs>
+</styleSheet>');
+    $smallFontColumns = [2, $type === 'pcl' ? 6 : 5];
     $sheet = '<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
     foreach (array_merge([$headers], $rows) as $rIndex => $row) {
         $rowNumber = $rIndex + 1;
         $sheet .= '<row r="' . $rowNumber . '">';
         foreach ($row as $cIndex => $value) {
-            $sheet .= rekap_petugas_xlsx_cell((string)$value, $rowNumber, $cIndex + 1);
+            $columnNumber = $cIndex + 1;
+            $style = $rowNumber > 1 && in_array($columnNumber, $smallFontColumns, true) ? 1 : 0;
+            $sheet .= rekap_petugas_xlsx_cell((string)$value, $rowNumber, $columnNumber, $style);
         }
         $sheet .= '</row>';
     }
@@ -261,6 +280,9 @@ render_header('Rekap Petugas');
     color: #2563eb;
     font-weight: 700;
   }
+  .rekap-small-text {
+    font-size: 9pt;
+  }
 </style>
 <form class="card card-body mb-3" method="get">
   <div class="form-row align-items-end">
@@ -338,11 +360,11 @@ render_header('Rekap Petugas');
         <?php foreach ($displayRows as $r): ?>
           <tr>
             <td><?= e(trim((string)($r['petugas_name'] ?? '')) ?: '-') ?></td>
-            <td><?= e($r['email']) ?></td>
+            <td class="rekap-small-text"><?= e($r['email']) ?></td>
             <?php if ($filters['petugas_type'] === 'pcl'): ?><td><?= e($r['pml_names'] ?: '-') ?></td><?php endif; ?>
             <td><?= e($r['kabupaten'] ?: '-') ?></td>
             <td><?= e($r['wilayah_kerja_kecamatan'] ?: '-') ?></td>
-            <td><?= e($r['wilayah_kerja'] ?: '-') ?></td>
+            <td class="rekap-small-text"><?= e($r['wilayah_kerja'] ?: '-') ?></td>
             <td class="text-right"><?= number_format((int)$r['subsls_total'], 0, ',', '.') ?></td>
             <td class="text-right"><?= number_format((int)$r['target'], 0, ',', '.') ?></td>
             <?php foreach (array_keys($fields) as $field): ?><td class="text-right"><?= number_format((int)$r[$field], 0, ',', '.') ?></td><?php endforeach; ?>
@@ -350,7 +372,7 @@ render_header('Rekap Petugas');
           </tr>
         <?php endforeach; ?>
         <?php if (!$displayRows): ?>
-          <tr><td colspan="<?= 7 + count($fields) + ($filters['petugas_type'] === 'pcl' ? 1 : 0) ?>" class="text-center text-muted">Tidak ada data petugas pada filter ini.</td></tr>
+          <tr><td colspan="<?= 8 + count($fields) + ($filters['petugas_type'] === 'pcl' ? 1 : 0) ?>" class="text-center text-muted">Tidak ada data petugas pada filter ini.</td></tr>
         <?php endif; ?>
       </tbody>
     </table>

@@ -288,9 +288,10 @@ function rekap_daily_export(array $rows, array $dates, array $matrix, array $fil
 
     $zip->addFromString('xl/styles.xml', '<?xml version="1.0" encoding="UTF-8"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="2">
+  <fonts count="3">
     <font><sz val="11"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><color rgb="FF1F2937"/><name val="Calibri"/></font>
+    <font><sz val="9"/><name val="Calibri"/></font>
   </fonts>
   <fills count="2">
     <fill><patternFill patternType="none"/></fill>
@@ -306,11 +307,12 @@ function rekap_daily_export(array $rows, array $dates, array $matrix, array $fil
     </border>
   </borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="2">
+  <cellXfs count="3">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="1" fillId="1" borderId="1" xfId="0" applyAlignment="1">
       <alignment horizontal="center" vertical="center" wrapText="1"/>
     </xf>
+    <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0"/>
   </cellXfs>
 </styleSheet>');
 
@@ -341,8 +343,11 @@ function rekap_daily_export(array $rows, array $dates, array $matrix, array $fil
     foreach (array_merge([$headerOne, $headerTwo], $exportRows) as $rowIndex => $row) {
         $rowNumber = $rowIndex + 1;
         $sheet .= '<row r="' . $rowNumber . '"' . ($rowNumber <= 2 ? ' ht="24" customHeight="1"' : '') . '>';
+        $smallFontColumns = [2, $filters['petugas_type'] === 'pcl' ? 6 : 5];
         foreach ($row as $colIndex => $value) {
-            $sheet .= rekap_daily_xlsx_cell((string)$value, $rowNumber, $colIndex + 1, $rowNumber <= 2 ? 1 : 0);
+            $columnNumber = $colIndex + 1;
+            $style = $rowNumber <= 2 ? 1 : (in_array($columnNumber, $smallFontColumns, true) ? 2 : 0);
+            $sheet .= rekap_daily_xlsx_cell((string)$value, $rowNumber, $columnNumber, $style);
         }
         $sheet .= '</row>';
     }
