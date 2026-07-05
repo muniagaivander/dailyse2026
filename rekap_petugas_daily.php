@@ -11,6 +11,7 @@ if (!in_array($selectedMonth, $allowedMonths, true)) {
 }
 
 $filters = [
+    'data_type' => ($_GET['data_type'] ?? 'rekap') === 'daily_achievement' ? 'daily_achievement' : 'rekap',
     'bulan' => $selectedMonth,
     'petugas_type' => ($_GET['petugas_type'] ?? 'pml') === 'pcl' ? 'pcl' : 'pml',
     'kab_id' => (string)($_GET['kab_id'] ?? ''),
@@ -115,9 +116,12 @@ function rekap_daily_values(array $user, array $filters): array
 {
     [$where, $params] = rekap_daily_area_where($user, $filters);
     [$dateStart, $dateEnd] = rekap_daily_date_range($filters['bulan']);
+    $queryStart = $filters['data_type'] === 'daily_achievement'
+        ? date('Y-m-d', strtotime($dateStart . ' -1 day'))
+        : $dateStart;
     $emailField = $filters['petugas_type'] === 'pcl' ? 'pencacah_email' : 'pengawas_email';
     $where[] = 'ds.tanggal BETWEEN ? AND ?';
-    $params[] = $dateStart;
+    $params[] = $queryStart;
     $params[] = $dateEnd;
     $where[] = "ds.$emailField IS NOT NULL";
     $where[] = "ds.$emailField <> ''";
@@ -143,7 +147,9 @@ function rekap_daily_values(array $user, array $filters): array
     foreach ($stmt->fetchAll() as $row) {
         $date = (string)$row['tanggal'];
         $email = normalize_email((string)$row['email']);
-        $dates[$date] = true;
+        if ($date >= $dateStart) {
+            $dates[$date] = true;
+        }
         $matrix[$email][$date] = [
             'count' => (int)$row['progress_count'],
             'target' => (int)$row['target'],
@@ -181,10 +187,10 @@ function rekap_daily_xlsx_col(int $index): string
     return $name;
 }
 
-function rekap_daily_xlsx_cell(string $value, int $row, int $col): string
+function rekap_daily_xlsx_cell(string $value, int $row, int $col, int $style = 0): string
 {
     $ref = rekap_daily_xlsx_col($col) . $row;
-    return '<c r="' . $ref . '" t="inlineStr"><is><t>'
+    return '<c r="' . $ref . '" s="' . $style . '" t="inlineStr"><is><t>'
         . htmlspecialchars($value, ENT_XML1 | ENT_COMPAT, 'UTF-8')
         . '</t></is></c>';
 }
@@ -219,15 +225,25 @@ function rekap_daily_export(array $rows, array $dates, array $matrix, array $fil
         $values[] = (string)(int)$row['subsls_total'];
         $email = normalize_email((string)$row['email']);
         foreach ($dates as $date) {
-            $daily = $matrix[$email][$date] ?? ['count' => 0, 'target' => 0];
-            $values[] = (string)$daily['count'];
-            $values[] = number_format(rekap_daily_pct($daily['count'], $daily['target']), 2, ',', '.') . '%';
+            $daily = $matrix[$email][$date] ?? null;
+            $count = (int)($daily['count'] ?? 0);
+            $target = (int)($daily['target'] ?? 0);
+            if ($filters['data_type'] === 'daily_achievement') {
+                $previousDate = date('Y-m-d', strtotime($date . ' -1 day'));
+                $previous = $matrix[$email][$previousDate] ?? null;
+                $count = $daily !== null && $previous !== null
+                    ? (int)$daily['count'] - (int)$previous['count']
+                    : 0;
+            }
+            $values[] = (string)$count;
+            $values[] = number_format(rekap_daily_pct($count, $target), 2, ',', '.') . '%';
         }
         $exportRows[] = $values;
     }
 
     $suffix = $filters['bulan'] === 'all' ? 'semua_bulan' : REKAP_DAILY_YEAR . $filters['bulan'];
-    $filename = 'rekap_petugas_daily_' . $filters['petugas_type'] . '_' . $suffix . '_' . date('Ymd_His');
+    $typePrefix = $filters['data_type'] === 'daily_achievement' ? 'capaian_petugas_daily' : 'rekap_petugas_daily';
+    $filename = $typePrefix . '_' . $filters['petugas_type'] . '_' . $suffix . '_' . date('Ymd_His');
     if ($format === 'csv') {
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="' . $filename . '.csv"');
@@ -252,6 +268,7 @@ function rekap_daily_export(array $rows, array $dates, array $matrix, array $fil
   <Default Extension="xml" ContentType="application/xml"/>
   <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
   <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
 </Types>');
     $zip->addFromString('_rels/.rels', '<?xml version="1.0" encoding="UTF-8"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
@@ -264,18 +281,89 @@ function rekap_daily_export(array $rows, array $dates, array $matrix, array $fil
     $zip->addFromString('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
 </Relationships>');
 
-    $sheet = '<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
+    $zip->addFromString('xl/styles.xml', '<?xml version="1.0" encoding="UTF-8"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="2">
+    <font><sz val="11"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FF1F2937"/><name val="Calibri"/></font>
+  </fonts>
+  <fills count="2">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFDBEAFE"/><bgColor indexed="64"/></patternFill></fill>
+  </fills>
+  <borders count="2">
+    <border/>
+    <border>
+      <left style="thin"><color rgb="FFCBD5E1"/></left>
+      <right style="thin"><color rgb="FFCBD5E1"/></right>
+      <top style="thin"><color rgb="FFCBD5E1"/></top>
+      <bottom style="thin"><color rgb="FFCBD5E1"/></bottom>
+    </border>
+  </borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="2">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="1" fillId="1" borderId="1" xfId="0" applyAlignment="1">
+      <alignment horizontal="center" vertical="center" wrapText="1"/>
+    </xf>
+  </cellXfs>
+</styleSheet>');
+
+    $fixedCount = count($fixedHeaders);
+    $lastColumn = $fixedCount + (count($dates) * 2);
+    $identityColumnsXml = '<col min="1" max="1" width="24" customWidth="1"/>'
+        . '<col min="2" max="2" width="30" customWidth="1"/>';
+    if ($filters['petugas_type'] === 'pcl') {
+        $identityColumnsXml .= '<col min="3" max="3" width="30" customWidth="1"/>'
+            . '<col min="4" max="4" width="28" customWidth="1"/>'
+            . '<col min="5" max="5" width="42" customWidth="1"/>'
+            . '<col min="6" max="6" width="16" customWidth="1"/>';
+    } else {
+        $identityColumnsXml .= '<col min="3" max="3" width="28" customWidth="1"/>'
+            . '<col min="4" max="4" width="42" customWidth="1"/>'
+            . '<col min="5" max="5" width="16" customWidth="1"/>';
+    }
+    $sheet = '<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        . '<sheetViews><sheetView workbookViewId="0"><pane ySplit="2" topLeftCell="A3" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
+        . '<cols>'
+        . $identityColumnsXml
+        . ($lastColumn > $fixedCount
+            ? '<col min="' . ($fixedCount + 1) . '" max="' . $lastColumn . '" width="12" customWidth="1"/>'
+            : '')
+        . '</cols><sheetData>';
     foreach (array_merge([$headerOne, $headerTwo], $exportRows) as $rowIndex => $row) {
         $rowNumber = $rowIndex + 1;
-        $sheet .= '<row r="' . $rowNumber . '">';
+        $sheet .= '<row r="' . $rowNumber . '"' . ($rowNumber <= 2 ? ' ht="24" customHeight="1"' : '') . '>';
         foreach ($row as $colIndex => $value) {
-            $sheet .= rekap_daily_xlsx_cell((string)$value, $rowNumber, $colIndex + 1);
+            $sheet .= rekap_daily_xlsx_cell((string)$value, $rowNumber, $colIndex + 1, $rowNumber <= 2 ? 1 : 0);
         }
         $sheet .= '</row>';
     }
-    $sheet .= '</sheetData></worksheet>';
+    $sheet .= '</sheetData>';
+    $mergeCells = [];
+    for ($fixedColumn = 1; $fixedColumn <= $fixedCount; $fixedColumn++) {
+        $fixedColumnName = rekap_daily_xlsx_col($fixedColumn);
+        $mergeCells[] = $fixedColumnName . '1:' . $fixedColumnName . '2';
+    }
+    if ($dates) {
+        $dateStartColumn = $fixedCount + 1;
+        foreach ($dates as $dateIndex => $_date) {
+            $startColumn = $dateStartColumn + ($dateIndex * 2);
+            $mergeCells[] = rekap_daily_xlsx_col($startColumn) . '1:'
+                . rekap_daily_xlsx_col($startColumn + 1) . '1';
+        }
+    }
+    if ($mergeCells) {
+        $sheet .= '<mergeCells count="' . count($mergeCells) . '">';
+        foreach ($mergeCells as $mergeRef) {
+            $sheet .= '<mergeCell ref="' . $mergeRef . '"/>';
+        }
+        $sheet .= '</mergeCells>';
+    }
+    $sheet .= '</worksheet>';
     $zip->addFromString('xl/worksheets/sheet1.xml', $sheet);
     $zip->close();
 
@@ -315,6 +403,13 @@ render_header('Rekap Petugas Daily');
 
 <form class="card card-body mb-3" method="get">
   <div class="form-row align-items-end">
+    <div class="form-group col-12 col-md-2">
+      <label>Tipe Data</label>
+      <select class="form-control" name="data_type" id="data_type">
+        <option value="rekap" <?= $filters['data_type']==='rekap'?'selected':'' ?>>Rekap</option>
+        <option value="daily_achievement" <?= $filters['data_type']==='daily_achievement'?'selected':'' ?>>Capaian Per Hari</option>
+      </select>
+    </div>
     <div class="form-group col-12 col-md-2">
       <label>Bulan</label>
       <select class="form-control" name="bulan" id="bulan">
@@ -373,6 +468,7 @@ render_header('Rekap Petugas Daily');
 <?php
   $exportQuery = [
       'bulan' => $filters['bulan'],
+      'data_type' => $filters['data_type'],
       'petugas_type' => $filters['petugas_type'],
       'kab_id' => $filters['kab_id'],
       'kec_id' => $filters['kec_id'],
@@ -382,15 +478,22 @@ render_header('Rekap Petugas Daily');
 ?>
 <div class="card rekap-daily-export">
   <div class="card-body">
-    <h5 class="font-weight-bold">Export Rekap Petugas Daily</h5>
-    <p class="text-muted">File akan dibuat berdasarkan bulan, jenis petugas, dan wilayah yang dipilih pada filter di atas. Proses dapat memerlukan waktu untuk cakupan data yang besar.</p>
+    <h5 class="font-weight-bold">Export <?= $filters['data_type'] === 'daily_achievement' ? 'Capaian Per Hari' : 'Rekap Petugas Daily' ?></h5>
+    <p class="text-muted">
+      <?php if ($filters['data_type'] === 'daily_achievement'): ?>
+        Count dihitung dari Progress Pendataan H dikurangi H-1. Persen dihitung dari Count dibagi Target pada hari H. Jika data H-1 tidak tersedia, Count ditetapkan 0.
+      <?php else: ?>
+        File berisi kondisi rekap Progress Pendataan pada setiap tanggal.
+      <?php endif; ?>
+      Proses dapat memerlukan waktu untuk cakupan data yang besar.
+    </p>
     <a class="btn btn-success mr-2" href="?<?= e(http_build_query($exportQuery + ['format' => 'csv'])) ?>"><i class="fas fa-file-csv mr-1"></i>Download CSV</a>
     <a class="btn btn-success" href="?<?= e(http_build_query($exportQuery + ['format' => 'xlsx'])) ?>"><i class="fas fa-file-excel mr-1"></i>Download Excel</a>
   </div>
 </div>
 
 <script>
-['bulan', 'petugas_type'].forEach(function (id) {
+['data_type', 'bulan', 'petugas_type'].forEach(function (id) {
   const element = document.getElementById(id);
   if (element) element.addEventListener('change', function () { this.form.submit(); });
 });

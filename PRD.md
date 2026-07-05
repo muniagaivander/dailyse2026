@@ -365,9 +365,9 @@ Sistem harus menyediakan export CSV/XLSX.
 
 ### FR-12A Rekap Petugas Daily
 
-Sistem harus menampilkan rekap PML/PCL per tanggal untuk periode Juni sampai Agustus 2026.
+Sistem harus menyediakan tipe data Rekap dan Capaian Per Hari untuk PML/PCL pada periode Juni sampai Agustus 2026.
 
-Setiap tanggal harus memiliki subkolom Count dan Persen. Count dihitung dari Submit, Reject, Pending, dan Approved. Persen dihitung terhadap Target pada tanggal yang sama.
+Setiap tanggal harus memiliki subkolom Count dan Persen, dengan header tanggal yang digabung melintang pada kedua subkolom di file XLSX. Pada tipe Rekap, Count adalah kondisi Submit, Reject, Pending, dan Approved tanggal H. Pada tipe Capaian Per Hari, Count dihitung dari Progress Pendataan H dikurangi H-1; jika H-1 tidak tersedia, Count bernilai 0. Persen selalu dihitung terhadap Target tanggal H.
 
 Filter wilayah serta export CSV/XLSX harus tersedia. Halaman bersifat export-only dan query rekap hanya dijalankan ketika pengguna menekan tombol download.
 

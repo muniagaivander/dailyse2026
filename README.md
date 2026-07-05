@@ -744,13 +744,16 @@ Akses:
 Filter:
 
 ```text
-Semua Bulan/Juni/Juli/Agustus -> PML/PCL -> Kabupaten/Kecamatan/Desa
+Rekap/Capaian Per Hari -> Semua Bulan/Juni/Juli/Agustus -> PML/PCL -> Kabupaten/Kecamatan/Desa
 ```
 
 File hasil export memuat kolom identitas mengikuti Rekap Petugas sampai Jumlah SubSLS. Setiap tanggal yang sudah memiliki data ditampilkan sebagai dua subkolom:
 
-- Count: `Submit + Reject + Pending + Approved`.
-- Persen: Count dibagi Target pada tanggal tersebut.
+- Mode Rekap: Count adalah kondisi `Submit + Reject + Pending + Approved` pada tanggal H.
+- Mode Capaian Per Hari: Count adalah Progress Pendataan H dikurangi H-1. Jika H-1 tidak tersedia, Count bernilai 0.
+- Persen: Count dibagi Target pada tanggal H.
+
+Pada file XLSX, judul setiap tanggal digabung melintang di atas subkolom Count dan Persen.
 
 Halaman tidak menjalankan query rekap saat dibuka atau ketika filter berubah. Query diproses hanya ketika pengguna menekan Download CSV atau Download Excel.
 
