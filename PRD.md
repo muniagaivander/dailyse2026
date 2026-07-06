@@ -242,6 +242,23 @@ Dashboard harus menampilkan maksimal 10 Performa Sementara dan 10 Performa Mingg
 
 Performa Sementara menggunakan target internal 15 Agustus 2026 dan menggabungkan Indeks Ketepatan Laju, Konsistensi Harian, serta Momentum 7 Hari.
 
+Rumus Performa Sementara:
+
+```text
+Progress Pendataan = Submit + Reject + Pending + Approved
+Capaian Harian H = Progress Pendataan H - Progress Pendataan H-1
+Ekspektasi = Target x Hari Rencana Berjalan / Total Hari Rencana sampai 15 Agustus
+Indeks Laju = min(120, Progress Aktual / Ekspektasi x 100)
+Konsistensi = 100 / (1 + Standar Deviasi Capaian Harian / Rata-rata Capaian Harian)
+Kebutuhan Harian = Sisa Pekerjaan / Sisa Hari menuju tenggat
+Momentum 7 Hari = min(120, Rata-rata Capaian 7 Hari / Kebutuhan Harian x 100)
+Skor Dasar = Indeks Laju x 50% + Konsistensi x 30% + Momentum x 20%
+Faktor Reliabilitas = min(1, Hari Observasi / 7)
+Skor Akhir = min(100, Skor Dasar x Faktor Reliabilitas)
+```
+
+Capaian negatif harus dianggap 0 untuk Konsistensi dan Momentum. Jika rata-rata capaian 0, Konsistensi bernilai 0. Setelah 15 Agustus, tenggat kebutuhan harian bergeser ke 31 Agustus. Prediksi selesai harus memakai rata-rata capaian tujuh hari terakhir.
+
 Performa Sementara harus menampilkan `Capaian Hari Ini dibanding Kemarin (Assignment)` yang dihitung dari Progress Pendataan kondisi H dikurangi kondisi H-1. `Target Hari Ini (Assignment)` dihitung berdasarkan sisa pekerjaan dan sisa hari menuju 15 Agustus. Rata-rata/Hari (Assignment) dan Target Hari Ini harus dibulatkan ke atas.
 
 Wilayah Kerja Performa Sementara harus menampilkan daftar desa diikuti total SubSLS petugas pada akhir teks.
@@ -373,7 +390,7 @@ Sistem harus menyediakan export CSV/XLSX.
 
 Sistem harus menyediakan tipe data Rekap dan Capaian Per Hari untuk PML/PCL pada periode Juni sampai Agustus 2026.
 
-Setiap tanggal harus memiliki subkolom Count dan Persen, dengan header tanggal yang digabung melintang pada kedua subkolom di file XLSX. Pada tipe Rekap, Count adalah kondisi Submit, Reject, Pending, dan Approved tanggal H. Pada tipe Capaian Per Hari, Count dihitung dari Progress Pendataan H dikurangi H-1; jika H-1 tidak tersedia, Count bernilai 0. Persen selalu dihitung terhadap Target tanggal H.
+Export harus memakai satu baris header. Setiap tanggal memiliki dua kolom dengan format `<Tanggal>-Count` dan `<Tanggal>-Persen`. Pada tipe Rekap, Count adalah kondisi Submit, Reject, Pending, dan Approved tanggal H. Pada tipe Capaian Per Hari, Count dihitung dari Progress Pendataan H dikurangi H-1; jika H-1 tidak tersedia, Count bernilai 0. Persen selalu dihitung terhadap Target tanggal H.
 
 Filter wilayah serta export CSV/XLSX harus tersedia. Halaman bersifat export-only dan query rekap hanya dijalankan ketika pengguna menekan tombol download.
 

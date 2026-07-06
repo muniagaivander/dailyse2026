@@ -379,6 +379,46 @@ Performa Sementara dihitung sejak 15 Juni 2026 sampai tanggal data berjalan, den
 20% Momentum 7 Hari
 ```
 
+Rumus Performa Sementara:
+
+```text
+Progress Pendataan = Submit + Reject + Pending + Approved
+
+Capaian Harian H = Progress Pendataan H - Progress Pendataan H-1
+
+Ekspektasi Hari Ini
+= Target x Hari Rencana Berjalan / Total Hari Rencana sampai 15 Agustus
+
+Indeks Ketepatan Laju
+= min(120, Progress Aktual / Ekspektasi Hari Ini x 100)
+
+Konsistensi Harian
+= 100 / (1 + Standar Deviasi Capaian Harian / Rata-rata Capaian Harian)
+
+Kebutuhan Harian
+= Sisa Pekerjaan / Sisa Hari menuju 15 Agustus
+
+Momentum 7 Hari
+= min(120, Rata-rata Capaian 7 Hari Terakhir / Kebutuhan Harian x 100)
+
+Skor Dasar
+= (Indeks Ketepatan Laju x 50%)
+ + (Konsistensi Harian x 30%)
+ + (Momentum 7 Hari x 20%)
+
+Faktor Reliabilitas = min(1, Jumlah Hari Observasi / 7)
+
+Skor Akhir = min(100, Skor Dasar x Faktor Reliabilitas)
+```
+
+Ketentuan perhitungan:
+
+- Komponen laju dan momentum dibatasi maksimal 120, sedangkan Skor Akhir maksimal 100.
+- Capaian harian negatif akibat koreksi data dianggap 0 untuk Konsistensi dan Momentum.
+- Jika rata-rata capaian harian 0, nilai Konsistensi menjadi 0.
+- Setelah 15 Agustus, kebutuhan harian dihitung terhadap batas akhir 31 Agustus.
+- Prediksi selesai memakai rata-rata capaian tujuh hari terakhir, bukan angka Rata-rata/Hari kumulatif yang ditampilkan.
+
 Performa Mingguan hanya memakai minggu terakhir yang sudah selesai. Minggu pertama adalah 15-21 Juni, minggu kedua 22-28 Juni, dan seterusnya sampai periode final 31 Agustus.
 
 ```text
@@ -751,13 +791,11 @@ Filter:
 Rekap/Capaian Per Hari -> Semua Bulan/Juni/Juli/Agustus -> PML/PCL -> Kabupaten/Kecamatan/Desa
 ```
 
-File hasil export memuat kolom identitas mengikuti Rekap Petugas sampai Jumlah SubSLS, termasuk Wilayah Kerja Kecamatan dan Wilayah Kerja Desa. Setiap tanggal yang sudah memiliki data ditampilkan sebagai dua subkolom:
+File hasil export memuat kolom identitas mengikuti Rekap Petugas sampai Jumlah SubSLS, termasuk Wilayah Kerja Kecamatan dan Wilayah Kerja Desa. Header hanya menggunakan satu baris. Setiap tanggal yang sudah memiliki data ditampilkan sebagai dua kolom, misalnya `16 Juni-Count` dan `16 Juni-Persen`:
 
 - Mode Rekap: Count adalah kondisi `Submit + Reject + Pending + Approved` pada tanggal H.
 - Mode Capaian Per Hari: Count adalah Progress Pendataan H dikurangi H-1. Jika H-1 tidak tersedia, Count bernilai 0.
 - Persen: Count dibagi Target pada tanggal H.
-
-Pada file XLSX, judul setiap tanggal digabung melintang di atas subkolom Count dan Persen.
 
 Halaman tidak menjalankan query rekap saat dibuka atau ketika filter berubah. Query diproses hanya ketika pengguna menekan Download CSV atau Download Excel.
 

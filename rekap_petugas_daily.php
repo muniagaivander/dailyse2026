@@ -203,13 +203,11 @@ function rekap_daily_export(array $rows, array $dates, array $matrix, array $fil
         $fixedHeaders[] = 'Nama PML';
     }
     $fixedHeaders = array_merge($fixedHeaders, ['Kabupaten', 'Wilayah Kerja Kecamatan', 'Wilayah Kerja Desa', 'Jumlah SubSLS']);
-    $headerOne = $fixedHeaders;
-    $headerTwo = array_fill(0, count($fixedHeaders), '');
+    $headers = $fixedHeaders;
     foreach ($dates as $date) {
-        $headerOne[] = rekap_daily_date_label($date);
-        $headerOne[] = '';
-        $headerTwo[] = 'Count';
-        $headerTwo[] = 'Persen';
+        $dateLabel = rekap_daily_date_label($date);
+        $headers[] = $dateLabel . '-Count';
+        $headers[] = $dateLabel . '-Persen';
     }
 
     $exportRows = [];
@@ -250,8 +248,7 @@ function rekap_daily_export(array $rows, array $dates, array $matrix, array $fil
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="' . $filename . '.csv"');
         $out = fopen('php://output', 'w');
-        fputcsv($out, $headerOne);
-        fputcsv($out, $headerTwo);
+        fputcsv($out, $headers);
         foreach ($exportRows as $row) {
             fputcsv($out, $row);
         }
@@ -333,46 +330,25 @@ function rekap_daily_export(array $rows, array $dates, array $matrix, array $fil
             . '<col min="6" max="6" width="16" customWidth="1"/>';
     }
     $sheet = '<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-        . '<sheetViews><sheetView workbookViewId="0"><pane ySplit="2" topLeftCell="A3" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
+        . '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
         . '<cols>'
         . $identityColumnsXml
         . ($lastColumn > $fixedCount
             ? '<col min="' . ($fixedCount + 1) . '" max="' . $lastColumn . '" width="12" customWidth="1"/>'
             : '')
         . '</cols><sheetData>';
-    foreach (array_merge([$headerOne, $headerTwo], $exportRows) as $rowIndex => $row) {
+    foreach (array_merge([$headers], $exportRows) as $rowIndex => $row) {
         $rowNumber = $rowIndex + 1;
-        $sheet .= '<row r="' . $rowNumber . '"' . ($rowNumber <= 2 ? ' ht="24" customHeight="1"' : '') . '>';
+        $sheet .= '<row r="' . $rowNumber . '"' . ($rowNumber === 1 ? ' ht="24" customHeight="1"' : '') . '>';
         $smallFontColumns = [2, $filters['petugas_type'] === 'pcl' ? 6 : 5];
         foreach ($row as $colIndex => $value) {
             $columnNumber = $colIndex + 1;
-            $style = $rowNumber <= 2 ? 1 : (in_array($columnNumber, $smallFontColumns, true) ? 2 : 0);
+            $style = $rowNumber === 1 ? 1 : (in_array($columnNumber, $smallFontColumns, true) ? 2 : 0);
             $sheet .= rekap_daily_xlsx_cell((string)$value, $rowNumber, $columnNumber, $style);
         }
         $sheet .= '</row>';
     }
-    $sheet .= '</sheetData>';
-    $mergeCells = [];
-    for ($fixedColumn = 1; $fixedColumn <= $fixedCount; $fixedColumn++) {
-        $fixedColumnName = rekap_daily_xlsx_col($fixedColumn);
-        $mergeCells[] = $fixedColumnName . '1:' . $fixedColumnName . '2';
-    }
-    if ($dates) {
-        $dateStartColumn = $fixedCount + 1;
-        foreach ($dates as $dateIndex => $_date) {
-            $startColumn = $dateStartColumn + ($dateIndex * 2);
-            $mergeCells[] = rekap_daily_xlsx_col($startColumn) . '1:'
-                . rekap_daily_xlsx_col($startColumn + 1) . '1';
-        }
-    }
-    if ($mergeCells) {
-        $sheet .= '<mergeCells count="' . count($mergeCells) . '">';
-        foreach ($mergeCells as $mergeRef) {
-            $sheet .= '<mergeCell ref="' . $mergeRef . '"/>';
-        }
-        $sheet .= '</mergeCells>';
-    }
-    $sheet .= '</worksheet>';
+    $sheet .= '</sheetData></worksheet>';
     $zip->addFromString('xl/worksheets/sheet1.xml', $sheet);
     $zip->close();
 
