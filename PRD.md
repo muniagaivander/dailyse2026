@@ -248,6 +248,8 @@ Wilayah Kerja Performa Sementara harus menampilkan daftar desa diikuti total Sub
 
 Performa Sementara, Performa Mingguan, dan tabel Perlu Perhatian harus menampilkan Kecamatan di antara Kode Kab dan Wilayah Kerja dengan ukuran teks yang sama seperti Wilayah Kerja.
 
+Export seluruh Performa Sementara harus memisahkan Progress Count dan Progress Persen ke dalam dua kolom.
+
 Status Performa Sementara harus mengikuti prediksi selesai dari rata-rata progress tujuh hari terakhir: `On Track` hingga 15 Agustus, `Perlu Didorong` pada 16-31 Agustus, `Tertinggal` setelah 31 Agustus, dan `Tidak Ada Momentum` apabila pekerjaan belum selesai tetapi tidak ada laju progress yang dapat diproyeksikan.
 
 Performa Mingguan hanya menggunakan periode terakhir yang sudah selesai, dimulai dari minggu 15-21 Juni 2026. Perhitungan menggabungkan Pencapaian Target Mingguan, Konsistensi Harian, dan Kemampuan Mengejar Sisa Target.

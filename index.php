@@ -975,14 +975,18 @@ if (($_GET['action'] ?? '') === 'export_performance_temporary'
     $rows = $cache['roles'][$type]['overall'][$scopeId] ?? [];
     $exportRows = [];
     foreach ($rows as $rankIndex => $row) {
+        $progressCount = (int)$row['progress_count'];
+        $target = (int)$row['target'];
+        $progressPct = $target > 0 ? $progressCount / $target * 100 : 0;
         $exportRows[] = [
             $rankIndex + 1,
             petugas_label($row['email'], $row['petugas_name'] ?? ''),
             $row['kab_codes'] ?? '',
             $row['wilayah_kerja_kecamatan'] ?? '',
             $row['wilayah_kerja'] ?? '',
-            $row['target'],
-            $row['progress_count'],
+            $target,
+            $progressCount,
+            number_format($progressPct, 2, ',', '.') . '%',
             (int)ceil((float)$row['average_per_day']),
             (int)$row['yesterday_achievement'],
             $row['required_daily_target'] === null ? 'Lewat Target' : (int)$row['required_daily_target'],
@@ -994,7 +998,7 @@ if (($_GET['action'] ?? '') === 'export_performance_temporary'
         ];
     }
     dashboard_export_rows(
-        ['rank', 'petugas', 'kode_kab', 'kecamatan', 'wilayah_kerja', 'target', 'progress', 'rata_rata_per_hari', 'capaian_kemarin_assignment', 'target_hari_ini_assignment', 'standar_deviasi', 'konsistensi_pct', 'prediksi_selesai', 'status', 'skor'],
+        ['rank', 'petugas', 'kode_kab', 'kecamatan', 'wilayah_kerja', 'target', 'progress_count', 'progress_persen', 'rata_rata_per_hari', 'capaian_kemarin_assignment', 'target_hari_ini_assignment', 'standar_deviasi', 'konsistensi_pct', 'prediksi_selesai', 'status', 'skor'],
         $exportRows,
         'performa_sementara_' . $type . '_' . $scopeId . '_' . date('Ymd_His'),
         'xlsx'

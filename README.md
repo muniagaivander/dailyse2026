@@ -411,6 +411,8 @@ Kolom Wilayah Kerja pada Performa Sementara menampilkan daftar desa dan total Su
 
 Ketiga tabel performa menampilkan kolom Kecamatan di antara Kode Kab dan Wilayah Kerja. Kecamatan dan Wilayah Kerja menggunakan ukuran teks yang sama agar daftar wilayah tetap ringkas.
 
+Export `Download Semua Pengawas/Pencacah` memisahkan Progress menjadi `progress_count` dan `progress_persen`.
+
 Status Performa Sementara mengikuti prediksi selesai berdasarkan rata-rata progress tujuh hari terakhir:
 
 - `Selesai`: progress telah mencapai target.
