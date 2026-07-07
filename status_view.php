@@ -46,7 +46,6 @@ $error = null;
 $statusFields = status_fields();
 $fields = [
     'open_count' => $statusFields['open_count'],
-    'draft_count' => $statusFields['draft_count'],
     'submitted_by_pencacah' => $statusFields['submitted_by_pencacah'],
     'rejected_by_pengawas' => $statusFields['rejected_by_pengawas'],
     'pending_count' => $statusFields['pending_count'],
@@ -124,6 +123,12 @@ function status_view_progress_pct(array $row): float
 {
     $target = (int)$row['target'];
     return $target > 0 ? (status_view_progress_count($row) / $target) * 100 : 0.0;
+}
+
+function status_view_field_pct(array $row, string $field): float
+{
+    $target = (int)$row['target'];
+    return $target > 0 ? ((int)$row[$field] / $target) * 100 : 0.0;
 }
 
 function status_view_card_where(string $sqlWhere, string $emailField): string
@@ -313,10 +318,13 @@ if (($_GET['action'] ?? '') === 'export' && isset($_GET['filter'])) {
     $stmt->execute($params);
     $exportSource = $stmt->fetchAll();
     $headers = ['Kabupaten', 'Kecamatan', 'Desa', 'Kode SubSLS', 'SLS', 'SubSLS', 'Pengawas', 'Pencacah', 'Target'];
+    $headers[] = 'Draft (Count)';
+    $headers[] = 'Draft (Persen %)';
     foreach ($fields as $label) {
         $headers[] = $label;
     }
-    $headers[] = 'Progress';
+    $headers[] = 'Progress (Count)';
+    $headers[] = 'Progress (Persen %)';
     $headers[] = 'Last Update';
     $headers[] = 'Updated By';
     $headers[] = 'Status Selesai';
@@ -333,10 +341,13 @@ if (($_GET['action'] ?? '') === 'export' && isset($_GET['filter'])) {
             petugas_label($r['pencacah_email'], $r['pencacah_name'] ?? ''),
             (string)(int)$r['target'],
         ];
+        $row[] = (string)(int)$r['draft_count'];
+        $row[] = number_format(status_view_field_pct($r, 'draft_count'), 2, ',', '.') . '%';
         foreach (array_keys($fields) as $field) {
             $row[] = (string)(int)$r[$field];
         }
         $row[] = (string)status_view_progress_count($r);
+        $row[] = number_format(status_view_progress_pct($r), 2, ',', '.') . '%';
         $row[] = $r['last_update'] ?: '';
         $row[] = $r['updated_by'] ?: '';
         $row[] = $r['status_selesai'];
@@ -468,6 +479,13 @@ render_header('Status Terupdate');
 .status-section-search {
   max-width: 280px;
   min-width: 220px;
+}
+.status-header-sub {
+  white-space: nowrap;
+}
+.status-pct-cell {
+  color: #2563eb;
+  font-weight: 700;
 }
 @media (max-width: 575.98px) {
   .status-card-section {
@@ -623,8 +641,12 @@ render_header('Status Terupdate');
       <thead>
         <tr>
           <th>Kode SubSLS</th><th>Desa</th><th>SLS</th><th>SubSLS</th><th>Pengawas</th><th>Pencacah</th><th>Target</th>
+          <th>Draft<br><span class="status-header-sub">(Count)</span></th>
+          <th>Draft<br><span class="status-header-sub">(Persen %)</span></th>
           <?php foreach ($fields as $label): ?><th><?= e($label) ?></th><?php endforeach; ?>
-          <th>Progress</th><th>Last Update</th><th>Updated By</th><th>Status Selesai</th>
+          <th>Progress<br><span class="status-header-sub">(Count)</span></th>
+          <th>Progress<br><span class="status-header-sub">(Persen %)</span></th>
+          <th>Last Update</th><th>Updated By</th><th>Status Selesai</th>
         </tr>
       </thead>
       <tbody>
@@ -637,8 +659,11 @@ render_header('Status Terupdate');
           <td><?= e(petugas_label($r['pengawas_email'], $r['pengawas_name'] ?? '')) ?></td>
           <td><?= e(petugas_label($r['pencacah_email'], $r['pencacah_name'] ?? '')) ?></td>
           <td><?= number_format((int)$r['target'], 0, ',', '.') ?></td>
+          <td><?= number_format((int)$r['draft_count'], 0, ',', '.') ?></td>
+          <td class="status-pct-cell"><?= number_format(status_view_field_pct($r, 'draft_count'), 2, ',', '.') ?>%</td>
           <?php foreach (array_keys($fields) as $field): ?><td><?= number_format((int)$r[$field], 0, ',', '.') ?></td><?php endforeach; ?>
           <td><?= number_format(status_view_progress_count($r), 0, ',', '.') ?></td>
+          <td class="status-pct-cell"><?= number_format(status_view_progress_pct($r), 2, ',', '.') ?>%</td>
           <td><?= e($r['last_update'] ?: '-') ?></td>
           <td><?= e($r['updated_by'] ?: '-') ?></td>
           <td><?= e($r['status_selesai']) ?></td>

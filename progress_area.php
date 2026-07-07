@@ -2,20 +2,21 @@
 require __DIR__ . '/layout.php';
 
 $user = require_role(['admin_kab','superadmin','viewer_prov','viewer_kab']);
-$monthOptions = [
-    '06' => 'Juni',
-    '07' => 'Juli',
-    '08' => 'Agustus',
-    '09' => 'September',
-];
 $filters = [
-    'month' => $_GET['month'] ?? '',
+    'date_start' => $_GET['date_start'] ?? '2026-06-15',
+    'date_end' => $_GET['date_end'] ?? date('Y-m-d'),
     'kab_id' => $_GET['kab_id'] ?? '',
     'kec_id' => $_GET['kec_id'] ?? '',
     'desa_id' => $_GET['desa_id'] ?? '',
 ];
-if (!array_key_exists($filters['month'], $monthOptions)) {
-    $filters['month'] = '';
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_start'])) {
+    $filters['date_start'] = '2026-06-15';
+}
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_end'])) {
+    $filters['date_end'] = date('Y-m-d');
+}
+if ($filters['date_start'] > $filters['date_end']) {
+    [$filters['date_start'], $filters['date_end']] = [$filters['date_end'], $filters['date_start']];
 }
 if (in_array($user['role'], ['admin_kab', 'viewer_kab'], true)) {
     $filters['kab_id'] = $user['kab_id'];
@@ -96,10 +97,9 @@ function progress_area_where(array $user, array $filters): array
         $where[] = 'k.id=?';
         $params[] = $filters['kab_id'];
     }
-    if (!empty($filters['month'])) {
-        $where[] = 'MONTH(ds.tanggal)=?';
-        $params[] = (int)$filters['month'];
-    }
+    $where[] = 'ds.tanggal BETWEEN ? AND ?';
+    $params[] = $filters['date_start'];
+    $params[] = $filters['date_end'];
     foreach (['kec_id' => 'kc.id', 'desa_id' => 'd.id'] as $key => $col) {
         if (!empty($filters[$key])) {
             $where[] = "{$col}=?";
@@ -224,11 +224,13 @@ render_header('Progress By Daerah');
   <input type="hidden" name="action" id="areaProgressAction" value="">
   <div class="form-row align-items-end">
     <div class="form-group col-md-2">
-      <label>Bulan</label>
-      <select class="form-control" name="month" id="month">
-        <option value="">Semua Bulan</option>
-        <?php foreach ($monthOptions as $value => $label): ?><option value="<?= e($value) ?>" <?= $filters['month']===$value?'selected':'' ?>><?= e($label) ?></option><?php endforeach; ?>
-      </select>
+      <label>Tanggal Awal</label>
+      <input class="form-control" type="date" name="date_start" id="date_start" value="<?= e($filters['date_start']) ?>">
+    </div>
+
+    <div class="form-group col-md-2">
+      <label>Tanggal Akhir</label>
+      <input class="form-control" type="date" name="date_end" id="date_end" value="<?= e($filters['date_end']) ?>">
     </div>
 
     <?php if (in_array($user['role'], ['superadmin','viewer_prov'], true)): ?>
@@ -315,7 +317,6 @@ render_header('Progress By Daerah');
 <?php endif; ?>
 
 <script>
-const monthSelect = document.getElementById('month');
 const kabSelect = document.getElementById('kab_id');
 const kecSelect = document.getElementById('kec_id');
 const desaSelect = document.getElementById('desa_id');
@@ -330,19 +331,6 @@ function reloadAreaOptions() {
 
 areaProgressFilterButton.addEventListener('click', function () {
   areaProgressAction.value = 'filter';
-});
-
-monthSelect.addEventListener('change', function () {
-  if (kabSelect) kabSelect.value = '';
-  kecSelect.value = '';
-  desaSelect.value = '';
-  if (kabSelect) {
-    kecSelect.disabled = true;
-    kecSelect.options[0].textContent = 'Pilih kabupaten dulu';
-  }
-  desaSelect.disabled = true;
-  desaSelect.options[0].textContent = 'Pilih kecamatan dulu';
-  reloadAreaOptions();
 });
 
 if (kabSelect) {

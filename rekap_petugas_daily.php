@@ -2,33 +2,30 @@
 require __DIR__ . '/layout.php';
 $user = require_role(['superadmin', 'admin_kab', 'viewer_prov', 'viewer_kab']);
 
-const REKAP_DAILY_YEAR = 2026;
-
-$allowedMonths = ['all', '06', '07', '08'];
-$selectedMonth = (string)($_GET['bulan'] ?? 'all');
-if (!in_array($selectedMonth, $allowedMonths, true)) {
-    $selectedMonth = 'all';
+$selectedDataType = (string)($_GET['data_type'] ?? 'rekap');
+if (!in_array($selectedDataType, ['rekap', 'daily_achievement', 'daily_plus_rekap'], true)) {
+    $selectedDataType = 'rekap';
 }
-
 $filters = [
-    'data_type' => ($_GET['data_type'] ?? 'rekap') === 'daily_achievement' ? 'daily_achievement' : 'rekap',
-    'bulan' => $selectedMonth,
+    'data_type' => $selectedDataType,
+    'date_start' => (string)($_GET['date_start'] ?? '2026-06-15'),
+    'date_end' => (string)($_GET['date_end'] ?? date('Y-m-d')),
     'petugas_type' => ($_GET['petugas_type'] ?? 'pml') === 'pcl' ? 'pcl' : 'pml',
     'kab_id' => (string)($_GET['kab_id'] ?? ''),
     'kec_id' => (string)($_GET['kec_id'] ?? ''),
     'desa_id' => (string)($_GET['desa_id'] ?? ''),
 ];
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_start'])) {
+    $filters['date_start'] = '2026-06-15';
+}
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_end'])) {
+    $filters['date_end'] = date('Y-m-d');
+}
+if ($filters['date_start'] > $filters['date_end']) {
+    [$filters['date_start'], $filters['date_end']] = [$filters['date_end'], $filters['date_start']];
+}
 if (in_array($user['role'], ['admin_kab', 'viewer_kab'], true)) {
     $filters['kab_id'] = (string)$user['kab_id'];
-}
-
-function rekap_daily_date_range(string $month): array
-{
-    if ($month === 'all') {
-        return [REKAP_DAILY_YEAR . '-06-01', REKAP_DAILY_YEAR . '-08-31'];
-    }
-    $start = REKAP_DAILY_YEAR . '-' . $month . '-01';
-    return [$start, date('Y-m-t', strtotime($start))];
 }
 
 function rekap_daily_filter_options(array $user, array $filters): array
@@ -116,8 +113,9 @@ function rekap_daily_petugas_rows(array $user, array $filters): array
 function rekap_daily_values(array $user, array $filters): array
 {
     [$where, $params] = rekap_daily_area_where($user, $filters);
-    [$dateStart, $dateEnd] = rekap_daily_date_range($filters['bulan']);
-    $queryStart = $filters['data_type'] === 'daily_achievement'
+    $dateStart = $filters['date_start'];
+    $dateEnd = $filters['date_end'];
+    $queryStart = in_array($filters['data_type'], ['daily_achievement', 'daily_plus_rekap'], true)
         ? date('Y-m-d', strtotime($dateStart . ' -1 day'))
         : $dateStart;
     $emailField = $filters['petugas_type'] === 'pcl' ? 'pencacah_email' : 'pengawas_email';
@@ -206,8 +204,15 @@ function rekap_daily_export(array $rows, array $dates, array $matrix, array $fil
     $headers = $fixedHeaders;
     foreach ($dates as $date) {
         $dateLabel = rekap_daily_date_label($date);
-        $headers[] = $dateLabel . '-Count';
-        $headers[] = $dateLabel . '-Persen';
+        if ($filters['data_type'] === 'daily_plus_rekap') {
+            $headers[] = 'Capaian ' . $dateLabel . '-Count';
+            $headers[] = 'Capaian ' . $dateLabel . '-Percent';
+            $headers[] = 'Rekap Sampai ' . $dateLabel . '-Count';
+            $headers[] = 'Rekap Sampai ' . $dateLabel . '-Percent';
+        } else {
+            $headers[] = $dateLabel . '-Count';
+            $headers[] = $dateLabel . '-Persen';
+        }
     }
 
     $exportRows = [];
@@ -228,6 +233,19 @@ function rekap_daily_export(array $rows, array $dates, array $matrix, array $fil
             $daily = $matrix[$email][$date] ?? null;
             $count = (int)($daily['count'] ?? 0);
             $target = (int)($daily['target'] ?? 0);
+            if ($filters['data_type'] === 'daily_plus_rekap') {
+                $rekapCount = $count;
+                $previousDate = date('Y-m-d', strtotime($date . ' -1 day'));
+                $previous = $matrix[$email][$previousDate] ?? null;
+                $capaianCount = $daily !== null && $previous !== null
+                    ? (int)$daily['count'] - (int)$previous['count']
+                    : 0;
+                $values[] = (string)$capaianCount;
+                $values[] = number_format(rekap_daily_pct($capaianCount, $target), 2, ',', '.') . '%';
+                $values[] = (string)$rekapCount;
+                $values[] = number_format(rekap_daily_pct($rekapCount, $target), 2, ',', '.') . '%';
+                continue;
+            }
             if ($filters['data_type'] === 'daily_achievement') {
                 $previousDate = date('Y-m-d', strtotime($date . ' -1 day'));
                 $previous = $matrix[$email][$previousDate] ?? null;
@@ -241,8 +259,14 @@ function rekap_daily_export(array $rows, array $dates, array $matrix, array $fil
         $exportRows[] = $values;
     }
 
-    $suffix = $filters['bulan'] === 'all' ? 'semua_bulan' : REKAP_DAILY_YEAR . $filters['bulan'];
-    $typePrefix = $filters['data_type'] === 'daily_achievement' ? 'capaian_petugas_daily' : 'rekap_petugas_daily';
+    $suffix = str_replace('-', '', $filters['date_start']) . '_' . str_replace('-', '', $filters['date_end']);
+    if ($filters['data_type'] === 'daily_achievement') {
+        $typePrefix = 'capaian_petugas_daily';
+    } elseif ($filters['data_type'] === 'daily_plus_rekap') {
+        $typePrefix = 'capaian_rekap_petugas_daily';
+    } else {
+        $typePrefix = 'rekap_petugas_daily';
+    }
     $filename = $typePrefix . '_' . $filters['petugas_type'] . '_' . $suffix . '_' . date('Ymd_His');
     if ($format === 'csv') {
         header('Content-Type: text/csv; charset=utf-8');
@@ -314,7 +338,8 @@ function rekap_daily_export(array $rows, array $dates, array $matrix, array $fil
 </styleSheet>');
 
     $fixedCount = count($fixedHeaders);
-    $lastColumn = $fixedCount + (count($dates) * 2);
+    $columnsPerDate = $filters['data_type'] === 'daily_plus_rekap' ? 4 : 2;
+    $lastColumn = $fixedCount + (count($dates) * $columnsPerDate);
     $identityColumnsXml = '<col min="1" max="1" width="24" customWidth="1"/>'
         . '<col min="2" max="2" width="30" customWidth="1"/>';
     if ($filters['petugas_type'] === 'pcl') {
@@ -393,16 +418,16 @@ render_header('Rekap Petugas Daily');
       <select class="form-control" name="data_type" id="data_type">
         <option value="rekap" <?= $filters['data_type']==='rekap'?'selected':'' ?>>Rekap</option>
         <option value="daily_achievement" <?= $filters['data_type']==='daily_achievement'?'selected':'' ?>>Capaian Per Hari</option>
+        <option value="daily_plus_rekap" <?= $filters['data_type']==='daily_plus_rekap'?'selected':'' ?>>Capaian Per Hari + Rekap</option>
       </select>
     </div>
     <div class="form-group col-12 col-md-2">
-      <label>Bulan</label>
-      <select class="form-control" name="bulan" id="bulan">
-        <option value="all" <?= $filters['bulan']==='all'?'selected':'' ?>>Semua Bulan</option>
-        <option value="06" <?= $filters['bulan']==='06'?'selected':'' ?>>Juni</option>
-        <option value="07" <?= $filters['bulan']==='07'?'selected':'' ?>>Juli</option>
-        <option value="08" <?= $filters['bulan']==='08'?'selected':'' ?>>Agustus</option>
-      </select>
+      <label>Tanggal Awal</label>
+      <input class="form-control" type="date" name="date_start" id="date_start" value="<?= e($filters['date_start']) ?>">
+    </div>
+    <div class="form-group col-12 col-md-2">
+      <label>Tanggal Akhir</label>
+      <input class="form-control" type="date" name="date_end" id="date_end" value="<?= e($filters['date_end']) ?>">
     </div>
     <div class="form-group col-12 col-md-2">
       <label>Jenis Petugas</label>
@@ -452,7 +477,8 @@ render_header('Rekap Petugas Daily');
 
 <?php
   $exportQuery = [
-      'bulan' => $filters['bulan'],
+      'date_start' => $filters['date_start'],
+      'date_end' => $filters['date_end'],
       'data_type' => $filters['data_type'],
       'petugas_type' => $filters['petugas_type'],
       'kab_id' => $filters['kab_id'],
@@ -463,10 +489,20 @@ render_header('Rekap Petugas Daily');
 ?>
 <div class="card rekap-daily-export">
   <div class="card-body">
-    <h5 class="font-weight-bold">Export <?= $filters['data_type'] === 'daily_achievement' ? 'Capaian Per Hari' : 'Rekap Petugas Daily' ?></h5>
+    <h5 class="font-weight-bold">Export <?php
+      if ($filters['data_type'] === 'daily_achievement') {
+          echo 'Capaian Per Hari';
+      } elseif ($filters['data_type'] === 'daily_plus_rekap') {
+          echo 'Capaian Per Hari + Rekap';
+      } else {
+          echo 'Rekap Petugas Daily';
+      }
+    ?></h5>
     <p class="text-muted">
       <?php if ($filters['data_type'] === 'daily_achievement'): ?>
         Count dihitung dari Progress Pendataan H dikurangi H-1. Persen dihitung dari Count dibagi Target pada hari H. Jika data H-1 tidak tersedia, Count ditetapkan 0.
+      <?php elseif ($filters['data_type'] === 'daily_plus_rekap'): ?>
+        File berisi Capaian Per Hari dan Rekap sampai tanggal tersebut. Capaian dihitung dari Progress Pendataan H dikurangi H-1.
       <?php else: ?>
         File berisi kondisi rekap Progress Pendataan pada setiap tanggal.
       <?php endif; ?>
@@ -478,7 +514,7 @@ render_header('Rekap Petugas Daily');
 </div>
 
 <script>
-['data_type', 'bulan', 'petugas_type'].forEach(function (id) {
+['data_type', 'petugas_type'].forEach(function (id) {
   const element = document.getElementById(id);
   if (element) element.addEventListener('change', function () { this.form.submit(); });
 });

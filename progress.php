@@ -7,21 +7,22 @@ if (in_array($user['role'], ['pengawas', 'pencacah'], true)) {
     $type = 'pencacah';
 }
 $filters = [
-    'month' => $_GET['month'] ?? '',
+    'date_start' => $_GET['date_start'] ?? '2026-06-15',
+    'date_end' => $_GET['date_end'] ?? date('Y-m-d'),
     'kab_id' => $_GET['kab_id'] ?? '',
     'email' => normalize_email($_GET['email'] ?? ''),
     'kec_id' => $_GET['kec_id'] ?? '',
     'desa_id' => $_GET['desa_id'] ?? '',
     'subsls_id' => $_GET['subsls_id'] ?? '',
 ];
-$monthOptions = [
-    '06' => 'Juni',
-    '07' => 'Juli',
-    '08' => 'Agustus',
-    '09' => 'September',
-];
-if (!array_key_exists($filters['month'], $monthOptions)) {
-    $filters['month'] = '';
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_start'])) {
+    $filters['date_start'] = '2026-06-15';
+}
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_end'])) {
+    $filters['date_end'] = date('Y-m-d');
+}
+if ($filters['date_start'] > $filters['date_end']) {
+    [$filters['date_start'], $filters['date_end']] = [$filters['date_end'], $filters['date_start']];
 }
 if (in_array($user['role'], ['admin_kab', 'viewer_kab'], true)) {
     $filters['kab_id'] = $user['kab_id'];
@@ -179,10 +180,9 @@ function progress_trend_where(array $user, string $type, array $filters): array
         $where[] = 'ds.pencacah_email=?';
         $params[] = $user['email'];
     }
-    if (!empty($filters['month'])) {
-        $where[] = 'MONTH(ds.tanggal)=?';
-        $params[] = (int)$filters['month'];
-    }
+    $where[] = 'ds.tanggal BETWEEN ? AND ?';
+    $params[] = $filters['date_start'];
+    $params[] = $filters['date_end'];
     foreach (['kec_id' => 'kc.id', 'desa_id' => 'd.id', 'subsls_id' => 'ms.id'] as $key => $col) {
         if (!empty($filters[$key])) {
             $where[] = "{$col}=?";
@@ -336,11 +336,12 @@ render_header('Progress ' . ucfirst($type));
   <input type="hidden" name="type" value="<?= e($type) ?>">
   <div class="form-row align-items-end">
     <div class="form-group col-md-2">
-      <label>Bulan</label>
-      <select class="form-control" name="month" id="month">
-        <option value="">Semua Bulan</option>
-        <?php foreach ($monthOptions as $value => $label): ?><option value="<?= e($value) ?>" <?= $filters['month']===$value?'selected':'' ?>><?= e($label) ?></option><?php endforeach; ?>
-      </select>
+      <label>Tanggal Awal</label>
+      <input class="form-control" type="date" name="date_start" id="date_start" value="<?= e($filters['date_start']) ?>">
+    </div>
+    <div class="form-group col-md-2">
+      <label>Tanggal Akhir</label>
+      <input class="form-control" type="date" name="date_end" id="date_end" value="<?= e($filters['date_end']) ?>">
     </div>
     <?php if (in_array($user['role'], ['superadmin','viewer_prov'], true)): ?>
       <div class="form-group col-md-2">
@@ -440,7 +441,6 @@ new Chart(document.getElementById('statusChart'), {
 
 <script>
 const form = document.getElementById('progressFilterForm');
-const monthSelect = document.getElementById('month');
 const kabSelect = document.getElementById('kab_id');
 const emailSelect = document.getElementById('email');
 const kecSelect = document.getElementById('kec_id');
