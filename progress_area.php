@@ -287,11 +287,8 @@ render_header('Progress By Daerah');
     valueMap[(row.label || '-') + '|' + row.tanggal] = pct;
   });
   function chartYMax(value) {
-    if (value <= 10) return 10;
-    if (value <= 25) return 25;
-    if (value <= 50) return 50;
-    if (value <= 75) return 75;
-    return 100;
+    if (value <= 0) return 10;
+    return Math.min(100, (Math.floor(value / 5) + 1) * 5);
   }
   new Chart(document.getElementById('lineChart'), {
     type:'line',

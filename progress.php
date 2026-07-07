@@ -414,11 +414,8 @@ const fields = <?= json_encode(array_keys(status_fields())) ?>;
 const labels = <?= json_encode(array_values(status_fields())) ?>;
 const colors = ['#2563eb','#f59e0b','#16a34a','#dc2626','#7c3aed','#0f766e'];
 function chartYMax(value) {
-  if (value <= 10) return 10;
-  if (value <= 25) return 25;
-  if (value <= 50) return 50;
-  if (value <= 75) return 75;
-  return 100;
+  if (value <= 0) return 10;
+  return Math.min(100, (Math.floor(value / 5) + 1) * 5);
 }
 const pendataanValues = rows.map(r => {
   const target = Number(r.target || 0);
