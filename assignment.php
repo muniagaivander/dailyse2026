@@ -120,7 +120,7 @@ render_header('Ganti Pengawas/Pencacah');
     <?php foreach ($rows as $r): ?><tr>
       <td><?= e($r['kdsls'] . $r['kdsubsls']) ?><input type="hidden" name="subsls_id[]" value="<?= e($r['id']) ?>"></td>
       <td><?= e($r['kdsls'] . ' - ' . $r['nmsls']) ?></td>
-      <td><?= e($r['nmsubsls']) ?></td>
+      <td><?= e($r['kdsubsls']) ?></td>
       <td><input class="form-control form-control-sm" name="pengawas_name[]" value="<?= e($r['pengawas_name'] ?? '') ?>"></td>
       <td><input class="form-control form-control-sm" name="pengawas_email[]" value="<?= e($r['pengawas_email']) ?>"></td>
       <td><input class="form-control form-control-sm" name="pencacah_name[]" value="<?= e($r['pencacah_name'] ?? '') ?>"></td>

@@ -110,10 +110,10 @@ function rekap_petugas_pendataan_count(array $row): int
         + (int)($row['approved_by_pengawas'] ?? 0);
 }
 
-function rekap_petugas_count_pct_text(int $count, int $target): string
+function rekap_petugas_pct_text(int $count, int $target): string
 {
     $pct = $target > 0 ? $count / $target * 100 : 0;
-    return e(number_format($count, 0, ',', '.')) . ' <span class="rekap-pct">(' . e(number_format($pct, 2, ',', '.')) . '%)</span>';
+    return number_format($pct, 2, ',', '.') . '%';
 }
 
 function rekap_petugas_xlsx_col(int $index): string
@@ -214,7 +214,6 @@ function rekap_petugas_export(array $headers, array $rows, string $format, strin
 $opts = rekap_petugas_filter_options($user, $filters);
 $fields = [
     'open_count' => 'Open',
-    'draft_count' => 'Draft',
     'submitted_by_pencacah' => 'Submit',
     'rejected_by_pengawas' => 'Reject',
     'pending_count' => 'Pending',
@@ -234,10 +233,13 @@ if (($_GET['action'] ?? '') === 'export') {
     if ($filters['petugas_type'] === 'pcl') {
         array_splice($headers, 2, 0, ['Nama PML']);
     }
+    $headers[] = 'Draft (Count)';
+    $headers[] = 'Draft (Persen %)';
     foreach ($fields as $label) {
         $headers[] = $label;
     }
-    $headers[] = 'Progress Pendataan';
+    $headers[] = 'Progress Pendataan (Count)';
+    $headers[] = 'Progress Pendataan (Persen %)';
     $exportRows = [];
     foreach ($rows as $r) {
         $row = [
@@ -252,13 +254,15 @@ if (($_GET['action'] ?? '') === 'export') {
         if ($filters['petugas_type'] === 'pcl') {
             array_splice($row, 2, 0, [$r['pml_names'] ?: '-']);
         }
+        $target = (int)$r['target'];
+        $row[] = number_format((int)$r['draft_count'], 0, ',', '.');
+        $row[] = rekap_petugas_pct_text((int)$r['draft_count'], $target);
         foreach (array_keys($fields) as $field) {
             $row[] = (string)(int)$r[$field];
         }
         $pendataanCount = rekap_petugas_pendataan_count($r);
-        $target = (int)$r['target'];
-        $pendataanPct = $target > 0 ? $pendataanCount / $target * 100 : 0;
-        $row[] = number_format($pendataanCount, 0, ',', '.') . ' (' . number_format($pendataanPct, 2, ',', '.') . '%)';
+        $row[] = number_format($pendataanCount, 0, ',', '.');
+        $row[] = rekap_petugas_pct_text($pendataanCount, $target);
         $exportRows[] = $row;
     }
     rekap_petugas_export($headers, $exportRows, $format, $filters['petugas_type']);
@@ -282,6 +286,9 @@ render_header('Rekap Petugas');
   }
   .rekap-small-text {
     font-size: 9pt;
+  }
+  .rekap-header-sub {
+    white-space: nowrap;
   }
 </style>
 <form class="card card-body mb-3" method="get">
@@ -352,8 +359,11 @@ render_header('Rekap Petugas');
           <th>Wilayah Kerja Desa</th>
           <th class="text-right">Jumlah SubSLS</th>
           <th class="text-right">Target</th>
+          <th class="text-right">Draft<br><span class="rekap-header-sub">(Count)</span></th>
+          <th class="text-right">Draft<br><span class="rekap-header-sub">(Persen %)</span></th>
           <?php foreach ($fields as $label): ?><th class="text-right"><?= e($label) ?></th><?php endforeach; ?>
-          <th class="text-right">Progress Pendataan</th>
+          <th class="text-right">Progress Pendataan<br><span class="rekap-header-sub">(Count)</span></th>
+          <th class="text-right">Progress Pendataan<br><span class="rekap-header-sub">(Persen %)</span></th>
         </tr>
       </thead>
       <tbody>
@@ -367,12 +377,15 @@ render_header('Rekap Petugas');
             <td class="rekap-small-text"><?= e($r['wilayah_kerja'] ?: '-') ?></td>
             <td class="text-right"><?= number_format((int)$r['subsls_total'], 0, ',', '.') ?></td>
             <td class="text-right"><?= number_format((int)$r['target'], 0, ',', '.') ?></td>
+            <td class="text-right"><?= number_format((int)$r['draft_count'], 0, ',', '.') ?></td>
+            <td class="text-right rekap-pct"><?= e(rekap_petugas_pct_text((int)$r['draft_count'], (int)$r['target'])) ?></td>
             <?php foreach (array_keys($fields) as $field): ?><td class="text-right"><?= number_format((int)$r[$field], 0, ',', '.') ?></td><?php endforeach; ?>
-            <td class="text-right"><?= rekap_petugas_count_pct_text(rekap_petugas_pendataan_count($r), (int)$r['target']) ?></td>
+            <td class="text-right"><?= number_format(rekap_petugas_pendataan_count($r), 0, ',', '.') ?></td>
+            <td class="text-right rekap-pct"><?= e(rekap_petugas_pct_text(rekap_petugas_pendataan_count($r), (int)$r['target'])) ?></td>
           </tr>
         <?php endforeach; ?>
         <?php if (!$displayRows): ?>
-          <tr><td colspan="<?= 8 + count($fields) + ($filters['petugas_type'] === 'pcl' ? 1 : 0) ?>" class="text-center text-muted">Tidak ada data petugas pada filter ini.</td></tr>
+          <tr><td colspan="<?= 11 + count($fields) + ($filters['petugas_type'] === 'pcl' ? 1 : 0) ?>" class="text-center text-muted">Tidak ada data petugas pada filter ini.</td></tr>
         <?php endif; ?>
       </tbody>
     </table>

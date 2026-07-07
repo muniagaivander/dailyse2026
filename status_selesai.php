@@ -253,7 +253,7 @@ render_header('Status Selesai SubSLS');
         <tr>
           <td><?= e($r['kode_subsls']) ?></td>
           <td><?= e($r['kdsls'] . ' - ' . $r['nmsls']) ?></td>
-          <td><?= e($r['kdsubsls'] . ' - ' . $r['nmsubsls']) ?></td>
+          <td><?= e($r['kdsubsls']) ?></td>
           <td><?= e(petugas_label($r['pengawas_email'], $r['pengawas_name'] ?? '')) ?></td>
           <td><?= e(petugas_label($r['pencacah_email'], $r['pencacah_name'] ?? '')) ?></td>
           <td>
