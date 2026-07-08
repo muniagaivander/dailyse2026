@@ -264,9 +264,18 @@ function dashboard_datetime_label(?string $datetime): string
     return $date->format('d') . ' ' . $months[$date->format('m')] . ' ' . $date->format('Y H:i') . ' WITA';
 }
 
-function dashboard_latest_daily_status_label(): string
+function dashboard_latest_status_label(array $user, array $filters): string
 {
-    $stmt = db()->query("SELECT MAX(updated_at) FROM daily_status");
+    [$sqlWhere, $params] = dashboard_where($user, $filters);
+    $stmt = db()->prepare("SELECT MAX(ss.last_update)
+        FROM master_subsls ms
+        JOIN master_sls sl ON sl.id=ms.sls_id
+        JOIN master_desa d ON d.id=sl.desa_id
+        JOIN master_kec kc ON kc.id=d.kec_id
+        JOIN master_kab k ON k.id=kc.kab_id
+        LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
+        $sqlWhere");
+    $stmt->execute($params);
     return dashboard_datetime_label($stmt->fetchColumn() ?: null);
 }
 
@@ -1064,7 +1073,7 @@ if (($_GET['action'] ?? '') === 'export_dashboard') {
 $opts = dashboard_filter_options($user, $filters);
 $chartRows = dashboard_rows($user, $filters, $fields);
 $totals = dashboard_totals($chartRows, $fields);
-$latestDailyStatusLabel = dashboard_latest_daily_status_label();
+$latestDailyStatusLabel = dashboard_latest_status_label($user, $filters);
 $completionPct = $totals['subsls_total'] > 0 ? round($totals['selesai_count'] / $totals['subsls_total'] * 100, 2) : 0;
 $submitApproveCount = dashboard_pendataan_count($totals);
 $submitApprovePct = $totals['target'] > 0 ? round($submitApproveCount / (int)$totals['target'] * 100, 2) : 0;
