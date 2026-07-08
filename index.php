@@ -264,6 +264,36 @@ function dashboard_datetime_label(?string $datetime): string
     return $date->format('d') . ' ' . $months[$date->format('m')] . ' ' . $date->format('Y H:i') . ' WITA';
 }
 
+function dashboard_wita_datetime_label(?string $datetime): string
+{
+    if (!$datetime) {
+        return '-';
+    }
+    $months = [
+        '01' => 'Januari',
+        '02' => 'Februari',
+        '03' => 'Maret',
+        '04' => 'April',
+        '05' => 'Mei',
+        '06' => 'Juni',
+        '07' => 'Juli',
+        '08' => 'Agustus',
+        '09' => 'September',
+        '10' => 'Oktober',
+        '11' => 'November',
+        '12' => 'Desember',
+    ];
+    try {
+        $date = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $datetime, new DateTimeZone('Asia/Makassar'));
+        if (!$date) {
+            $date = new DateTimeImmutable($datetime, new DateTimeZone('Asia/Makassar'));
+        }
+    } catch (Throwable $e) {
+        return '-';
+    }
+    return $date->format('d') . ' ' . $months[$date->format('m')] . ' ' . $date->format('Y H:i') . ' WITA';
+}
+
 function dashboard_latest_status_label(array $user, array $filters): string
 {
     [$sqlWhere, $params] = dashboard_where($user, $filters);
@@ -276,7 +306,7 @@ function dashboard_latest_status_label(array $user, array $filters): string
         LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
         $sqlWhere");
     $stmt->execute($params);
-    return dashboard_datetime_label($stmt->fetchColumn() ?: null);
+    return dashboard_wita_datetime_label($stmt->fetchColumn() ?: null);
 }
 
 function dashboard_rank_badge(int $rank): string
