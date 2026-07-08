@@ -14,7 +14,7 @@ $rangeColors = [
 ];
 $activeTab = $_GET['tab'] ?? 'submit_approve';
 $allowedTabs = ['submit_approve', 'status', 'selesai'];
-$canSeePerformance = in_array($user['role'], ['superadmin', 'admin_kab', 'viewer_prov', 'viewer_kab'], true);
+$canSeePerformance = in_array($user['role'], ['superadmin', 'admin_kab', 'viewer_prov', 'viewer_kab', 'pengawas', 'pencacah'], true);
 if ($canSeePerformance) {
     $allowedTabs[] = 'performa_pengawas';
     $allowedTabs[] = 'performa_pencacah';
@@ -783,9 +783,88 @@ function dashboard_kab_options_for_performance(array $user): array
         $stmt->execute([$user['kab_id']]);
         return $stmt->fetchAll();
     }
+    if (in_array($user['role'], ['pengawas', 'pencacah'], true)) {
+        $field = $user['role'] === 'pengawas' ? 'ms.pengawas_email' : 'ms.pencacah_email';
+        $stmt = db()->prepare("SELECT DISTINCT k.id value, CONCAT(k.id,' - ',k.nmkab) label
+            FROM master_subsls ms
+            JOIN master_sls sl ON sl.id=ms.sls_id
+            JOIN master_desa d ON d.id=sl.desa_id
+            JOIN master_kec kc ON kc.id=d.kec_id
+            JOIN master_kab k ON k.id=kc.kab_id
+            WHERE {$field}=?
+            ORDER BY k.id");
+        $stmt->execute([$user['email']]);
+        return $stmt->fetchAll();
+    }
     $rows = db()->query("SELECT id value, CONCAT(id,' - ',nmkab) label FROM master_kab ORDER BY id")->fetchAll();
     array_unshift($rows, ['value' => '6400', 'label' => '6400 - Kalimantan Timur']);
     return $rows;
+}
+
+function dashboard_performance_related_emails(array $user, string $type, string $kabId): array
+{
+    $email = normalize_email((string)($user['email'] ?? ''));
+    if ($email === '' || !in_array($user['role'], ['pengawas', 'pencacah'], true)) {
+        return [];
+    }
+    if ($user['role'] === 'pengawas') {
+        if ($type === 'pengawas') {
+            return [$email => true];
+        }
+        $stmt = db()->prepare("SELECT DISTINCT ms.pencacah_email email
+            FROM master_subsls ms
+            JOIN master_sls sl ON sl.id=ms.sls_id
+            JOIN master_desa d ON d.id=sl.desa_id
+            JOIN master_kec kc ON kc.id=d.kec_id
+            WHERE kc.kab_id=? AND ms.pengawas_email=? AND ms.pencacah_email IS NOT NULL AND ms.pencacah_email <> ''");
+        $stmt->execute([$kabId, $email]);
+        return array_fill_keys(array_map(fn($row) => normalize_email((string)$row['email']), $stmt->fetchAll()), true);
+    }
+
+    $stmt = db()->prepare("SELECT DISTINCT ms.pengawas_email email
+        FROM master_subsls ms
+        JOIN master_sls sl ON sl.id=ms.sls_id
+        JOIN master_desa d ON d.id=sl.desa_id
+        JOIN master_kec kc ON kc.id=d.kec_id
+        WHERE kc.kab_id=? AND ms.pencacah_email=? AND ms.pengawas_email IS NOT NULL AND ms.pengawas_email <> ''");
+    $stmt->execute([$kabId, $email]);
+    $pengawasEmails = array_map(fn($row) => normalize_email((string)$row['email']), $stmt->fetchAll());
+    if ($type === 'pengawas') {
+        return array_fill_keys($pengawasEmails, true);
+    }
+    if (!$pengawasEmails) {
+        return [$email => true];
+    }
+    $placeholders = implode(',', array_fill(0, count($pengawasEmails), '?'));
+    $params = array_merge([$kabId], $pengawasEmails);
+    $stmt = db()->prepare("SELECT DISTINCT ms.pencacah_email email
+        FROM master_subsls ms
+        JOIN master_sls sl ON sl.id=ms.sls_id
+        JOIN master_desa d ON d.id=sl.desa_id
+        JOIN master_kec kc ON kc.id=d.kec_id
+        WHERE kc.kab_id=? AND ms.pengawas_email IN ({$placeholders}) AND ms.pencacah_email IS NOT NULL AND ms.pencacah_email <> ''");
+    $stmt->execute($params);
+    return array_fill_keys(array_map(fn($row) => normalize_email((string)$row['email']), $stmt->fetchAll()), true);
+}
+
+function dashboard_performance_visible_rows(array $rows, array $relatedEmails, int $topLimit = 10): array
+{
+    $visible = [];
+    $seen = [];
+    foreach ($rows as $index => $row) {
+        if ($index >= $topLimit && empty($relatedEmails[normalize_email((string)($row['email'] ?? ''))])) {
+            continue;
+        }
+        $email = normalize_email((string)($row['email'] ?? ''));
+        if (isset($seen[$email])) {
+            continue;
+        }
+        $row['_rank'] = $index + 1;
+        $row['_highlight'] = !empty($relatedEmails[$email]);
+        $visible[] = $row;
+        $seen[$email] = true;
+    }
+    return $visible;
 }
 
 function dashboard_can_access_kab(array $user, string $kabId): bool
@@ -952,9 +1031,6 @@ if (($_GET['action'] ?? '') === 'generate_performance_cache'
         $threshold = performance_attention_threshold();
         foreach ($roleConfigs as $type => $roleField) {
             $dataset = performance_metric_dataset($roleField, $user, false);
-            foreach ($dataset['weekly'] as $scopeId => $weeklyRows) {
-                $dataset['weekly'][$scopeId] = array_slice($weeklyRows, 0, 10);
-            }
             $attention = [];
             foreach (array_keys($dataset['overall']) as $scopeId) {
                 $attention[$scopeId] = performance_attention_rows($roleField, $scopeId, (float)$threshold['pct']);
@@ -1044,7 +1120,8 @@ if (($_GET['action'] ?? '') === 'export_performance_temporary'
     );
 }
 
-if (($_GET['action'] ?? '') === 'export_attention' && $canSeePerformance) {
+if (($_GET['action'] ?? '') === 'export_attention'
+    && in_array($user['role'], ['superadmin', 'admin_kab', 'viewer_prov', 'viewer_kab'], true)) {
     $kabId = (string)($_GET['kab_id'] ?? '');
     $type = ($_GET['type'] ?? '') === 'pencacah' ? 'pencacah' : 'pengawas';
     $format = ($_GET['format'] ?? 'csv') === 'xlsx' ? 'xlsx' : 'csv';
@@ -1244,6 +1321,13 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
   font-weight: 700;
   padding: 2px 8px;
   white-space: nowrap;
+}
+.performance-related-row td {
+  font-weight: 700;
+}
+.performance-related-row .performance-staff-email,
+.performance-related-row .performance-work-area {
+  font-weight: 700;
 }
 .data-update-dot {
   background: #22c55e;
@@ -1668,8 +1752,9 @@ if (pengawas) {
     <div class="tab-content">
       <?php foreach ($performanceKabOptions as $i => $kab): ?>
         <?php
-          $topRows = array_slice($performanceMetricData['overall'][$kab['value']] ?? [], 0, 10);
-          $weeklyRows = array_slice($performanceMetricData['weekly'][$kab['value']] ?? [], 0, 10);
+          $relatedEmails = dashboard_performance_related_emails($user, $attentionType, (string)$kab['value']);
+          $topRows = dashboard_performance_visible_rows($performanceMetricData['overall'][$kab['value']] ?? [], $relatedEmails, 10);
+          $weeklyRows = dashboard_performance_visible_rows($performanceMetricData['weekly'][$kab['value']] ?? [], $relatedEmails, 10);
           $weeklyPeriod = $performanceMetricData['week_period'] ?? null;
           $attentionRows = $performanceMetricData['attention'][$kab['value']] ?? [];
         ?>
@@ -1707,9 +1792,9 @@ if (pengawas) {
                 </tr>
               </thead>
               <tbody>
-              <?php foreach ($topRows as $rankIndex => $r): ?>
-                <tr>
-                  <td><?= dashboard_rank_badge($rankIndex + 1) ?></td>
+              <?php foreach ($topRows as $r): ?>
+                <tr class="<?= !empty($r['_highlight']) ? 'performance-related-row' : '' ?>">
+                  <td><?= dashboard_rank_badge((int)$r['_rank']) ?></td>
                   <td><?= performance_petugas_html((string)$r['email'], (string)($r['petugas_name'] ?? '')) ?></td>
                   <td><?= e($r['kab_codes'] ?: '-') ?></td>
                   <td class="performance-work-area"><?= e($r['wilayah_kerja_kecamatan'] ?: '-') ?></td>
@@ -1761,9 +1846,9 @@ if (pengawas) {
                 </tr>
               </thead>
               <tbody>
-              <?php foreach ($weeklyRows as $rankIndex => $r): ?>
-                <tr>
-                  <td><?= dashboard_rank_badge($rankIndex + 1) ?></td>
+              <?php foreach ($weeklyRows as $r): ?>
+                <tr class="<?= !empty($r['_highlight']) ? 'performance-related-row' : '' ?>">
+                  <td><?= dashboard_rank_badge((int)$r['_rank']) ?></td>
                   <td><?= performance_petugas_html((string)$r['email'], (string)($r['petugas_name'] ?? '')) ?></td>
                   <td><?= e($r['kab_codes'] ?: '-') ?></td>
                   <td class="performance-work-area"><?= e($r['wilayah_kerja_kecamatan'] ?: '-') ?></td>
@@ -1785,6 +1870,7 @@ if (pengawas) {
               </tbody>
             </table>
           </div>
+          <?php if (in_array($user['role'], ['superadmin', 'admin_kab', 'viewer_prov', 'viewer_kab'], true)): ?>
           <div class="d-flex flex-wrap justify-content-between align-items-center mb-2">
             <div>
               <h5 class="mb-1"><?= e($labelRole) ?> Perlu Perhatian</h5>
@@ -1824,6 +1910,7 @@ if (pengawas) {
               <span class="small text-muted attention-info"></span>
               <button class="btn btn-outline-secondary btn-sm attention-next" type="button">Next</button>
             </div>
+          <?php endif; ?>
           <?php endif; ?>
         </div>
       <?php endforeach; ?>
