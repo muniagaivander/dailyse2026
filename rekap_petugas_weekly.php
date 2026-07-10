@@ -173,11 +173,11 @@ function rekap_weekly_export_payload(array $rows, array $dates, array $matrix, a
         'Wilayah Kerja Desa',
         'Jumlah SubSLS',
         'Total Assignment (' . $dateEndLabel . ')',
-        'Rekap Sampai ' . $dateEndLabel . '-Count',
-        'Rekap Sampai ' . $dateEndLabel . '-Persen',
+        'Total Submit sd ' . $dateEndLabel,
+        '% Submit sd tanggal ' . $dateEndLabel,
     ]);
     foreach ($dates as $date) {
-        $headers[] = 'Capaian ' . rekap_weekly_date_label($date) . '-Count';
+        $headers[] = 'Submit Tanggal ' . rekap_weekly_date_label($date);
     }
 
     $out = [];
@@ -210,6 +210,32 @@ function rekap_weekly_export_payload(array $rows, array $dates, array $matrix, a
         $out[] = $line;
     }
     return [$headers, $out];
+}
+
+function rekap_weekly_header_html(string $header): string
+{
+    if ($header === 'Wilayah Kerja Kecamatan') {
+        return 'Wilayah Kerja<br>Kecamatan';
+    }
+    if ($header === 'Wilayah Kerja Desa') {
+        return 'Wilayah Kerja<br>Desa';
+    }
+    if ($header === 'Jumlah SubSLS') {
+        return 'Jumlah<br>SubSLS';
+    }
+    if (preg_match('/^Total Assignment \((.+)\)$/', $header, $m)) {
+        return 'Total<br>Assignment<br>(' . e($m[1]) . ')';
+    }
+    if (preg_match('/^Total Submit sd (.+)$/', $header, $m)) {
+        return 'Total<br>Submit sd<br>' . e($m[1]);
+    }
+    if (preg_match('/^% Submit sd tanggal (.+)$/', $header, $m)) {
+        return '% Submit<br>sd tanggal<br>' . e($m[1]);
+    }
+    if (preg_match('/^Submit Tanggal (.+)$/', $header, $m)) {
+        return 'Submit<br>Tanggal<br>' . e($m[1]);
+    }
+    return e($header);
 }
 
 function rekap_weekly_xlsx_col(int $index): string
@@ -250,7 +276,7 @@ function rekap_weekly_xlsx_header_is_numeric(string $header): bool
             return false;
         }
     }
-    foreach (['jumlah subsls', 'total assignment', 'count', 'persen'] as $numericPart) {
+    foreach (['jumlah subsls', 'total assignment', 'total submit', '% submit', 'submit tanggal', 'count', 'persen'] as $numericPart) {
         if (str_contains($header, $numericPart)) {
             return true;
         }
@@ -393,9 +419,85 @@ render_header('Rekap Petugas Weekly');
     margin-bottom: 16px;
     padding: 10px 14px;
   }
-  .weekly-table th { white-space: nowrap; }
+  .weekly-table th {
+    line-height: 1.1;
+    text-align: center;
+    vertical-align: middle !important;
+    white-space: normal;
+  }
+  .weekly-header-box {
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    height: 98px;
+    justify-content: space-between;
+  }
+  .weekly-header-label {
+    align-items: center;
+    display: flex;
+    flex: 1;
+    justify-content: center;
+    min-height: 68px;
+  }
   .weekly-table td { white-space: nowrap; }
+  .weekly-table th.weekly-compact-number {
+    min-width: 78px;
+    width: 78px;
+  }
+  .weekly-table th.weekly-identity {
+    min-width: 130px;
+  }
+  .weekly-table th.weekly-wide {
+    min-width: 185px;
+  }
+  .weekly-head-orange {
+    background: #ffedd5;
+    color: #7c2d12;
+  }
+  .weekly-head-blue {
+    background: #dbeafe;
+    color: #1e3a8a;
+  }
+  .weekly-head-green {
+    background: #dcfce7;
+    color: #14532d;
+  }
   .weekly-small { font-size: .82rem; }
+  .weekly-sortable {
+    user-select: none;
+  }
+  .weekly-sort-select {
+    border-radius: 4px;
+    font-size: .72rem;
+    height: 24px;
+    margin-top: 5px;
+    min-width: 78px;
+    padding: 1px 4px;
+  }
+  .weekly-sort-spacer {
+    display: block;
+    height: 29px;
+  }
+  .weekly-page-size {
+    max-width: 110px;
+  }
+  .weekly-toolbar {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: space-between;
+  }
+  .weekly-toolbar-left {
+    align-items: flex-start;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .weekly-page-control {
+    align-items: center;
+    display: flex;
+  }
 </style>
 
 <form class="card card-body mb-3" method="get">
@@ -450,12 +552,22 @@ render_header('Rekap Petugas Weekly');
   <div class="alert alert-info">Pilih filter lalu klik <strong>Filter</strong> untuk menampilkan Rekap Petugas Weekly.</div>
 <?php else: ?>
   <div class="weekly-note">
-    Periode: <?= e(rekap_weekly_date_label($dateStart)) ?> - <?= e(rekap_weekly_date_label($dateEnd)) ?>.
-    Progress Pendataan = Submit+Reject+Pending+Approve.
+    Periode <?= e(rekap_weekly_date_label($dateStart)) ?> - <?= e(rekap_weekly_date_label($dateEnd)) ?>
   </div>
   <div class="card mb-3">
-    <div class="card-body d-flex flex-wrap justify-content-between align-items-center">
-      <div class="font-weight-bold">Total baris: <?= number_format(count($tableRows), 0, ',', '.') ?></div>
+    <div class="card-body weekly-toolbar">
+      <div class="weekly-toolbar-left">
+        <div class="font-weight-bold">Total Baris <?= number_format(count($tableRows), 0, ',', '.') ?></div>
+        <div class="weekly-page-control">
+          <select class="form-control form-control-sm weekly-page-size" id="weeklyPageSize">
+            <option value="20" selected>20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="500">500</option>
+            <option value="1000">1000</option>
+          </select>
+        </div>
+      </div>
       <div>
         <?php $exportQuery = array_merge($filters, ['filter' => 1, 'action' => 'export']); ?>
         <a class="btn btn-outline-success btn-sm mr-2" href="?<?= e(http_build_query($exportQuery + ['format' => 'csv'])) ?>"><i class="fas fa-file-csv mr-1"></i>Download CSV</a>
@@ -468,21 +580,57 @@ render_header('Rekap Petugas Weekly');
       <table class="table table-sm table-bordered table-striped mb-0 weekly-table">
         <thead>
           <tr>
-            <?php foreach ($headers as $header): ?>
-              <th><?= e($header) ?></th>
+            <?php foreach ($headers as $i => $header): ?>
+              <?php
+                $isNumericHeader = rekap_weekly_xlsx_header_is_numeric((string)$header);
+                $isKabupatenHeader = (string)$header === 'Kabupaten';
+                $isSortableHeader = $isNumericHeader || $isKabupatenHeader;
+              ?>
+              <?php
+                $headerText = strtolower((string)$header);
+                $headerClass = $isNumericHeader ? 'weekly-sortable weekly-compact-number' : 'weekly-identity';
+                if ($isKabupatenHeader) {
+                    $headerClass .= ' weekly-sortable';
+                }
+                if (in_array((string)$header, ['Jumlah SubSLS'], true) || str_starts_with((string)$header, 'Total Assignment')) {
+                    $headerClass .= ' weekly-head-orange';
+                } elseif (str_starts_with((string)$header, 'Total Submit') || str_starts_with((string)$header, '% Submit')) {
+                    $headerClass .= ' weekly-head-blue';
+                } elseif (str_starts_with((string)$header, 'Submit Tanggal')) {
+                    $headerClass .= ' weekly-head-green';
+                }
+                if (str_contains($headerText, 'email') || str_contains($headerText, 'wilayah kerja') || str_contains($headerText, 'nama pml')) {
+                    $headerClass .= ' weekly-wide';
+                }
+              ?>
+              <th class="<?= e($headerClass) ?>" <?= $isSortableHeader ? 'data-sort-col="' . (int)$i . '" data-sort-type="' . ($isNumericHeader ? 'number' : 'text') . '"' : '' ?>>
+                <div class="weekly-header-box">
+                  <div class="weekly-header-label"><?= rekap_weekly_header_html((string)$header) ?></div>
+                  <?php if ($isSortableHeader): ?>
+                    <select class="form-control form-control-sm weekly-sort-select" data-sort-col="<?= (int)$i ?>" data-sort-type="<?= $isNumericHeader ? 'number' : 'text' ?>" aria-label="Sort <?= e((string)$header) ?>">
+                      <option value="">Sort</option>
+                      <option value="asc">Ascending</option>
+                      <option value="desc">Descending</option>
+                      <option value="clear">Clear</option>
+                    </select>
+                  <?php else: ?>
+                    <span class="weekly-sort-spacer"></span>
+                  <?php endif; ?>
+                </div>
+              </th>
             <?php endforeach; ?>
           </tr>
         </thead>
         <tbody>
-          <?php foreach ($tableRows as $row): ?>
-            <tr>
+          <?php foreach ($tableRows as $rowIndex => $row): ?>
+            <tr data-original-index="<?= (int)$rowIndex ?>">
               <?php foreach ($row as $i => $value): ?>
                 <?php
                   $header = strtolower((string)($headers[$i] ?? ''));
                   $isNumeric = rekap_weekly_xlsx_header_is_numeric($header);
                   $small = str_contains($header, 'email') || str_contains($header, 'wilayah kerja');
                 ?>
-                <td class="<?= $isNumeric ? 'text-right' : '' ?> <?= $small ? 'weekly-small' : '' ?>">
+                <td class="<?= $isNumeric ? 'text-right' : '' ?> <?= $small ? 'weekly-small' : '' ?>" <?= $isNumeric ? 'data-sort-value="' . e((string)(float)$value) . '"' : '' ?>>
                   <?= $isNumeric ? e(number_format((float)$value, str_contains($header, 'persen') ? 2 : 0, ',', '.')) : e((string)$value) ?>
                 </td>
               <?php endforeach; ?>
@@ -494,7 +642,98 @@ render_header('Rekap Petugas Weekly');
         </tbody>
       </table>
     </div>
+    <div class="card-footer d-flex justify-content-between align-items-center">
+      <button class="btn btn-outline-secondary btn-sm weekly-prev" type="button">Prev</button>
+      <span class="small text-muted weekly-page-info"></span>
+      <button class="btn btn-outline-secondary btn-sm weekly-next" type="button">Next</button>
+    </div>
   </div>
 <?php endif; ?>
+
+<script>
+document.querySelectorAll('.weekly-table').forEach(function (table) {
+  const tbody = table.querySelector('tbody');
+  if (!tbody) return;
+  const card = table.closest('.card');
+  const pageSizeSelect = document.getElementById('weeklyPageSize');
+  const prev = card ? card.querySelector('.weekly-prev') : null;
+  const next = card ? card.querySelector('.weekly-next') : null;
+  const info = card ? card.querySelector('.weekly-page-info') : null;
+  let currentPage = 1;
+  function dataRows() {
+    return Array.from(tbody.querySelectorAll('tr')).filter(function (row) {
+      return row.querySelectorAll('td').length > 1;
+    });
+  }
+  function pageSize() {
+    return Number((pageSizeSelect && pageSizeSelect.value) || 20);
+  }
+  function renderPage() {
+    const rows = dataRows();
+    const size = pageSize();
+    const totalPages = Math.max(1, Math.ceil(rows.length / size));
+    currentPage = Math.min(Math.max(1, currentPage), totalPages);
+    rows.forEach(function (row, index) {
+      row.style.display = index >= (currentPage - 1) * size && index < currentPage * size ? '' : 'none';
+    });
+    if (info) info.textContent = rows.length ? 'Halaman ' + currentPage + ' dari ' + totalPages : 'Tidak ada data';
+    if (prev) prev.disabled = currentPage <= 1;
+    if (next) next.disabled = currentPage >= totalPages;
+  }
+  if (pageSizeSelect) {
+    pageSizeSelect.addEventListener('change', function () {
+      currentPage = 1;
+      renderPage();
+    });
+  }
+  if (prev) {
+    prev.addEventListener('click', function () {
+      currentPage--;
+      renderPage();
+    });
+  }
+  if (next) {
+    next.addEventListener('click', function () {
+      currentPage++;
+      renderPage();
+    });
+  }
+  table.querySelectorAll('.weekly-sort-select').forEach(function (select) {
+    select.addEventListener('change', function () {
+      const col = Number(select.dataset.sortCol || 0);
+      const direction = select.value;
+      table.querySelectorAll('.weekly-sort-select').forEach(function (other) {
+        if (other !== select) other.value = '';
+      });
+      const rows = dataRows();
+      if (direction === 'clear' || direction === '') {
+        rows.sort(function (a, b) {
+          return Number(a.dataset.originalIndex || 0) - Number(b.dataset.originalIndex || 0);
+        });
+        select.value = '';
+        rows.forEach(function (row) { tbody.appendChild(row); });
+        currentPage = 1;
+        renderPage();
+        return;
+      }
+      rows.sort(function (a, b) {
+        const sortType = select.dataset.sortType || 'number';
+        if (sortType === 'text') {
+          const at = (a.children[col] ? a.children[col].textContent : '').trim();
+          const bt = (b.children[col] ? b.children[col].textContent : '').trim();
+          return direction === 'asc' ? at.localeCompare(bt) : bt.localeCompare(at);
+        }
+        const av = Number((a.children[col] && a.children[col].dataset.sortValue) || 0);
+        const bv = Number((b.children[col] && b.children[col].dataset.sortValue) || 0);
+        return direction === 'asc' ? av - bv : bv - av;
+      });
+      rows.forEach(function (row) { tbody.appendChild(row); });
+      currentPage = 1;
+      renderPage();
+    });
+  });
+  renderPage();
+});
+</script>
 
 <?php render_footer(); ?>
