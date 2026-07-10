@@ -186,9 +186,53 @@ function rekap_daily_xlsx_col(int $index): string
     return $name;
 }
 
-function rekap_daily_xlsx_cell(string $value, int $row, int $col, int $style = 0): string
+function rekap_daily_xlsx_numeric_value($value): ?string
+{
+    if (is_int($value) || is_float($value)) {
+        return (string)(0 + $value);
+    }
+    $value = trim((string)$value);
+    if ($value === '') {
+        return null;
+    }
+    $value = str_replace('%', '', $value);
+    if (preg_match('/^-?\d{1,3}(\.\d{3})*(,\d+)?$/', $value)) {
+        $value = str_replace('.', '', $value);
+        $value = str_replace(',', '.', $value);
+    } elseif (preg_match('/^-?\d+(,\d+)?$/', $value)) {
+        $value = str_replace(',', '.', $value);
+    }
+    return is_numeric($value) ? (string)(0 + $value) : null;
+}
+
+function rekap_daily_xlsx_header_is_numeric(string $header): bool
+{
+    $header = strtolower($header);
+    foreach (['email', 'nama', 'petugas', 'kabupaten', 'kecamatan', 'desa', 'wilayah', 'pml'] as $textPart) {
+        if (str_contains($header, $textPart)) {
+            return false;
+        }
+    }
+    foreach (['jumlah subsls', 'count', 'persen', 'percent'] as $numericPart) {
+        if (str_contains($header, $numericPart)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function rekap_daily_xlsx_cell($value, int $row, int $col, int $style = 0, bool $numeric = false): string
 {
     $ref = rekap_daily_xlsx_col($col) . $row;
+    if ($numeric) {
+        $number = rekap_daily_xlsx_numeric_value($value);
+        if ($number !== null) {
+            return '<c r="' . $ref . '" s="' . $style . '"><v>'
+                . htmlspecialchars($number, ENT_XML1 | ENT_COMPAT, 'UTF-8')
+                . '</v></c>';
+        }
+    }
+    $value = (string)$value;
     return '<c r="' . $ref . '" s="' . $style . '" t="inlineStr"><is><t>'
         . htmlspecialchars($value, ENT_XML1 | ENT_COMPAT, 'UTF-8')
         . '</t></is></c>';
@@ -369,7 +413,8 @@ function rekap_daily_export(array $rows, array $dates, array $matrix, array $fil
         foreach ($row as $colIndex => $value) {
             $columnNumber = $colIndex + 1;
             $style = $rowNumber === 1 ? 1 : (in_array($columnNumber, $smallFontColumns, true) ? 2 : 0);
-            $sheet .= rekap_daily_xlsx_cell((string)$value, $rowNumber, $columnNumber, $style);
+            $numeric = $rowNumber > 1 && rekap_daily_xlsx_header_is_numeric((string)($headers[$colIndex] ?? ''));
+            $sheet .= rekap_daily_xlsx_cell($value, $rowNumber, $columnNumber, $style, $numeric);
         }
         $sheet .= '</row>';
     }

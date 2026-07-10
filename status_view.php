@@ -241,9 +241,51 @@ function status_view_xlsx_col(int $index): string
     return $name;
 }
 
-function status_view_xlsx_cell(string $value, int $row, int $col): string
+function status_view_xlsx_numeric_value($value): ?string
+{
+    if (is_int($value) || is_float($value)) {
+        return (string)(0 + $value);
+    }
+    $value = trim((string)$value);
+    if ($value === '') {
+        return null;
+    }
+    $value = str_replace('%', '', $value);
+    if (preg_match('/^-?\d{1,3}(\.\d{3})*(,\d+)?$/', $value)) {
+        $value = str_replace('.', '', $value);
+        $value = str_replace(',', '.', $value);
+    } elseif (preg_match('/^-?\d+(,\d+)?$/', $value)) {
+        $value = str_replace(',', '.', $value);
+    }
+    return is_numeric($value) ? (string)(0 + $value) : null;
+}
+
+function status_view_xlsx_header_is_numeric(string $header): bool
+{
+    $header = strtolower($header);
+    foreach (['kode', 'id', 'email', 'nama', 'pengawas', 'pencacah', 'kabupaten', 'kecamatan', 'desa', 'sls', 'updated', 'last', 'status selesai'] as $textPart) {
+        if (str_contains($header, $textPart)) {
+            return false;
+        }
+    }
+    foreach (['target', 'open', 'draft', 'submit', 'reject', 'pending', 'approve', 'approved', 'progress', 'count', 'persen'] as $numericPart) {
+        if (str_contains($header, $numericPart)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function status_view_xlsx_cell($value, int $row, int $col, bool $numeric = false): string
 {
     $ref = status_view_xlsx_col($col) . $row;
+    if ($numeric) {
+        $number = status_view_xlsx_numeric_value($value);
+        if ($number !== null) {
+            return '<c r="' . $ref . '"><v>' . htmlspecialchars($number, ENT_XML1 | ENT_COMPAT, 'UTF-8') . '</v></c>';
+        }
+    }
+    $value = (string)$value;
     return '<c r="' . $ref . '" t="inlineStr"><is><t>' . htmlspecialchars($value, ENT_XML1 | ENT_COMPAT, 'UTF-8') . '</t></is></c>';
 }
 
@@ -292,7 +334,8 @@ function status_view_export(array $headers, array $rows, string $format): void
         $rowNumber = $rIndex + 1;
         $sheet .= '<row r="' . $rowNumber . '">';
         foreach ($row as $cIndex => $value) {
-            $sheet .= status_view_xlsx_cell((string)$value, $rowNumber, $cIndex + 1);
+            $numeric = $rowNumber > 1 && status_view_xlsx_header_is_numeric((string)($headers[$cIndex] ?? ''));
+            $sheet .= status_view_xlsx_cell($value, $rowNumber, $cIndex + 1, $numeric);
         }
         $sheet .= '</row>';
     }

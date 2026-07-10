@@ -242,9 +242,51 @@ function export_daily_xlsx_col(int $index): string
     return $name;
 }
 
-function export_daily_xlsx_cell(string $value, int $row, int $col): string
+function export_daily_xlsx_numeric_value($value): ?string
+{
+    if (is_int($value) || is_float($value)) {
+        return (string)(0 + $value);
+    }
+    $value = trim((string)$value);
+    if ($value === '') {
+        return null;
+    }
+    $value = str_replace('%', '', $value);
+    if (preg_match('/^-?\d{1,3}(\.\d{3})*(,\d+)?$/', $value)) {
+        $value = str_replace('.', '', $value);
+        $value = str_replace(',', '.', $value);
+    } elseif (preg_match('/^-?\d+(,\d+)?$/', $value)) {
+        $value = str_replace(',', '.', $value);
+    }
+    return is_numeric($value) ? (string)(0 + $value) : null;
+}
+
+function export_daily_xlsx_header_is_numeric(string $header): bool
+{
+    $header = strtolower($header);
+    foreach (['kode', 'id', 'email', 'nama', 'tanggal', 'kabupaten', 'kecamatan', 'desa', 'sls', 'updated', 'submitted', 'by'] as $textPart) {
+        if (str_contains($header, $textPart)) {
+            return false;
+        }
+    }
+    foreach (['target', 'open', 'draft', 'submit', 'reject', 'pending', 'approve', 'approved'] as $numericPart) {
+        if (str_contains($header, $numericPart)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function export_daily_xlsx_cell($value, int $row, int $col, bool $numeric = false): string
 {
     $ref = export_daily_xlsx_col($col) . $row;
+    if ($numeric) {
+        $number = export_daily_xlsx_numeric_value($value);
+        if ($number !== null) {
+            return '<c r="' . $ref . '"><v>' . htmlspecialchars($number, ENT_XML1) . '</v></c>';
+        }
+    }
+    $value = (string)$value;
     return '<c r="' . $ref . '" t="inlineStr"><is><t>' . htmlspecialchars($value, ENT_XML1) . '</t></is></c>';
 }
 
@@ -287,16 +329,18 @@ function export_daily_stream_xlsx(array $filters): void
 
     $sheet = '<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
     $rowNumber = 1;
+    $headers = export_daily_headers();
     $sheet .= '<row r="' . $rowNumber . '">';
-    foreach (export_daily_headers() as $col => $value) {
-        $sheet .= export_daily_xlsx_cell((string)$value, $rowNumber, $col + 1);
+    foreach ($headers as $col => $value) {
+        $sheet .= export_daily_xlsx_cell($value, $rowNumber, $col + 1);
     }
     $sheet .= '</row>';
     while ($row = $stmt->fetch()) {
         $rowNumber++;
         $sheet .= '<row r="' . $rowNumber . '">';
         foreach (export_daily_row_values($row) as $col => $value) {
-            $sheet .= export_daily_xlsx_cell((string)$value, $rowNumber, $col + 1);
+            $numeric = export_daily_xlsx_header_is_numeric((string)($headers[$col] ?? ''));
+            $sheet .= export_daily_xlsx_cell($value, $rowNumber, $col + 1, $numeric);
         }
         $sheet .= '</row>';
     }

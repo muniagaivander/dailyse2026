@@ -265,9 +265,51 @@ function edit_xlsx_col(int $index): string
     return $name;
 }
 
-function edit_xlsx_cell(string $value, int $row, int $col): string
+function edit_xlsx_numeric_value($value): ?string
+{
+    if (is_int($value) || is_float($value)) {
+        return (string)(0 + $value);
+    }
+    $value = trim((string)$value);
+    if ($value === '') {
+        return null;
+    }
+    $value = str_replace('%', '', $value);
+    if (preg_match('/^-?\d{1,3}(\.\d{3})*(,\d+)?$/', $value)) {
+        $value = str_replace('.', '', $value);
+        $value = str_replace(',', '.', $value);
+    } elseif (preg_match('/^-?\d+(,\d+)?$/', $value)) {
+        $value = str_replace(',', '.', $value);
+    }
+    return is_numeric($value) ? (string)(0 + $value) : null;
+}
+
+function edit_xlsx_header_is_numeric(string $header): bool
+{
+    $header = strtolower($header);
+    foreach (['kode', 'id', 'email', 'nama', 'tanggal', 'kabupaten', 'kecamatan', 'desa', 'sls', 'updated', 'by'] as $textPart) {
+        if (str_contains($header, $textPart)) {
+            return false;
+        }
+    }
+    foreach (['target', 'open', 'draft', 'submit', 'reject', 'pending', 'approve', 'approved'] as $numericPart) {
+        if (str_contains($header, $numericPart)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function edit_xlsx_cell($value, int $row, int $col, bool $numeric = false): string
 {
     $ref = edit_xlsx_col($col) . $row;
+    if ($numeric) {
+        $number = edit_xlsx_numeric_value($value);
+        if ($number !== null) {
+            return '<c r="' . $ref . '"><v>' . htmlspecialchars($number, ENT_XML1) . '</v></c>';
+        }
+    }
+    $value = (string)$value;
     return '<c r="' . $ref . '" t="inlineStr"><is><t>' . htmlspecialchars($value, ENT_XML1) . '</t></is></c>';
 }
 
@@ -323,7 +365,8 @@ function edit_export_rows(array $headers, array $rows, string $filename, string 
         $rowNumber = $rIndex + 1;
         $sheet .= '<row r="' . $rowNumber . '">';
         foreach ($values as $cIndex => $value) {
-            $sheet .= edit_xlsx_cell((string)$value, $rowNumber, $cIndex + 1);
+            $numeric = $rowNumber > 1 && edit_xlsx_header_is_numeric((string)($headers[$cIndex] ?? ''));
+            $sheet .= edit_xlsx_cell($value, $rowNumber, $cIndex + 1, $numeric);
         }
         $sheet .= '</row>';
     }

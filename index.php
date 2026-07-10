@@ -558,6 +558,7 @@ function performance_metric_row(array $meta, array $daily, string $asOf): array
         'stddev' => $consistency['stddev'],
         'consistency_score' => $consistency['score'],
         'momentum_score' => $momentum,
+        'projected_finish_iso' => $completionDate ?: $projectedFinishDate,
         'projected_finish' => $completionDate
             ? performance_date_label($completionDate)
             : ($projectedFinishDate ? performance_date_label($projectedFinishDate) : performance_projected_finish($progress, $target, $recentAverage, $asOf)),
@@ -886,9 +887,51 @@ function dashboard_xlsx_col(int $index): string
     return $name;
 }
 
-function dashboard_xlsx_cell(string $value, int $row, int $col): string
+function dashboard_xlsx_numeric_value($value): ?string
+{
+    if (is_int($value) || is_float($value)) {
+        return (string)(0 + $value);
+    }
+    $value = trim((string)$value);
+    if ($value === '') {
+        return null;
+    }
+    $value = str_replace('%', '', $value);
+    if (preg_match('/^-?\d{1,3}(\.\d{3})*(,\d+)?$/', $value)) {
+        $value = str_replace('.', '', $value);
+        $value = str_replace(',', '.', $value);
+    } elseif (preg_match('/^-?\d+(,\d+)?$/', $value)) {
+        $value = str_replace(',', '.', $value);
+    }
+    return is_numeric($value) ? (string)(0 + $value) : null;
+}
+
+function dashboard_xlsx_header_is_numeric(string $header): bool
+{
+    $header = strtolower($header);
+    foreach (['kode', 'id', 'email', 'nama', 'petugas', 'kabupaten', 'kecamatan', 'desa', 'wilayah', 'status', 'tanggal', 'prediksi'] as $textPart) {
+        if (str_contains($header, $textPart)) {
+            return false;
+        }
+    }
+    foreach (['rank', 'target', 'open', 'draft', 'submit', 'reject', 'pending', 'approved', 'approve', 'progress', 'count', 'persen', 'pct', 'selesai', 'subsls', 'rata', 'capaian', 'skor', 'deviasi', 'konsistensi', 'momentum'] as $numericPart) {
+        if (str_contains($header, $numericPart)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function dashboard_xlsx_cell($value, int $row, int $col, bool $numeric = false): string
 {
     $ref = dashboard_xlsx_col($col) . $row;
+    if ($numeric) {
+        $number = dashboard_xlsx_numeric_value($value);
+        if ($number !== null) {
+            return '<c r="' . $ref . '"><v>' . htmlspecialchars($number, ENT_XML1) . '</v></c>';
+        }
+    }
+    $value = (string)$value;
     return '<c r="' . $ref . '" t="inlineStr"><is><t>' . htmlspecialchars($value, ENT_XML1) . '</t></is></c>';
 }
 
@@ -944,7 +987,8 @@ function dashboard_export_rows(array $headers, array $rows, string $filename, st
         $rowNumber = $rIndex + 1;
         $sheet .= '<row r="' . $rowNumber . '">';
         foreach ($values as $cIndex => $value) {
-            $sheet .= dashboard_xlsx_cell((string)$value, $rowNumber, $cIndex + 1);
+            $numeric = $rowNumber > 1 && dashboard_xlsx_header_is_numeric((string)($headers[$cIndex] ?? ''));
+            $sheet .= dashboard_xlsx_cell($value, $rowNumber, $cIndex + 1, $numeric);
         }
         $sheet .= '</row>';
     }
@@ -1101,19 +1145,19 @@ if (($_GET['action'] ?? '') === 'export_performance_temporary'
             $row['wilayah_kerja'] ?? '',
             $target,
             $progressCount,
-            number_format($progressPct, 2, ',', '.') . '%',
+            round($progressPct, 2),
             (int)ceil((float)$row['average_per_day']),
             (int)$row['yesterday_achievement'],
             $row['required_daily_target'] === null ? 'Lewat Target' : (int)$row['required_daily_target'],
             round((float)$row['stddev'], 2),
             round((float)$row['consistency_score'], 2),
-            $row['projected_finish'],
+            $row['projected_finish_iso'] ?? $row['projected_finish'],
             $row['performance_status'],
             round((float)$row['performance_score'], 2),
         ];
     }
     dashboard_export_rows(
-        ['rank', 'petugas', 'kode_kab', 'kecamatan', 'wilayah_kerja', 'target', 'progress_count', 'progress_persen', 'rata_rata_per_hari', 'capaian_kemarin_assignment', 'target_hari_ini_assignment', 'standar_deviasi', 'konsistensi_pct', 'prediksi_selesai', 'status', 'skor'],
+        ['rank', 'petugas', 'kode_kab', 'kecamatan', 'wilayah_kerja', 'target', 'progress_count', 'progress_persen', 'rata_rata_per_hari', 'capaian_kemarin_assignment', 'target_hari_ini_assignment', 'standar_deviasi', 'konsistensi_persen', 'prediksi_selesai', 'status', 'skor'],
         $exportRows,
         'performa_sementara_' . $type . '_' . $scopeId . '_' . date('Ymd_His'),
         'xlsx'
@@ -1138,16 +1182,21 @@ if (($_GET['action'] ?? '') === 'export_attention'
     $rows = $cache['roles'][$type]['attention'][$kabId] ?? [];
     $exportRows = [];
     foreach ($rows as $row) {
+        $target = (int)$row['target'];
+        $draftCount = (int)$row['draft_count'];
+        $progressCount = dashboard_pendataan_count($row);
         $exportRows[] = [
             petugas_label($row['email'], $row['petugas_name'] ?? ''),
-            $row['submit_approve_pct'],
+            $draftCount,
+            $target > 0 ? round($draftCount / $target * 100, 2) : 0,
+            $progressCount,
+            $target > 0 ? round($progressCount / $target * 100, 2) : 0,
             $row['selesai_pct'],
             $threshold['pct'],
             $threshold['date'],
-            $row['target'],
+            $target,
             $row['submitted_by_pencacah'],
             $row['rejected_by_pengawas'],
-            $row['draft_count'],
             $row['pending_count'],
             $row['approved_by_pengawas'],
             $row['kab_codes'] ?? '',
@@ -1158,7 +1207,7 @@ if (($_GET['action'] ?? '') === 'export_attention'
         ];
     }
     dashboard_export_rows(
-        ['petugas', 'progress_pendataan_pct', 'selesai_subsls_pct', 'threshold_selesai_pct', 'batas_tanggal', 'target', 'submitted_by_pencacah', 'rejected_by_pengawas', 'draft_count', 'pending_count', 'approved_by_pengawas', 'kode_kab', 'kecamatan', 'wilayah_kerja', 'subsls_total', 'selesai_count'],
+        ['petugas', 'draft_count', 'draft_persen', 'progress_pendataan_count', 'progress_pendataan_persen', 'selesai_subsls_pct', 'threshold_selesai_pct', 'batas_tanggal', 'target', 'submitted_by_pencacah', 'rejected_by_pengawas', 'pending_count', 'approved_by_pengawas', 'kode_kab', 'kecamatan', 'wilayah_kerja', 'subsls_total', 'selesai_count'],
         $exportRows,
         'perlu_perhatian_' . $type . '_' . $kabId . '_' . date('Ymd'),
         $format
@@ -1780,12 +1829,13 @@ if (pengawas) {
                   <th>Kecamatan</th>
                   <th>Wilayah Kerja</th>
                   <th>Target</th>
-                  <th>Progress</th>
+                  <th class="text-right">Progress<br>Count</th>
+                  <th class="text-right">Progress<br>(%)</th>
                   <th class="performance-compact-header">Rata-rata/<br>Hari<br>(Assignment)</th>
                   <th class="performance-compact-header">Capaian<br>Hari Ini<br>dibanding<br>Kemarin<br>(Assignment)</th>
                   <th class="performance-compact-header">Target<br>Hari Ini<br>(Assignment)</th>
                   <th>Standar Deviasi</th>
-                  <th>Konsistensi</th>
+                  <th>Konsistensi (%)</th>
                   <th>Prediksi Selesai</th>
                   <th>Status</th>
                   <th>Skor</th>
@@ -1800,19 +1850,20 @@ if (pengawas) {
                   <td class="performance-work-area"><?= e($r['wilayah_kerja_kecamatan'] ?: '-') ?></td>
                   <td class="performance-work-area"><?= performance_work_area_html((string)($r['wilayah_kerja'] ?? '')) ?></td>
                   <td class="text-right"><?= number_format((int)$r['target'],0,',','.') ?></td>
-                  <td class="text-right performance-progress-cell"><?= dashboard_table_count_pct_text((int)$r['progress_count'], (int)$r['target']) ?></td>
+                  <td class="text-right"><?= number_format((int)$r['progress_count'],0,',','.') ?></td>
+                  <td class="text-right"><?= number_format((int)$r['target'] > 0 ? (int)$r['progress_count'] / (int)$r['target'] * 100 : 0,2,',','.') ?></td>
                   <td class="text-right"><?= number_format((int)ceil((float)$r['average_per_day']),0,',','.') ?></td>
                   <td class="text-right"><?= number_format((int)$r['yesterday_achievement'],0,',','.') ?></td>
                   <td class="text-right"><?= $r['required_daily_target'] === null ? 'Lewat Target' : number_format((int)$r['required_daily_target'],0,',','.') ?></td>
                   <td class="text-right"><?= number_format((float)$r['stddev'],2,',','.') ?></td>
-                  <td class="text-right"><?= number_format((float)$r['consistency_score'],2,',','.') ?>%</td>
+                  <td class="text-right"><?= number_format((float)$r['consistency_score'],2,',','.') ?></td>
                   <td><?= e($r['projected_finish']) ?></td>
                   <td><span class="performance-status"><?= e($r['performance_status']) ?></span></td>
                   <td class="text-right font-weight-bold"><?= number_format((float)$r['performance_score'],2,',','.') ?></td>
                 </tr>
               <?php endforeach; ?>
               <?php if (!$topRows): ?>
-                <tr><td colspan="15" class="text-center text-muted">Belum ada data performa sementara.</td></tr>
+                <tr><td colspan="16" class="text-center text-muted">Belum ada data performa sementara.</td></tr>
               <?php endif; ?>
               </tbody>
             </table>
@@ -1840,8 +1891,8 @@ if (pengawas) {
                   <th>Target Mingguan</th>
                   <th>Rata-rata/Hari</th>
                   <th>Standar Deviasi</th>
-                  <th>Konsistensi</th>
-                  <th>Kemampuan Mengejar</th>
+                  <th>Konsistensi (%)</th>
+                  <th>Kemampuan Mengejar (%)</th>
                   <th>Skor</th>
                 </tr>
               </thead>
@@ -1859,8 +1910,8 @@ if (pengawas) {
                   <td class="text-right"><?= number_format((float)$r['weekly_target'],2,',','.') ?></td>
                   <td class="text-right"><?= number_format((int)ceil((float)$r['average_per_day']),0,',','.') ?></td>
                   <td class="text-right"><?= number_format((float)$r['stddev'],2,',','.') ?></td>
-                  <td class="text-right"><?= number_format((float)$r['consistency_score'],2,',','.') ?>%</td>
-                  <td class="text-right"><?= number_format((float)$r['momentum_score'],2,',','.') ?>%</td>
+                  <td class="text-right"><?= number_format((float)$r['consistency_score'],2,',','.') ?></td>
+                  <td class="text-right"><?= number_format((float)$r['momentum_score'],2,',','.') ?></td>
                   <td class="text-right font-weight-bold"><?= number_format((float)$r['performance_score'],2,',','.') ?></td>
                 </tr>
               <?php endforeach; ?>
@@ -1883,23 +1934,32 @@ if (pengawas) {
           </div>
           <div class="table-responsive">
             <table class="table table-sm table-bordered table-striped mb-0 attention-table" data-page-size="25">
-              <thead><tr><th>Email</th><th>Kode Kab</th><th>Kecamatan</th><th>Wilayah Kerja</th><th>Draft</th><th>Progress Pendataan</th><th>Selesai SubSLS</th><th>Target</th><th>Total SubSLS</th></tr></thead>
+              <thead><tr><th>Email</th><th>Kode Kab</th><th>Kecamatan</th><th>Wilayah Kerja</th><th class="text-right">Draft<br>(Count)</th><th class="text-right">Draft<br>(%)</th><th class="text-right">Progress Pendataan<br>Count</th><th class="text-right">Progress Pendataan<br>(%)</th><th>Selesai SubSLS</th><th>Target</th><th>Total SubSLS</th></tr></thead>
               <tbody>
               <?php foreach ($attentionRows as $r): ?>
+                <?php
+                  $attentionTarget = (int)$r['target'];
+                  $attentionDraft = (int)$r['draft_count'];
+                  $attentionProgress = dashboard_pendataan_count($r);
+                  $attentionDraftPct = $attentionTarget > 0 ? $attentionDraft / $attentionTarget * 100 : 0;
+                  $attentionProgressPct = $attentionTarget > 0 ? $attentionProgress / $attentionTarget * 100 : 0;
+                ?>
                 <tr class="attention-row">
                   <td><?= e(petugas_label($r['email'], $r['petugas_name'] ?? '')) ?></td>
                   <td><?= e($r['kab_codes'] ?: '-') ?></td>
                   <td class="performance-work-area"><?= e($r['wilayah_kerja_kecamatan'] ?: '-') ?></td>
                   <td class="performance-work-area"><?= e($r['wilayah_kerja'] ?: '-') ?></td>
-                  <td class="text-right"><?= dashboard_table_count_pct_text((int)$r['draft_count'], (int)$r['target']) ?></td>
-                  <td class="text-right"><?= dashboard_table_count_pct_text(dashboard_pendataan_count($r), (int)$r['target']) ?></td>
+                  <td class="text-right"><?= number_format($attentionDraft,0,',','.') ?></td>
+                  <td class="text-right"><?= number_format($attentionDraftPct,2,',','.') ?></td>
+                  <td class="text-right"><?= number_format($attentionProgress,0,',','.') ?></td>
+                  <td class="text-right"><?= number_format($attentionProgressPct,2,',','.') ?></td>
                   <td class="text-right"><?= number_format((float)$r['selesai_pct'],2,',','.') ?>%</td>
                   <td class="text-right"><?= number_format((int)$r['target'],0,',','.') ?></td>
                   <td class="text-right"><?= number_format((int)$r['subsls_total'],0,',','.') ?></td>
                 </tr>
               <?php endforeach; ?>
               <?php if (!$attentionRows): ?>
-                <tr><td colspan="9" class="text-center text-muted">Tidak ada <?= e(strtolower($labelRole)) ?> yang masuk kategori perlu perhatian.</td></tr>
+                <tr><td colspan="11" class="text-center text-muted">Tidak ada <?= e(strtolower($labelRole)) ?> yang masuk kategori perlu perhatian.</td></tr>
               <?php endif; ?>
               </tbody>
             </table>
