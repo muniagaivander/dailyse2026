@@ -429,7 +429,7 @@ render_header('Rekap Petugas Weekly');
     align-items: center;
     display: flex;
     flex-direction: column;
-    height: 98px;
+    height: 104px;
     justify-content: space-between;
   }
   .weekly-header-label {
@@ -473,6 +473,14 @@ render_header('Rekap Petugas Weekly');
     margin-top: 5px;
     min-width: 78px;
     padding: 1px 4px;
+  }
+  .weekly-search-input {
+    border-radius: 4px;
+    font-size: .72rem;
+    height: 24px;
+    margin-top: 5px;
+    min-width: 128px;
+    padding: 1px 6px;
   }
   .weekly-sort-spacer {
     display: block;
@@ -584,6 +592,7 @@ render_header('Rekap Petugas Weekly');
               <?php
                 $isNumericHeader = rekap_weekly_xlsx_header_is_numeric((string)$header);
                 $isKabupatenHeader = (string)$header === 'Kabupaten';
+                $isSearchHeader = in_array((string)$header, ['Nama Petugas', 'Nama PML'], true);
                 $isSortableHeader = $isNumericHeader || $isKabupatenHeader;
               ?>
               <?php
@@ -613,6 +622,8 @@ render_header('Rekap Petugas Weekly');
                       <option value="desc">Descending</option>
                       <option value="clear">Clear</option>
                     </select>
+                  <?php elseif ($isSearchHeader): ?>
+                    <input class="form-control form-control-sm weekly-search-input" type="search" data-search-col="<?= (int)$i ?>" placeholder="Cari nama">
                   <?php else: ?>
                     <span class="weekly-sort-spacer"></span>
                   <?php endif; ?>
@@ -665,18 +676,36 @@ document.querySelectorAll('.weekly-table').forEach(function (table) {
       return row.querySelectorAll('td').length > 1;
     });
   }
+  function filteredRows() {
+    const terms = Array.from(table.querySelectorAll('.weekly-search-input')).map(function (input) {
+      return {
+        col: Number(input.dataset.searchCol || 0),
+        term: (input.value || '').trim().toLowerCase()
+      };
+    }).filter(function (item) { return item.term !== ''; });
+    return dataRows().filter(function (row) {
+      return terms.every(function (item) {
+        const text = row.children[item.col] ? row.children[item.col].textContent.toLowerCase() : '';
+        return text.indexOf(item.term) !== -1;
+      });
+    });
+  }
   function pageSize() {
     return Number((pageSizeSelect && pageSizeSelect.value) || 20);
   }
   function renderPage() {
-    const rows = dataRows();
+    const allRows = dataRows();
+    const rows = filteredRows();
     const size = pageSize();
     const totalPages = Math.max(1, Math.ceil(rows.length / size));
     currentPage = Math.min(Math.max(1, currentPage), totalPages);
+    allRows.forEach(function (row) {
+      row.style.display = 'none';
+    });
     rows.forEach(function (row, index) {
       row.style.display = index >= (currentPage - 1) * size && index < currentPage * size ? '' : 'none';
     });
-    if (info) info.textContent = rows.length ? 'Halaman ' + currentPage + ' dari ' + totalPages : 'Tidak ada data';
+    if (info) info.textContent = rows.length ? 'Halaman ' + currentPage + ' dari ' + totalPages + ' (' + rows.length + ' hasil)' : 'Tidak ada data';
     if (prev) prev.disabled = currentPage <= 1;
     if (next) next.disabled = currentPage >= totalPages;
   }
@@ -698,6 +727,12 @@ document.querySelectorAll('.weekly-table').forEach(function (table) {
       renderPage();
     });
   }
+  table.querySelectorAll('.weekly-search-input').forEach(function (input) {
+    input.addEventListener('input', function () {
+      currentPage = 1;
+      renderPage();
+    });
+  });
   table.querySelectorAll('.weekly-sort-select').forEach(function (select) {
     select.addEventListener('change', function () {
       const col = Number(select.dataset.sortCol || 0);
