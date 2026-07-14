@@ -161,6 +161,17 @@ function rekap_weekly_pct(int $count, int $target): float
     return $target > 0 ? $count / $target * 100 : 0;
 }
 
+function rekap_weekly_latest_daily(array $dailyRows, string $dateEnd): ?array
+{
+    $latestDate = null;
+    foreach (array_keys($dailyRows) as $date) {
+        if ($date <= $dateEnd && ($latestDate === null || $date > $latestDate)) {
+            $latestDate = $date;
+        }
+    }
+    return $latestDate === null ? null : $dailyRows[$latestDate];
+}
+
 function rekap_weekly_export_payload(array $rows, array $dates, array $matrix, array $filters): array
 {
     $dateEnd = end($dates);
@@ -187,7 +198,8 @@ function rekap_weekly_export_payload(array $rows, array $dates, array $matrix, a
     $out = [];
     foreach ($rows as $row) {
         $email = normalize_email((string)$row['email']);
-        $endDaily = $matrix[$email][$dateEnd] ?? null;
+        $petugasDailyRows = $matrix[$email] ?? [];
+        $endDaily = rekap_weekly_latest_daily($petugasDailyRows, (string)$dateEnd);
         $target = (int)($endDaily['target'] ?? 0);
         $draftCount = (int)($endDaily['draft_count'] ?? 0);
         $rekapCount = (int)($endDaily['count'] ?? 0);
@@ -471,6 +483,10 @@ render_header('Rekap Petugas Weekly');
     background: #dbeafe;
     color: #1e3a8a;
   }
+  .weekly-head-purple {
+    background: #ede9fe;
+    color: #4c1d95;
+  }
   .weekly-head-green {
     background: #dcfce7;
     color: #14532d;
@@ -616,7 +632,9 @@ render_header('Rekap Petugas Weekly');
                 }
                 if (in_array((string)$header, ['Jumlah SubSLS'], true) || str_starts_with((string)$header, 'Total Assignment')) {
                     $headerClass .= ' weekly-head-orange';
-                } elseif (str_starts_with((string)$header, 'Total Draft') || str_starts_with((string)$header, '% Draft') || str_starts_with((string)$header, 'Total Submit') || str_starts_with((string)$header, '% Submit')) {
+                } elseif (str_starts_with((string)$header, 'Total Draft') || str_starts_with((string)$header, '% Draft')) {
+                    $headerClass .= ' weekly-head-purple';
+                } elseif (str_starts_with((string)$header, 'Total Submit') || str_starts_with((string)$header, '% Submit')) {
                     $headerClass .= ' weekly-head-blue';
                 } elseif (str_starts_with((string)$header, 'Submit Tanggal')) {
                     $headerClass .= ' weekly-head-green';
