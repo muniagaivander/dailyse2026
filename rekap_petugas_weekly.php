@@ -186,10 +186,10 @@ function rekap_weekly_export_payload(array $rows, array $dates, array $matrix, a
         'Wilayah Kerja Desa',
         'Jumlah SubSLS',
         'Total Assignment (' . $dateEndLabel . ')',
-        'Total Draft sd ' . $dateEndLabel,
-        '% Draft sd ' . $dateEndLabel,
         'Total Submit sd ' . $dateEndLabel,
         '% Submit sd ' . $dateEndLabel,
+        'Total Draft sd ' . $dateEndLabel,
+        '% Draft sd ' . $dateEndLabel,
     ]);
     foreach ($dates as $date) {
         $headers[] = 'Submit Tanggal ' . rekap_weekly_date_label($date);
@@ -215,10 +215,10 @@ function rekap_weekly_export_payload(array $rows, array $dates, array $matrix, a
         $line[] = $row['wilayah_kerja'] ?: '-';
         $line[] = (int)$row['subsls_total'];
         $line[] = $target;
-        $line[] = $draftCount;
-        $line[] = round(rekap_weekly_pct($draftCount, $target), 2);
         $line[] = $rekapCount;
         $line[] = round(rekap_weekly_pct($rekapCount, $target), 2);
+        $line[] = $draftCount;
+        $line[] = round(rekap_weekly_pct($draftCount, $target), 2);
         foreach ($dates as $date) {
             $daily = $matrix[$email][$date] ?? null;
             $previous = $matrix[$email][date('Y-m-d', strtotime($date . ' -1 day'))] ?? null;
