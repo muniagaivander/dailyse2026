@@ -7,7 +7,13 @@ $filters = [
     'kab_id' => $_GET['kab_id'] ?? '',
     'kec_id' => $_GET['kec_id'] ?? '',
     'desa_id' => $_GET['desa_id'] ?? '',
+    'sort_key' => trim((string)($_GET['sort_key'] ?? '')),
+    'sort_dir' => ($_GET['sort_dir'] ?? '') === 'desc' ? 'desc' : (($_GET['sort_dir'] ?? '') === 'asc' ? 'asc' : ''),
 ];
+$rekapSearchKeys = ['search_nama', 'search_kabupaten', 'search_kecamatan', 'search_desa'];
+foreach ($rekapSearchKeys as $key) {
+    $filters[$key] = trim((string)($_GET[$key] ?? ''));
+}
 if (in_array($user['role'], ['admin_kab', 'viewer_kab'], true)) {
     $filters['kab_id'] = $user['kab_id'];
 }
@@ -114,6 +120,62 @@ function rekap_petugas_pct_text(int $count, int $target): string
 {
     $pct = $target > 0 ? $count / $target * 100 : 0;
     return number_format($pct, 2, ',', '.') . '%';
+}
+
+function rekap_petugas_apply_search(array $rows, array $filters): array
+{
+    $map = [
+        'search_nama' => fn(array $row): string => trim((string)($row['petugas_name'] ?? '')) . ' ' . (string)($row['email'] ?? ''),
+        'search_kabupaten' => fn(array $row): string => (string)($row['kabupaten'] ?? ''),
+        'search_kecamatan' => fn(array $row): string => (string)($row['wilayah_kerja_kecamatan'] ?? ''),
+        'search_desa' => fn(array $row): string => (string)($row['wilayah_kerja'] ?? ''),
+    ];
+    foreach ($map as $key => $getter) {
+        $term = strtolower(trim((string)($filters[$key] ?? '')));
+        if ($term === '') {
+            continue;
+        }
+        $rows = array_values(array_filter($rows, function (array $row) use ($getter, $term): bool {
+            return str_contains(strtolower($getter($row)), $term);
+        }));
+    }
+    return $rows;
+}
+
+function rekap_petugas_progress_count(array $row): int
+{
+    return (int)($row['submitted_by_pencacah'] ?? 0)
+        + (int)($row['rejected_by_pengawas'] ?? 0)
+        + (int)($row['pending_count'] ?? 0)
+        + (int)($row['approved_by_pengawas'] ?? 0);
+}
+
+function rekap_petugas_sort_rows(array $rows, array $filters): array
+{
+    $sortMap = [
+        'subsls_total' => fn(array $row): float => (float)($row['subsls_total'] ?? 0),
+        'target' => fn(array $row): float => (float)($row['target'] ?? 0),
+        'draft_count' => fn(array $row): float => (float)($row['draft_count'] ?? 0),
+        'draft_pct' => fn(array $row): float => (float)($row['target'] ?? 0) > 0 ? (float)($row['draft_count'] ?? 0) / (float)$row['target'] : 0.0,
+        'open_count' => fn(array $row): float => (float)($row['open_count'] ?? 0),
+        'submitted_by_pencacah' => fn(array $row): float => (float)($row['submitted_by_pencacah'] ?? 0),
+        'rejected_by_pengawas' => fn(array $row): float => (float)($row['rejected_by_pengawas'] ?? 0),
+        'pending_count' => fn(array $row): float => (float)($row['pending_count'] ?? 0),
+        'approved_by_pengawas' => fn(array $row): float => (float)($row['approved_by_pengawas'] ?? 0),
+        'progress_count' => fn(array $row): float => (float)rekap_petugas_progress_count($row),
+        'progress_pct' => fn(array $row): float => (float)($row['target'] ?? 0) > 0 ? rekap_petugas_progress_count($row) / (float)$row['target'] : 0.0,
+    ];
+    $key = (string)($filters['sort_key'] ?? '');
+    $dir = (string)($filters['sort_dir'] ?? '');
+    if (!isset($sortMap[$key]) || !in_array($dir, ['asc', 'desc'], true)) {
+        return $rows;
+    }
+    $getter = $sortMap[$key];
+    usort($rows, function (array $a, array $b) use ($getter, $dir): int {
+        $cmp = $getter($a) <=> $getter($b);
+        return $dir === 'asc' ? $cmp : -$cmp;
+    });
+    return $rows;
 }
 
 function rekap_petugas_xlsx_col(int $index): string
@@ -262,7 +324,7 @@ $fields = [
     'pending_count' => 'Pending',
     'approved_by_pengawas' => 'Approve',
 ];
-$rows = rekap_petugas_rows($user, $filters);
+$rows = rekap_petugas_sort_rows(rekap_petugas_apply_search(rekap_petugas_rows($user, $filters), $filters), $filters);
 $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 100;
 $totalRows = count($rows);
@@ -333,9 +395,60 @@ render_header('Rekap Petugas');
   .rekap-header-sub {
     white-space: nowrap;
   }
+  .rekap-table th {
+    text-align: center;
+    vertical-align: bottom !important;
+    white-space: nowrap;
+  }
+  .rekap-header-label {
+    align-items: center;
+    display: flex;
+    justify-content: center;
+    line-height: 1.08;
+    min-height: 48px;
+  }
+  .rekap-control-spacer {
+    display: block;
+    height: 29px;
+  }
+  .rekap-head-blue {
+    background: #dbeafe !important;
+    color: #1e3a8a;
+  }
+  .rekap-head-yellow {
+    background: #fef3c7 !important;
+    color: #78350f;
+  }
+  .rekap-head-light-green {
+    background: #dcfce7 !important;
+    color: #14532d;
+  }
+  .rekap-head-red {
+    background: #fee2e2 !important;
+    color: #7f1d1d;
+  }
+  .rekap-head-dark-green {
+    background: #bbf7d0 !important;
+    color: #064e3b;
+  }
+  .rekap-search-input,
+  .rekap-sort-select {
+    border-radius: 4px;
+    font-size: .72rem;
+    height: 24px;
+    margin-top: 5px;
+    min-width: 92px;
+    padding: 1px 5px;
+  }
+  .rekap-search-input {
+    min-width: 145px;
+  }
 </style>
 <form class="card card-body mb-3" method="get">
   <div class="form-row align-items-end">
+    <?php foreach ($rekapSearchKeys as $key): ?>
+      <input type="hidden" name="<?= e($key) ?>" value="<?= e($filters[$key]) ?>">
+    <?php endforeach; ?>
     <div class="form-group col-12 col-md-2">
       <label>Jenis Petugas</label>
       <select class="form-control" name="petugas_type" id="petugas_type">
@@ -385,46 +498,86 @@ render_header('Rekap Petugas');
             'desa_id' => $filters['desa_id'],
             'action' => 'export',
         ];
+        foreach ($rekapSearchKeys as $key) {
+            if ($filters[$key] !== '') {
+                $exportQuery[$key] = $filters[$key];
+            }
+        }
+        if ($filters['sort_key'] !== '' && $filters['sort_dir'] !== '') {
+            $exportQuery['sort_key'] = $filters['sort_key'];
+            $exportQuery['sort_dir'] = $filters['sort_dir'];
+        }
       ?>
       <a class="btn btn-outline-success btn-sm mr-2" href="?<?= e(http_build_query($exportQuery + ['format' => 'csv'])) ?>"><i class="fas fa-file-csv mr-1"></i>Download CSV</a>
       <a class="btn btn-outline-success btn-sm" href="?<?= e(http_build_query($exportQuery + ['format' => 'xlsx'])) ?>"><i class="fas fa-file-excel mr-1"></i>Download Excel</a>
     </div>
   </div>
   <div class="card-body table-responsive p-0">
-    <table class="table table-sm table-bordered table-striped mb-0">
+    <table class="table table-sm table-bordered table-striped mb-0 rekap-table" id="rekapPetugasTable">
       <thead>
         <tr>
-          <th>Nama Petugas</th>
-          <th>Email Petugas</th>
-          <?php if ($filters['petugas_type'] === 'pcl'): ?><th>Nama PML</th><?php endif; ?>
-          <th>Kabupaten</th>
-          <th>Wilayah Kerja Kecamatan</th>
-          <th>Wilayah Kerja Desa</th>
-          <th class="text-right">Jumlah SubSLS</th>
-          <th class="text-right">Target</th>
-          <th class="text-right">Draft<br><span class="rekap-header-sub">(Count)</span></th>
-          <th class="text-right">Draft<br><span class="rekap-header-sub">(Persen %)</span></th>
-          <?php foreach ($fields as $label): ?><th class="text-right"><?= e($label) ?></th><?php endforeach; ?>
-          <th class="text-right">Progress Pendataan<br><span class="rekap-header-sub">(Count)</span></th>
-          <th class="text-right">Progress Pendataan<br><span class="rekap-header-sub">(Persen %)</span></th>
+          <th><div class="rekap-header-label">Nama Petugas</div><input class="form-control form-control-sm rekap-search-input" type="search" placeholder="Cari nama" value="<?= e($filters['search_nama']) ?>" data-rekap-server-search="search_nama"></th>
+          <th><div class="rekap-header-label">Email Petugas</div><span class="rekap-control-spacer"></span></th>
+          <?php if ($filters['petugas_type'] === 'pcl'): ?><th><div class="rekap-header-label">Nama PML</div><span class="rekap-control-spacer"></span></th><?php endif; ?>
+          <?php $colOffset = $filters['petugas_type'] === 'pcl' ? 1 : 0; ?>
+          <th><div class="rekap-header-label">Kabupaten</div><input class="form-control form-control-sm rekap-search-input" type="search" placeholder="Cari kab" value="<?= e($filters['search_kabupaten']) ?>" data-rekap-server-search="search_kabupaten"></th>
+          <th><div class="rekap-header-label">Wilayah<br>Kerja<br>Kecamatan</div><input class="form-control form-control-sm rekap-search-input" type="search" placeholder="Cari kec" value="<?= e($filters['search_kecamatan']) ?>" data-rekap-server-search="search_kecamatan"></th>
+          <th><div class="rekap-header-label">Wilayah<br>Kerja<br>Desa</div><input class="form-control form-control-sm rekap-search-input" type="search" placeholder="Cari desa" value="<?= e($filters['search_desa']) ?>" data-rekap-server-search="search_desa"></th>
+          <?php
+            $numericHeaders = [
+                ['label' => 'Jumlah<br>SubSLS', 'class' => 'rekap-head-blue', 'key' => 'subsls_total'],
+                ['label' => 'Target', 'class' => 'rekap-head-blue', 'key' => 'target'],
+                ['label' => 'Draft<br>(Count)', 'class' => 'rekap-head-yellow', 'key' => 'draft_count'],
+                ['label' => 'Draft<br>(Persen %)', 'class' => 'rekap-head-yellow', 'key' => 'draft_pct'],
+            ];
+            foreach ($fields as $fieldKey => $label) {
+                $class = match ($fieldKey) {
+                    'open_count' => 'rekap-head-blue',
+                    'submitted_by_pencacah' => 'rekap-head-light-green',
+                    'approved_by_pengawas' => 'rekap-head-dark-green',
+                    'rejected_by_pengawas', 'pending_count' => 'rekap-head-red',
+                    default => 'rekap-head-blue',
+                };
+                $numericHeaders[] = ['label' => e($label), 'class' => $class, 'key' => $fieldKey];
+            }
+            $numericHeaders[] = ['label' => 'Progress<br>Pendataan<br>Count', 'class' => 'rekap-head-light-green', 'key' => 'progress_count'];
+            $numericHeaders[] = ['label' => 'Progress<br>Pendataan<br>(Persen %)', 'class' => 'rekap-head-light-green', 'key' => 'progress_pct'];
+          ?>
+          <?php foreach ($numericHeaders as $i => $header): ?>
+            <th class="text-right <?= e($header['class']) ?>">
+              <div class="rekap-header-label"><?= $header['label'] ?></div>
+              <select class="form-control form-control-sm rekap-sort-select" data-rekap-sort-key="<?= e($header['key']) ?>">
+                <option value="">Sort</option>
+                <option value="asc" <?= $filters['sort_key']===$header['key'] && $filters['sort_dir']==='asc' ? 'selected' : '' ?>>Ascending</option>
+                <option value="desc" <?= $filters['sort_key']===$header['key'] && $filters['sort_dir']==='desc' ? 'selected' : '' ?>>Descending</option>
+                <option value="clear">Clear</option>
+              </select>
+            </th>
+          <?php endforeach; ?>
         </tr>
       </thead>
       <tbody>
-        <?php foreach ($displayRows as $r): ?>
-          <tr>
+        <?php foreach ($displayRows as $rowIndex => $r): ?>
+          <?php
+            $rowTarget = (int)$r['target'];
+            $draftPct = $rowTarget > 0 ? (int)$r['draft_count'] / $rowTarget * 100 : 0;
+            $pendataanCount = rekap_petugas_pendataan_count($r);
+            $pendataanPct = $rowTarget > 0 ? $pendataanCount / $rowTarget * 100 : 0;
+          ?>
+          <tr data-original-index="<?= (int)$rowIndex ?>">
             <td><?= e(trim((string)($r['petugas_name'] ?? '')) ?: '-') ?></td>
             <td class="rekap-small-text"><?= e($r['email']) ?></td>
             <?php if ($filters['petugas_type'] === 'pcl'): ?><td><?= e($r['pml_names'] ?: '-') ?></td><?php endif; ?>
             <td><?= e($r['kabupaten'] ?: '-') ?></td>
             <td><?= e($r['wilayah_kerja_kecamatan'] ?: '-') ?></td>
             <td class="rekap-small-text"><?= e($r['wilayah_kerja'] ?: '-') ?></td>
-            <td class="text-right"><?= number_format((int)$r['subsls_total'], 0, ',', '.') ?></td>
-            <td class="text-right"><?= number_format((int)$r['target'], 0, ',', '.') ?></td>
-            <td class="text-right"><?= number_format((int)$r['draft_count'], 0, ',', '.') ?></td>
-            <td class="text-right rekap-pct"><?= e(rekap_petugas_pct_text((int)$r['draft_count'], (int)$r['target'])) ?></td>
-            <?php foreach (array_keys($fields) as $field): ?><td class="text-right"><?= number_format((int)$r[$field], 0, ',', '.') ?></td><?php endforeach; ?>
-            <td class="text-right"><?= number_format(rekap_petugas_pendataan_count($r), 0, ',', '.') ?></td>
-            <td class="text-right rekap-pct"><?= e(rekap_petugas_pct_text(rekap_petugas_pendataan_count($r), (int)$r['target'])) ?></td>
+            <td class="text-right" data-sort-value="<?= (int)$r['subsls_total'] ?>"><?= number_format((int)$r['subsls_total'], 0, ',', '.') ?></td>
+            <td class="text-right" data-sort-value="<?= $rowTarget ?>"><?= number_format($rowTarget, 0, ',', '.') ?></td>
+            <td class="text-right" data-sort-value="<?= (int)$r['draft_count'] ?>"><?= number_format((int)$r['draft_count'], 0, ',', '.') ?></td>
+            <td class="text-right rekap-pct" data-sort-value="<?= e((string)$draftPct) ?>"><?= e(rekap_petugas_pct_text((int)$r['draft_count'], $rowTarget)) ?></td>
+            <?php foreach (array_keys($fields) as $field): ?><td class="text-right" data-sort-value="<?= (int)$r[$field] ?>"><?= number_format((int)$r[$field], 0, ',', '.') ?></td><?php endforeach; ?>
+            <td class="text-right" data-sort-value="<?= $pendataanCount ?>"><?= number_format($pendataanCount, 0, ',', '.') ?></td>
+            <td class="text-right rekap-pct" data-sort-value="<?= e((string)$pendataanPct) ?>"><?= e(rekap_petugas_pct_text($pendataanCount, $rowTarget)) ?></td>
           </tr>
         <?php endforeach; ?>
         <?php if (!$displayRows): ?>
@@ -444,6 +597,15 @@ render_header('Rekap Petugas');
             'kec_id' => $filters['kec_id'],
             'desa_id' => $filters['desa_id'],
         ];
+        foreach ($rekapSearchKeys as $key) {
+            if ($filters[$key] !== '') {
+                $baseQuery[$key] = $filters[$key];
+            }
+        }
+        if ($filters['sort_key'] !== '' && $filters['sort_dir'] !== '') {
+            $baseQuery['sort_key'] = $filters['sort_key'];
+            $baseQuery['sort_dir'] = $filters['sort_dir'];
+        }
         $start = max(1, $page - 2);
         $end = min($totalPages, $page + 2);
       ?>
@@ -487,5 +649,46 @@ if (desa) {
     this.form.submit();
   });
 }
+
+document.querySelectorAll('#rekapPetugasTable').forEach(function (table) {
+  const sortSelects = Array.from(table.querySelectorAll('[data-rekap-sort-key]'));
+
+  sortSelects.forEach(function (select) {
+    select.addEventListener('change', function () {
+      const direction = select.value;
+      const params = new URLSearchParams(window.location.search);
+      params.delete('page');
+      if (direction === 'asc' || direction === 'desc') {
+        params.set('sort_key', select.dataset.rekapSortKey || '');
+        params.set('sort_dir', direction);
+      } else {
+        params.delete('sort_key');
+        params.delete('sort_dir');
+      }
+      window.location.search = params.toString();
+    });
+  });
+});
+
+document.querySelectorAll('[data-rekap-server-search]').forEach(function (input) {
+  let timer = null;
+  input.addEventListener('input', function () {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(function () {
+      const params = new URLSearchParams(window.location.search);
+      params.delete('page');
+      document.querySelectorAll('[data-rekap-server-search]').forEach(function (field) {
+        const key = field.dataset.rekapServerSearch;
+        const value = (field.value || '').trim();
+        if (value) {
+          params.set(key, value);
+        } else {
+          params.delete(key);
+        }
+      });
+      window.location.search = params.toString();
+    }, 600);
+  });
+});
 </script>
 <?php render_footer(); ?>

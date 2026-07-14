@@ -6,6 +6,10 @@ $filters = [
     'kec_id' => $_GET['kec_id'] ?? '',
     'desa_id' => $_GET['desa_id'] ?? '',
 ];
+$petugasSearchKeys = ['search_kode', 'search_desa', 'search_sls', 'search_subsls', 'search_pengawas', 'search_pencacah'];
+foreach ($petugasSearchKeys as $key) {
+    $filters[$key] = trim((string)($_GET[$key] ?? ''));
+}
 if (in_array($user['role'], ['admin_kab', 'viewer_kab'], true)) {
     $filters['kab_id'] = $user['kab_id'];
 }
@@ -202,6 +206,20 @@ if (isset($_GET['filter'])) {
         $where[] = 'd.id=?';
         $params[] = $filters['desa_id'];
     }
+    $searchExpressions = [
+        'search_kode' => "CONCAT(k.id, kc.kdkec, d.kddesa, sl.kdsls, ms.kdsubsls)",
+        'search_desa' => "d.nmdesa",
+        'search_sls' => "CONCAT(sl.kdsls, ' ', sl.nmsls)",
+        'search_subsls' => "ms.kdsubsls",
+        'search_pengawas' => "CONCAT(COALESCE(up.name, ''), ' ', COALESCE(ms.pengawas_email, ''))",
+        'search_pencacah' => "CONCAT(COALESCE(uc.name, ''), ' ', COALESCE(ms.pencacah_email, ''))",
+    ];
+    foreach ($searchExpressions as $key => $expr) {
+        if ($filters[$key] !== '') {
+            $where[] = $expr . ' LIKE ?';
+            $params[] = '%' . $filters[$key] . '%';
+        }
+    }
     $sqlWhere = $where ? 'WHERE ' . implode(' AND ', $where) : '';
     $countStmt = db()->prepare("SELECT COUNT(*)
         FROM master_subsls ms
@@ -209,6 +227,8 @@ if (isset($_GET['filter'])) {
         JOIN master_desa d ON d.id=sl.desa_id
         JOIN master_kec kc ON kc.id=d.kec_id
         JOIN master_kab k ON k.id=kc.kab_id
+        LEFT JOIN users up ON up.email=ms.pengawas_email
+        LEFT JOIN users uc ON uc.email=ms.pencacah_email
         $sqlWhere");
     $countStmt->execute($params);
     $totalRows = (int)$countStmt->fetchColumn();
@@ -224,6 +244,8 @@ if (isset($_GET['filter'])) {
         JOIN master_desa d ON d.id=sl.desa_id
         JOIN master_kec kc ON kc.id=d.kec_id
         JOIN master_kab k ON k.id=kc.kab_id
+        LEFT JOIN users up ON up.email=ms.pengawas_email
+        LEFT JOIN users uc ON uc.email=ms.pencacah_email
         $sqlWhere");
     $summaryStmt->execute($params);
     $summary = $summaryStmt->fetch() ?: [];
@@ -252,9 +274,27 @@ if (isset($_GET['filter'])) {
 
 render_header('Daftar Petugas');
 ?>
+<style>
+  .petugas-table th {
+    text-align: center;
+    vertical-align: bottom !important;
+    white-space: nowrap;
+  }
+  .petugas-search-input {
+    border-radius: 4px;
+    font-size: .72rem;
+    height: 24px;
+    margin-top: 5px;
+    min-width: 130px;
+    padding: 1px 5px;
+  }
+</style>
 <?php if ($error): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
 <form class="card card-body mb-3" method="get">
   <div class="form-row align-items-end">
+    <?php foreach ($petugasSearchKeys as $key): ?>
+      <input type="hidden" name="<?= e($key) ?>" value="<?= e($filters[$key]) ?>">
+    <?php endforeach; ?>
     <?php if (in_array($user['role'], ['superadmin', 'viewer_prov'], true)): ?>
       <div class="form-group col-md-3">
         <label>Kabupaten</label>
@@ -303,8 +343,27 @@ render_header('Daftar Petugas');
     <span>Menampilkan <?= number_format(count($rows), 0, ',', '.') ?> dari <?= number_format($totalRows, 0, ',', '.') ?> SubSLS</span>
   </div>
   <div class="card-body table-responsive p-0">
-    <table class="table table-sm table-bordered table-striped mb-0">
-      <thead><tr><th>Kode SubSLS</th><th>Desa</th><th>SLS</th><th>SubSLS</th><th>Pengawas</th><th>Pencacah</th></tr></thead>
+    <table class="table table-sm table-bordered table-striped mb-0 petugas-table" id="petugasTable">
+      <thead>
+        <tr>
+          <?php
+            $petugasSearchHeaders = [
+                ['label' => 'Kode SubSLS', 'key' => 'search_kode'],
+                ['label' => 'Desa', 'key' => 'search_desa'],
+                ['label' => 'SLS', 'key' => 'search_sls'],
+                ['label' => 'SubSLS', 'key' => 'search_subsls'],
+                ['label' => 'Pengawas', 'key' => 'search_pengawas'],
+                ['label' => 'Pencacah', 'key' => 'search_pencacah'],
+            ];
+          ?>
+          <?php foreach ($petugasSearchHeaders as $header): ?>
+            <th>
+              <div><?= e($header['label']) ?></div>
+              <input class="form-control form-control-sm petugas-search-input" type="search" placeholder="Cari" value="<?= e($filters[$header['key']]) ?>" data-petugas-server-search="<?= e($header['key']) ?>">
+            </th>
+          <?php endforeach; ?>
+        </tr>
+      </thead>
       <tbody>
       <?php foreach ($rows as $r): ?>
         <tr>
@@ -327,6 +386,11 @@ render_header('Daftar Petugas');
         $start = max(1, $page - 2);
         $end = min($totalPages, $page + 2);
         $baseQuery = ['filter' => 1, 'kab_id' => $filters['kab_id'], 'kec_id' => $filters['kec_id'], 'desa_id' => $filters['desa_id']];
+        foreach ($petugasSearchKeys as $key) {
+            if ($filters[$key] !== '') {
+                $baseQuery[$key] = $filters[$key];
+            }
+        }
       ?>
       <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>"><a class="page-link" href="?<?= e(http_build_query($baseQuery + ['page' => max(1, $page - 1)])) ?>">Prev</a></li>
       <?php for ($p = $start; $p <= $end; $p++): ?>
@@ -351,6 +415,28 @@ if (kabupaten) {
 document.getElementById('kec_id').addEventListener('change', function () {
   document.getElementById('desa_id').value = '';
   this.form.submit();
+});
+
+document.querySelectorAll('[data-petugas-server-search]').forEach(function (input) {
+  let timer = null;
+  input.addEventListener('input', function () {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(function () {
+      const params = new URLSearchParams(window.location.search);
+      params.set('filter', '1');
+      params.delete('page');
+      document.querySelectorAll('[data-petugas-server-search]').forEach(function (field) {
+        const key = field.dataset.petugasServerSearch;
+        const value = (field.value || '').trim();
+        if (value) {
+          params.set(key, value);
+        } else {
+          params.delete(key);
+        }
+      });
+      window.location.search = params.toString();
+    }, 600);
+  });
 });
 </script>
 <?php render_footer(); ?>

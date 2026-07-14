@@ -1403,8 +1403,48 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
   vertical-align: middle;
   white-space: nowrap;
 }
+.dashboard-summary-table th {
+  text-align: center;
+}
 .dashboard-summary-table tfoot td {
   font-weight: 800;
+}
+.dashboard-summary-table .summary-head-blue,
+.attention-table .summary-head-blue {
+  background: #dbeafe !important;
+  color: #1e3a8a;
+}
+.dashboard-summary-table .summary-head-yellow,
+.attention-table .summary-head-yellow {
+  background: #fef3c7 !important;
+  color: #78350f;
+}
+.dashboard-summary-table .summary-head-light-green,
+.attention-table .summary-head-light-green {
+  background: #dcfce7 !important;
+  color: #14532d;
+}
+.dashboard-summary-table .summary-head-red,
+.attention-table .summary-head-red {
+  background: #fee2e2 !important;
+  color: #7f1d1d;
+}
+.dashboard-summary-table .summary-head-dark-green,
+.attention-table .summary-head-dark-green {
+  background: #bbf7d0 !important;
+  color: #064e3b;
+}
+.dashboard-summary-table .summary-search-input,
+.dashboard-summary-table .summary-sort-select {
+  border-radius: 4px;
+  font-size: .72rem;
+  height: 24px;
+  margin-top: 5px;
+  min-width: 84px;
+  padding: 1px 5px;
+}
+.dashboard-summary-table .summary-search-input {
+  min-width: 150px;
 }
 .dashboard-summary-table th.performance-compact-header {
   line-height: 1.2;
@@ -1596,27 +1636,48 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
       $minPendataanPct = $pendataanPcts ? min($pendataanPcts) : null;
       $samePendataanPct = $maxPendataanPct !== null && $minPendataanPct !== null && abs($maxPendataanPct - $minPendataanPct) < 0.001;
     ?>
-    <table class="table table-sm table-bordered table-striped mb-0 dashboard-summary-table">
+    <table class="table table-sm table-bordered table-striped mb-0 dashboard-summary-table" id="dashboardSummaryTable">
       <thead>
         <tr>
-          <th>Kelompok</th>
-          <th class="text-right">Target</th>
-          <th class="text-right">Open</th>
-          <th class="text-right">Draft</th>
-          <th class="text-right">Submit</th>
-          <th class="text-right">Reject</th>
-          <th class="text-right">Pending</th>
-          <th class="text-right">Approve</th>
-          <th class="text-right">Progress Pendataan</th>
-          <th class="text-right">Jumlah SubSLS Selesai</th>
+          <th>
+            <div>Kelompok</div>
+            <input class="form-control form-control-sm summary-search-input" type="search" placeholder="Cari kelompok" data-summary-search>
+          </th>
+          <?php
+            $summaryHeaders = [
+                ['label' => 'Target', 'class' => 'summary-head-blue'],
+                ['label' => 'Open', 'class' => 'summary-head-blue'],
+                ['label' => 'Draft', 'class' => 'summary-head-yellow'],
+                ['label' => 'Submit', 'class' => 'summary-head-light-green'],
+                ['label' => 'Reject', 'class' => 'summary-head-red'],
+                ['label' => 'Pending', 'class' => 'summary-head-red'],
+                ['label' => 'Approve', 'class' => 'summary-head-dark-green'],
+                ['label' => 'Progress Pendataan', 'class' => 'summary-head-light-green'],
+                ['label' => 'Jumlah SubSLS Selesai', 'class' => 'summary-head-dark-green'],
+            ];
+          ?>
+          <?php foreach ($summaryHeaders as $index => $header): ?>
+            <th class="text-right <?= e($header['class']) ?>">
+              <div><?= e($header['label']) ?></div>
+              <select class="form-control form-control-sm summary-sort-select" data-summary-sort-col="<?= $index + 1 ?>">
+                <option value="">Sort</option>
+                <option value="asc">Ascending</option>
+                <option value="desc">Descending</option>
+                <option value="clear">Clear</option>
+              </select>
+            </th>
+          <?php endforeach; ?>
         </tr>
       </thead>
       <tbody>
-        <?php foreach ($chartRows as $row): ?>
+        <?php foreach ($chartRows as $rowIndex => $row): ?>
           <?php
             $rowTarget = (int)$row['target'];
             $submitApproveCount = dashboard_pendataan_count($row);
             $pendataanPct = $rowTarget > 0 ? $submitApproveCount / $rowTarget * 100 : 0;
+            $draftPct = $rowTarget > 0 ? (int)$row['draft_count'] / $rowTarget * 100 : 0;
+            $submitPct = $rowTarget > 0 ? (int)$row['submitted_by_pencacah'] / $rowTarget * 100 : 0;
+            $approvePct = $rowTarget > 0 ? (int)$row['approved_by_pengawas'] / $rowTarget * 100 : 0;
             $pendataanClass = '';
             if ($samePendataanPct || ($maxPendataanPct !== null && abs($pendataanPct - $maxPendataanPct) < 0.001)) {
                 $pendataanClass = ' best-progress';
@@ -1624,17 +1685,17 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
                 $pendataanClass = ' low-progress';
             }
           ?>
-          <tr>
+          <tr data-original-index="<?= (int)$rowIndex ?>">
             <td><?= e($row['label']) ?></td>
-            <td class="text-right"><?= number_format($rowTarget, 0, ',', '.') ?></td>
-            <td class="text-right"><?= number_format((int)$row['open_count'], 0, ',', '.') ?></td>
-            <td class="text-right"><?= dashboard_table_count_pct_text((int)$row['draft_count'], $rowTarget) ?></td>
-            <td class="text-right"><?= dashboard_table_count_pct_text((int)$row['submitted_by_pencacah'], $rowTarget) ?></td>
-            <td class="text-right"><?= number_format((int)$row['rejected_by_pengawas'], 0, ',', '.') ?></td>
-            <td class="text-right"><?= number_format((int)$row['pending_count'], 0, ',', '.') ?></td>
-            <td class="text-right"><?= dashboard_table_count_pct_text((int)$row['approved_by_pengawas'], $rowTarget) ?></td>
-            <td class="text-right<?= e($pendataanClass) ?>"><?= dashboard_table_count_pct_text($submitApproveCount, $rowTarget) ?></td>
-            <td class="text-right"><?= number_format((int)$row['selesai_count'], 0, ',', '.') ?></td>
+            <td class="text-right" data-sort-value="<?= $rowTarget ?>"><?= number_format($rowTarget, 0, ',', '.') ?></td>
+            <td class="text-right" data-sort-value="<?= (int)$row['open_count'] ?>"><?= number_format((int)$row['open_count'], 0, ',', '.') ?></td>
+            <td class="text-right" data-sort-value="<?= e((string)$draftPct) ?>"><?= dashboard_table_count_pct_text((int)$row['draft_count'], $rowTarget) ?></td>
+            <td class="text-right" data-sort-value="<?= e((string)$submitPct) ?>"><?= dashboard_table_count_pct_text((int)$row['submitted_by_pencacah'], $rowTarget) ?></td>
+            <td class="text-right" data-sort-value="<?= (int)$row['rejected_by_pengawas'] ?>"><?= number_format((int)$row['rejected_by_pengawas'], 0, ',', '.') ?></td>
+            <td class="text-right" data-sort-value="<?= (int)$row['pending_count'] ?>"><?= number_format((int)$row['pending_count'], 0, ',', '.') ?></td>
+            <td class="text-right" data-sort-value="<?= e((string)$approvePct) ?>"><?= dashboard_table_count_pct_text((int)$row['approved_by_pengawas'], $rowTarget) ?></td>
+            <td class="text-right<?= e($pendataanClass) ?>" data-sort-value="<?= e((string)$pendataanPct) ?>"><?= dashboard_table_count_pct_text($submitApproveCount, $rowTarget) ?></td>
+            <td class="text-right" data-sort-value="<?= (int)$row['selesai_count'] ?>"><?= number_format((int)$row['selesai_count'], 0, ',', '.') ?></td>
           </tr>
         <?php endforeach; ?>
       </tbody>
@@ -1660,6 +1721,55 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
   </div>
   <div class="card-footer text-muted small">Progress Pendataan = submit+reject+pending+approve</div>
 </div>
+
+<script>
+document.querySelectorAll('#dashboardSummaryTable').forEach(function (table) {
+  const tbody = table.querySelector('tbody');
+  if (!tbody) return;
+  const search = table.querySelector('[data-summary-search]');
+  const sortSelects = table.querySelectorAll('[data-summary-sort-col]');
+  function rows() {
+    return Array.from(tbody.querySelectorAll('tr')).filter(function (row) {
+      return row.querySelectorAll('td').length > 1;
+    });
+  }
+  function applySearch() {
+    const term = search ? (search.value || '').trim().toLowerCase() : '';
+    rows().forEach(function (row) {
+      const label = row.children[0] ? row.children[0].textContent.toLowerCase() : '';
+      row.style.display = term === '' || label.indexOf(term) !== -1 ? '' : 'none';
+    });
+  }
+  if (search) {
+    search.addEventListener('input', applySearch);
+  }
+  sortSelects.forEach(function (select) {
+    select.addEventListener('change', function () {
+      const direction = select.value;
+      sortSelects.forEach(function (other) {
+        if (other !== select) other.value = '';
+      });
+      const tableRows = rows();
+      if (direction === '' || direction === 'clear') {
+        tableRows.sort(function (a, b) {
+          return Number(a.dataset.originalIndex || 0) - Number(b.dataset.originalIndex || 0);
+        });
+        select.value = '';
+      } else {
+        const col = Number(select.dataset.summarySortCol || 0);
+        tableRows.sort(function (a, b) {
+          const av = Number((a.children[col] && a.children[col].dataset.sortValue) || 0);
+          const bv = Number((b.children[col] && b.children[col].dataset.sortValue) || 0);
+          return direction === 'asc' ? av - bv : bv - av;
+        });
+      }
+      tableRows.forEach(function (row) { tbody.appendChild(row); });
+      applySearch();
+    });
+  });
+  applySearch();
+});
+</script>
 
 <script>
 const rows = <?= json_encode($chartRows) ?>;
@@ -1834,7 +1944,6 @@ if (pengawas) {
                   <th class="performance-compact-header">Rata-rata/<br>Hari<br>(Assignment)</th>
                   <th class="performance-compact-header">Capaian<br>Hari Ini<br>dibanding<br>Kemarin<br>(Assignment)</th>
                   <th class="performance-compact-header">Target<br>Hari Ini<br>(Assignment)</th>
-                  <th>Standar Deviasi</th>
                   <th>Konsistensi (%)</th>
                   <th>Prediksi Selesai</th>
                   <th>Status</th>
@@ -1855,7 +1964,6 @@ if (pengawas) {
                   <td class="text-right"><?= number_format((int)ceil((float)$r['average_per_day']),0,',','.') ?></td>
                   <td class="text-right"><?= number_format((int)$r['yesterday_achievement'],0,',','.') ?></td>
                   <td class="text-right"><?= $r['required_daily_target'] === null ? 'Lewat Target' : number_format((int)$r['required_daily_target'],0,',','.') ?></td>
-                  <td class="text-right"><?= number_format((float)$r['stddev'],2,',','.') ?></td>
                   <td class="text-right"><?= number_format((float)$r['consistency_score'],2,',','.') ?></td>
                   <td><?= e($r['projected_finish']) ?></td>
                   <td><span class="performance-status"><?= e($r['performance_status']) ?></span></td>
@@ -1863,7 +1971,7 @@ if (pengawas) {
                 </tr>
               <?php endforeach; ?>
               <?php if (!$topRows): ?>
-                <tr><td colspan="16" class="text-center text-muted">Belum ada data performa sementara.</td></tr>
+                <tr><td colspan="15" class="text-center text-muted">Belum ada data performa sementara.</td></tr>
               <?php endif; ?>
               </tbody>
             </table>
@@ -1890,7 +1998,6 @@ if (pengawas) {
                   <th>Tambahan Mingguan</th>
                   <th>Target Mingguan</th>
                   <th>Rata-rata/Hari</th>
-                  <th>Standar Deviasi</th>
                   <th>Konsistensi (%)</th>
                   <th>Kemampuan Mengejar (%)</th>
                   <th>Skor</th>
@@ -1909,14 +2016,13 @@ if (pengawas) {
                   <td class="text-right"><?= number_format((int)$r['weekly_count'],0,',','.') ?></td>
                   <td class="text-right"><?= number_format((float)$r['weekly_target'],2,',','.') ?></td>
                   <td class="text-right"><?= number_format((int)ceil((float)$r['average_per_day']),0,',','.') ?></td>
-                  <td class="text-right"><?= number_format((float)$r['stddev'],2,',','.') ?></td>
                   <td class="text-right"><?= number_format((float)$r['consistency_score'],2,',','.') ?></td>
                   <td class="text-right"><?= number_format((float)$r['momentum_score'],2,',','.') ?></td>
                   <td class="text-right font-weight-bold"><?= number_format((float)$r['performance_score'],2,',','.') ?></td>
                 </tr>
               <?php endforeach; ?>
               <?php if (!$weeklyRows): ?>
-                <tr><td colspan="14" class="text-center text-muted"><?= $weeklyPeriod ? 'Belum ada data petugas aktif pada periode ini.' : 'Performa mingguan akan tampil setelah minggu pertama selesai.' ?></td></tr>
+                <tr><td colspan="13" class="text-center text-muted"><?= $weeklyPeriod ? 'Belum ada data petugas aktif pada periode ini.' : 'Performa mingguan akan tampil setelah minggu pertama selesai.' ?></td></tr>
               <?php endif; ?>
               </tbody>
             </table>
@@ -1928,15 +2034,51 @@ if (pengawas) {
               <div class="text-muted small">Rule aktif: sampai <?= e(date('d/m/Y', strtotime($attentionThreshold['date']))) ?>, yang selesai SubSLS masih di bawah <?= e($attentionThreshold['pct']) ?>% masuk tabel ini.</div>
             </div>
             <div class="mt-2 mt-md-0">
-              <a class="btn btn-outline-success btn-sm mr-2" href="?action=export_attention&type=<?= e($attentionType) ?>&kab_id=<?= e($kab['value']) ?>&format=csv"><i class="fas fa-file-csv mr-1"></i>Export CSV</a>
-              <a class="btn btn-outline-success btn-sm" href="?action=export_attention&type=<?= e($attentionType) ?>&kab_id=<?= e($kab['value']) ?>&format=xlsx"><i class="fas fa-file-excel mr-1"></i>Export Excel</a>
+              <?php
+                $attentionExportQuery = [
+                    'action' => 'export_attention',
+                    'type' => $attentionType,
+                    'kab_id' => $kab['value'],
+                ];
+              ?>
+              <a class="btn btn-outline-success btn-sm mr-2" href="?<?= e(http_build_query($attentionExportQuery + ['format' => 'csv'])) ?>"><i class="fas fa-file-csv mr-1"></i>Export CSV</a>
+              <a class="btn btn-outline-success btn-sm" href="?<?= e(http_build_query($attentionExportQuery + ['format' => 'xlsx'])) ?>"><i class="fas fa-file-excel mr-1"></i>Export Excel</a>
             </div>
           </div>
           <div class="table-responsive">
             <table class="table table-sm table-bordered table-striped mb-0 attention-table" data-page-size="25">
-              <thead><tr><th>Email</th><th>Kode Kab</th><th>Kecamatan</th><th>Wilayah Kerja</th><th class="text-right">Draft<br>(Count)</th><th class="text-right">Draft<br>(%)</th><th class="text-right">Progress Pendataan<br>Count</th><th class="text-right">Progress Pendataan<br>(%)</th><th>Selesai SubSLS</th><th>Target</th><th>Total SubSLS</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>
+                    <div>Nama (email)</div>
+                  </th>
+                  <th>Kode Kab</th>
+                  <th>
+                    <div>Kecamatan</div>
+                  </th>
+                  <th>
+                    <div>Wilayah Kerja</div>
+                  </th>
+                  <?php
+                    $attentionHeaders = [
+                        ['label' => 'Draft<br>(Count)', 'class' => 'summary-head-yellow'],
+                        ['label' => 'Draft<br>(%)', 'class' => 'summary-head-yellow'],
+                        ['label' => 'Progress Pendataan<br>Count', 'class' => 'summary-head-light-green'],
+                        ['label' => 'Progress Pendataan<br>(%)', 'class' => 'summary-head-light-green'],
+                        ['label' => 'Selesai SubSLS', 'class' => 'summary-head-dark-green'],
+                        ['label' => 'Target', 'class' => 'summary-head-blue'],
+                        ['label' => 'Total SubSLS', 'class' => 'summary-head-blue'],
+                    ];
+                  ?>
+                  <?php foreach ($attentionHeaders as $hIndex => $header): ?>
+                    <th class="text-right <?= e($header['class']) ?>">
+                      <div><?= $header['label'] ?></div>
+                    </th>
+                  <?php endforeach; ?>
+                </tr>
+              </thead>
               <tbody>
-              <?php foreach ($attentionRows as $r): ?>
+              <?php foreach ($attentionRows as $attentionIndex => $r): ?>
                 <?php
                   $attentionTarget = (int)$r['target'];
                   $attentionDraft = (int)$r['draft_count'];
@@ -1944,18 +2086,18 @@ if (pengawas) {
                   $attentionDraftPct = $attentionTarget > 0 ? $attentionDraft / $attentionTarget * 100 : 0;
                   $attentionProgressPct = $attentionTarget > 0 ? $attentionProgress / $attentionTarget * 100 : 0;
                 ?>
-                <tr class="attention-row">
+                <tr class="attention-row" data-original-index="<?= (int)$attentionIndex ?>">
                   <td><?= e(petugas_label($r['email'], $r['petugas_name'] ?? '')) ?></td>
                   <td><?= e($r['kab_codes'] ?: '-') ?></td>
                   <td class="performance-work-area"><?= e($r['wilayah_kerja_kecamatan'] ?: '-') ?></td>
                   <td class="performance-work-area"><?= e($r['wilayah_kerja'] ?: '-') ?></td>
-                  <td class="text-right"><?= number_format($attentionDraft,0,',','.') ?></td>
-                  <td class="text-right"><?= number_format($attentionDraftPct,2,',','.') ?></td>
-                  <td class="text-right"><?= number_format($attentionProgress,0,',','.') ?></td>
-                  <td class="text-right"><?= number_format($attentionProgressPct,2,',','.') ?></td>
-                  <td class="text-right"><?= number_format((float)$r['selesai_pct'],2,',','.') ?>%</td>
-                  <td class="text-right"><?= number_format((int)$r['target'],0,',','.') ?></td>
-                  <td class="text-right"><?= number_format((int)$r['subsls_total'],0,',','.') ?></td>
+                  <td class="text-right" data-sort-value="<?= $attentionDraft ?>"><?= number_format($attentionDraft,0,',','.') ?></td>
+                  <td class="text-right" data-sort-value="<?= e((string)$attentionDraftPct) ?>"><?= number_format($attentionDraftPct,2,',','.') ?></td>
+                  <td class="text-right" data-sort-value="<?= $attentionProgress ?>"><?= number_format($attentionProgress,0,',','.') ?></td>
+                  <td class="text-right" data-sort-value="<?= e((string)$attentionProgressPct) ?>"><?= number_format($attentionProgressPct,2,',','.') ?></td>
+                  <td class="text-right" data-sort-value="<?= e((string)(float)$r['selesai_pct']) ?>"><?= number_format((float)$r['selesai_pct'],2,',','.') ?>%</td>
+                  <td class="text-right" data-sort-value="<?= (int)$r['target'] ?>"><?= number_format((int)$r['target'],0,',','.') ?></td>
+                  <td class="text-right" data-sort-value="<?= (int)$r['subsls_total'] ?>"><?= number_format((int)$r['subsls_total'],0,',','.') ?></td>
                 </tr>
               <?php endforeach; ?>
               <?php if (!$attentionRows): ?>
@@ -1982,9 +2124,9 @@ if (pengawas) {
 
 <script>
 document.querySelectorAll('.attention-table').forEach(function (table) {
+  const tbody = table.querySelector('tbody');
   const rows = Array.from(table.querySelectorAll('tbody tr.attention-row'));
   const pageSize = Number(table.getAttribute('data-page-size') || 25);
-  if (rows.length <= pageSize) return;
 
   let page = 1;
   const pane = table.closest('.tab-pane');
@@ -1992,19 +2134,28 @@ document.querySelectorAll('.attention-table').forEach(function (table) {
   const prev = pager ? pager.querySelector('.attention-prev') : null;
   const next = pager ? pager.querySelector('.attention-next') : null;
   const info = pager ? pager.querySelector('.attention-info') : null;
-  const totalPages = Math.ceil(rows.length / pageSize);
+
+  function filteredRows() {
+    return rows;
+  }
 
   function render() {
-    rows.forEach(function (row, index) {
+    const visibleRows = filteredRows();
+    const totalPages = Math.max(1, Math.ceil(visibleRows.length / pageSize));
+    page = Math.min(Math.max(1, page), totalPages);
+    rows.forEach(function (row) {
+      row.style.display = 'none';
+    });
+    visibleRows.forEach(function (row, index) {
       row.style.display = index >= (page - 1) * pageSize && index < page * pageSize ? '' : 'none';
     });
-    if (info) info.textContent = 'Halaman ' + page + ' dari ' + totalPages + ' (' + rows.length + ' row)';
+    if (info) info.textContent = visibleRows.length ? 'Halaman ' + page + ' dari ' + totalPages + ' (' + visibleRows.length + ' row)' : 'Tidak ada data';
     if (prev) prev.disabled = page <= 1;
     if (next) next.disabled = page >= totalPages;
   }
 
   if (prev) prev.addEventListener('click', function () { if (page > 1) { page--; render(); } });
-  if (next) next.addEventListener('click', function () { if (page < totalPages) { page++; render(); } });
+  if (next) next.addEventListener('click', function () { page++; render(); });
   render();
 });
 </script>

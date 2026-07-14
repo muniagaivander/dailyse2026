@@ -7,7 +7,7 @@ if (in_array($user['role'], ['pengawas', 'pencacah'], true)) {
     $type = 'pencacah';
 }
 $filters = [
-    'date_start' => $_GET['date_start'] ?? '2026-06-15',
+    'date_start' => $_GET['date_start'] ?? date('Y-m-d', strtotime('-7 days')),
     'date_end' => $_GET['date_end'] ?? date('Y-m-d'),
     'kab_id' => $_GET['kab_id'] ?? '',
     'email' => normalize_email($_GET['email'] ?? ''),
@@ -16,7 +16,7 @@ $filters = [
     'subsls_id' => $_GET['subsls_id'] ?? '',
 ];
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_start'])) {
-    $filters['date_start'] = '2026-06-15';
+    $filters['date_start'] = date('Y-m-d', strtotime('-7 days'));
 }
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_end'])) {
     $filters['date_end'] = date('Y-m-d');
@@ -417,21 +417,29 @@ function chartYMax(value) {
   if (value <= 0) return 10;
   return Math.min(100, (Math.floor(value / 5) + 1) * 5);
 }
+function chartYMin(value) {
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return Math.max(0, Math.floor(value / 5) * 5);
+}
 const pendataanValues = rows.map(r => {
   const target = Number(r.target || 0);
   const count = Number(r.submitted_by_pencacah || 0) + Number(r.rejected_by_pengawas || 0) + Number(r.pending_count || 0) + Number(r.approved_by_pengawas || 0);
   return target ? Math.round(count / target * 10000) / 100 : 0;
 });
 const maxPendataan = Math.max(0, ...pendataanValues);
+const minPendataan = pendataanValues.length ? Math.min(...pendataanValues) : 0;
+const statusValues = rows.flatMap(r => fields.map(f => Number(r.target) ? Math.round(Number(r[f]) / Number(r.target) * 10000) / 100 : 0));
+const maxStatus = statusValues.length ? Math.max(...statusValues) : 0;
+const minStatus = statusValues.length ? Math.min(...statusValues) : 0;
 new Chart(document.getElementById('pendataanChart'), {
   type:'line',
   data:{ labels: rows.map(r=>r.tanggal), datasets:[{ label:'Progress Pendataan', data:pendataanValues, borderColor:'#2563eb', backgroundColor:'#2563eb', tension:.2 }] },
-  options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{min:0,max:chartYMax(maxPendataan),ticks:{callback:v=>v+'%'}} } }
+  options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{min:chartYMin(minPendataan),max:chartYMax(maxPendataan),ticks:{callback:v=>v+'%'}} } }
 });
 new Chart(document.getElementById('statusChart'), {
   type:'line',
   data:{ labels: rows.map(r=>r.tanggal), datasets: fields.map((f,i)=>({ label:labels[i], data:rows.map(r=>Number(r.target)?Math.round(Number(r[f])/Number(r.target)*10000)/100:0), borderColor:colors[i], backgroundColor:colors[i], tension:.2 })) },
-  options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{min:0,max:100,ticks:{callback:v=>v+'%'}} } }
+  options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{min:chartYMin(minStatus),max:chartYMax(maxStatus),ticks:{callback:v=>v+'%'}} } }
 });
 </script>
 <?php endif; ?>

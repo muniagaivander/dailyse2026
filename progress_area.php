@@ -3,14 +3,14 @@ require __DIR__ . '/layout.php';
 
 $user = require_role(['admin_kab','superadmin','viewer_prov','viewer_kab']);
 $filters = [
-    'date_start' => $_GET['date_start'] ?? '2026-06-15',
+    'date_start' => $_GET['date_start'] ?? date('Y-m-d', strtotime('-7 days')),
     'date_end' => $_GET['date_end'] ?? date('Y-m-d'),
     'kab_id' => $_GET['kab_id'] ?? '',
     'kec_id' => $_GET['kec_id'] ?? '',
     'desa_id' => $_GET['desa_id'] ?? '',
 ];
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_start'])) {
-    $filters['date_start'] = '2026-06-15';
+    $filters['date_start'] = date('Y-m-d', strtotime('-7 days'));
 }
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['date_end'])) {
     $filters['date_end'] = date('Y-m-d');
@@ -279,13 +279,19 @@ render_header('Progress By Daerah');
   const seriesLabels = [...new Set(rows.map(r => r.label || '-'))];
   const valueMap = {};
   let maxPct = 0;
+  let minPct = null;
   rows.forEach(row => {
     const target = Number(row.target || 0);
     const pendataan = Number(row.submitted_by_pencacah || 0) + Number(row.rejected_by_pengawas || 0) + Number(row.pending_count || 0) + Number(row.approved_by_pengawas || 0);
     const pct = target ? Math.round(pendataan / target * 10000) / 100 : 0;
     maxPct = Math.max(maxPct, pct);
+    minPct = minPct === null ? pct : Math.min(minPct, pct);
     valueMap[(row.label || '-') + '|' + row.tanggal] = pct;
   });
+  function chartYMin(value) {
+    if (value === null || value <= 0) return 0;
+    return Math.max(0, Math.floor(value / 5) * 5);
+  }
   function chartYMax(value) {
     if (value <= 0) return 10;
     return Math.min(100, (Math.floor(value / 5) + 1) * 5);
@@ -307,7 +313,7 @@ render_header('Progress By Daerah');
       responsive:true,
       maintainAspectRatio:false,
       plugins:{legend:{position:'bottom'}},
-      scales:{ y:{min:0,max:chartYMax(maxPct),ticks:{callback:v=>v+'%'}} }
+      scales:{ y:{min:chartYMin(minPct),max:chartYMax(maxPct),ticks:{callback:v=>v+'%'}} }
     }
   });
   </script>

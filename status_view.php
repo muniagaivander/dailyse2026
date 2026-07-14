@@ -7,7 +7,13 @@ $filters = [
     'desa_id' => $_GET['desa_id'] ?? '',
     'view_mode' => ($_GET['view_mode'] ?? 'card') === 'table' ? 'table' : 'card',
     'card_sort' => ($_GET['card_sort'] ?? 'desc') === 'asc' ? 'asc' : 'desc',
+    'sort_key' => trim((string)($_GET['sort_key'] ?? '')),
+    'sort_dir' => ($_GET['sort_dir'] ?? '') === 'desc' ? 'desc' : (($_GET['sort_dir'] ?? '') === 'asc' ? 'asc' : ''),
 ];
+$statusSearchKeys = ['search_kode', 'search_desa', 'search_pengawas', 'search_pencacah'];
+foreach ($statusSearchKeys as $key) {
+    $filters[$key] = trim((string)($_GET[$key] ?? ''));
+}
 if (in_array($user['role'], ['admin_kab', 'viewer_kab'], true)) {
     $filters['kab_id'] = $user['kab_id'];
 }
@@ -78,15 +84,50 @@ function status_view_build_filter(array $user, array $filters): array
         $where[] = 'd.id=?';
         $params[] = $filters['desa_id'];
     }
+    $searchExpressions = [
+        'search_kode' => "CONCAT(k.id, kc.kdkec, d.kddesa, sl.kdsls, ms.kdsubsls)",
+        'search_desa' => "d.nmdesa",
+        'search_pengawas' => "CONCAT(COALESCE(up.name, ''), ' ', COALESCE(ms.pengawas_email, ''))",
+        'search_pencacah' => "CONCAT(COALESCE(uc.name, ''), ' ', COALESCE(ms.pencacah_email, ''))",
+    ];
+    foreach ($searchExpressions as $key => $expr) {
+        if (($filters[$key] ?? '') !== '') {
+            $where[] = $expr . ' LIKE ?';
+            $params[] = '%' . $filters[$key] . '%';
+        }
+    }
     return [$where ? 'WHERE ' . implode(' AND ', $where) : '', $params];
 }
 
-function status_view_select_sql(string $sqlWhere, ?int $limitRows = null, ?int $offsetRows = null): string
+function status_view_order_clause(array $filters): string
+{
+    $sortMap = [
+        'target' => 'COALESCE(ss.target,0)',
+        'draft_count' => 'COALESCE(ss.draft_count,0)',
+        'draft_pct' => 'CASE WHEN COALESCE(ss.target,0)>0 THEN COALESCE(ss.draft_count,0)/COALESCE(ss.target,0) ELSE 0 END',
+        'open_count' => 'COALESCE(ss.open_count,0)',
+        'submitted_by_pencacah' => 'COALESCE(ss.submitted_by_pencacah,0)',
+        'rejected_by_pengawas' => 'COALESCE(ss.rejected_by_pengawas,0)',
+        'pending_count' => 'COALESCE(ss.pending_count,0)',
+        'approved_by_pengawas' => 'COALESCE(ss.approved_by_pengawas,0)',
+        'progress_count' => '(COALESCE(ss.submitted_by_pencacah,0)+COALESCE(ss.rejected_by_pengawas,0)+COALESCE(ss.pending_count,0)+COALESCE(ss.approved_by_pengawas,0))',
+        'progress_pct' => 'CASE WHEN COALESCE(ss.target,0)>0 THEN (COALESCE(ss.submitted_by_pencacah,0)+COALESCE(ss.rejected_by_pengawas,0)+COALESCE(ss.pending_count,0)+COALESCE(ss.approved_by_pengawas,0))/COALESCE(ss.target,0) ELSE 0 END',
+    ];
+    $key = (string)($filters['sort_key'] ?? '');
+    $dir = (string)($filters['sort_dir'] ?? '');
+    if (!isset($sortMap[$key]) || !in_array($dir, ['asc', 'desc'], true)) {
+        return 'ORDER BY k.id, kc.kdkec, d.kddesa, sl.kdsls, ms.kdsubsls';
+    }
+    return 'ORDER BY ' . $sortMap[$key] . ' ' . strtoupper($dir) . ', k.id, kc.kdkec, d.kddesa, sl.kdsls, ms.kdsubsls';
+}
+
+function status_view_select_sql(string $sqlWhere, ?int $limitRows = null, ?int $offsetRows = null, ?array $filters = null): string
 {
     $limit = '';
     if ($limitRows !== null && $offsetRows !== null) {
         $limit = 'LIMIT ' . max(1, $limitRows) . ' OFFSET ' . max(0, $offsetRows);
     }
+    $orderClause = status_view_order_clause($filters ?? []);
     return "SELECT k.id kab_id, k.nmkab, kc.kdkec, kc.nmkec, d.kddesa, d.nmdesa,
                 sl.kdsls, sl.nmsls, ms.kdsubsls, ms.nmsubsls,
                 ms.pengawas_email, ms.pencacah_email,
@@ -110,7 +151,7 @@ function status_view_select_sql(string $sqlWhere, ?int $limitRows = null, ?int $
             LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
             LEFT JOIN subsls_completion_status cs ON cs.subsls_id=ms.id
             $sqlWhere
-            ORDER BY k.id, kc.kdkec, d.kddesa, sl.kdsls, ms.kdsubsls
+            $orderClause
             $limit";
 }
 
@@ -357,7 +398,7 @@ if (($_GET['action'] ?? '') === 'export' && isset($_GET['filter'])) {
     }
     $format = ($_GET['format'] ?? 'csv') === 'xlsx' ? 'xlsx' : 'csv';
     [$sqlWhere, $params] = status_view_build_filter($user, $filters);
-    $stmt = db()->prepare(status_view_select_sql($sqlWhere));
+    $stmt = db()->prepare(status_view_select_sql($sqlWhere, null, null, $filters));
     $stmt->execute($params);
     $exportSource = $stmt->fetchAll();
     $headers = ['Kabupaten', 'Kecamatan', 'Desa', 'Kode SubSLS', 'SLS', 'SubSLS', 'Pengawas', 'Pencacah', 'Target'];
@@ -412,6 +453,8 @@ if ($canShowStatus && $filters['view_mode'] === 'table') {
         JOIN master_desa d ON d.id=sl.desa_id
         JOIN master_kec kc ON kc.id=d.kec_id
         JOIN master_kab k ON k.id=kc.kab_id
+        LEFT JOIN users up ON up.email=ms.pengawas_email
+        LEFT JOIN users uc ON uc.email=ms.pencacah_email
         $sqlWhere");
     $countStmt->execute($params);
     $totalRows = (int)$countStmt->fetchColumn();
@@ -419,7 +462,7 @@ if ($canShowStatus && $filters['view_mode'] === 'table') {
     $page = min($page, $totalPages);
     $offset = ($page - 1) * $perPage;
 
-    $stmt = db()->prepare(status_view_select_sql($sqlWhere, $perPage, $offset));
+    $stmt = db()->prepare(status_view_select_sql($sqlWhere, $perPage, $offset, $filters));
     $stmt->execute($params);
     $rows = $stmt->fetchAll();
 }
@@ -530,6 +573,51 @@ render_header('Status Terupdate');
   color: #2563eb;
   font-weight: 700;
 }
+.status-table-view th {
+  height: 92px;
+  text-align: center;
+  vertical-align: bottom !important;
+  white-space: nowrap;
+}
+.status-table-view th > div:first-child {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  line-height: 1.12;
+  min-height: 44px;
+}
+.status-table-view .status-head-blue {
+  background: #dbeafe !important;
+  color: #1e3a8a;
+}
+.status-table-view .status-head-yellow {
+  background: #fef3c7 !important;
+  color: #78350f;
+}
+.status-table-view .status-head-light-green {
+  background: #dcfce7 !important;
+  color: #14532d;
+}
+.status-table-view .status-head-red {
+  background: #fee2e2 !important;
+  color: #7f1d1d;
+}
+.status-table-view .status-head-dark-green {
+  background: #bbf7d0 !important;
+  color: #064e3b;
+}
+.status-table-search,
+.status-table-sort {
+  border-radius: 4px;
+  font-size: .72rem;
+  height: 24px;
+  margin-top: 5px;
+  min-width: 90px;
+  padding: 1px 5px;
+}
+.status-table-search {
+  min-width: 145px;
+}
 @media (max-width: 575.98px) {
   .status-card-section {
     align-items: flex-start;
@@ -546,6 +634,9 @@ render_header('Status Terupdate');
 <?php if ($error): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
 <form class="card card-body mb-3" method="get">
   <input type="hidden" name="card_sort" value="<?= e($filters['card_sort']) ?>">
+  <?php foreach ($statusSearchKeys as $key): ?>
+    <input type="hidden" name="<?= e($key) ?>" value="<?= e($filters[$key]) ?>">
+  <?php endforeach; ?>
   <div class="form-row align-items-end">
     <?php if (in_array($user['role'], ['superadmin', 'viewer_prov'], true)): ?>
       <div class="form-group col-12 col-md-3">
@@ -674,39 +765,83 @@ render_header('Status Terupdate');
     <div>
       <?php
         $exportQuery = ['filter' => 1, 'kab_id' => $filters['kab_id'], 'kec_id' => $filters['kec_id'], 'desa_id' => $filters['desa_id'], 'view_mode' => $filters['view_mode'], 'action' => 'export'];
+        foreach ($statusSearchKeys as $key) {
+            if ($filters[$key] !== '') {
+                $exportQuery[$key] = $filters[$key];
+            }
+        }
+        if ($filters['sort_key'] !== '' && $filters['sort_dir'] !== '') {
+            $exportQuery['sort_key'] = $filters['sort_key'];
+            $exportQuery['sort_dir'] = $filters['sort_dir'];
+        }
       ?>
       <a class="btn btn-outline-success btn-sm mr-2" href="?<?= e(http_build_query($exportQuery + ['format' => 'csv'])) ?>"><i class="fas fa-file-csv mr-1"></i>Download CSV</a>
       <a class="btn btn-outline-success btn-sm" href="?<?= e(http_build_query($exportQuery + ['format' => 'xlsx'])) ?>"><i class="fas fa-file-excel mr-1"></i>Download Excel</a>
     </div>
   </div>
   <div class="card-body table-responsive p-0">
-    <table class="table table-sm table-bordered table-striped mb-0">
+    <table class="table table-sm table-bordered table-striped mb-0 status-table-view" id="statusTableView">
       <thead>
         <tr>
-          <th>Kode SubSLS</th><th>Desa</th><th>SLS</th><th>SubSLS</th><th>Pengawas</th><th>Pencacah</th><th>Target</th>
-          <th>Draft<br><span class="status-header-sub">(Count)</span></th>
-          <th>Draft<br><span class="status-header-sub">(Persen %)</span></th>
-          <?php foreach ($fields as $label): ?><th><?= e($label) ?></th><?php endforeach; ?>
-          <th>Progress<br><span class="status-header-sub">(Count)</span></th>
-          <th>Progress<br><span class="status-header-sub">(Persen %)</span></th>
+          <th><div>Kode SubSLS</div><input class="form-control form-control-sm status-table-search" type="search" placeholder="Cari kode" value="<?= e($filters['search_kode']) ?>" data-status-server-search="search_kode"></th>
+          <th><div>Desa</div><input class="form-control form-control-sm status-table-search" type="search" placeholder="Cari desa" value="<?= e($filters['search_desa']) ?>" data-status-server-search="search_desa"></th>
+          <th>SLS</th>
+          <th>SubSLS</th>
+          <th><div>Pengawas</div><input class="form-control form-control-sm status-table-search" type="search" placeholder="Cari pengawas" value="<?= e($filters['search_pengawas']) ?>" data-status-server-search="search_pengawas"></th>
+          <th><div>Pencacah</div><input class="form-control form-control-sm status-table-search" type="search" placeholder="Cari pencacah" value="<?= e($filters['search_pencacah']) ?>" data-status-server-search="search_pencacah"></th>
+          <?php
+            $statusSortHeaders = [
+                ['label' => 'Target', 'class' => 'status-head-blue', 'key' => 'target'],
+                ['label' => 'Draft<br><span class="status-header-sub">(Count)</span>', 'class' => 'status-head-yellow', 'key' => 'draft_count'],
+                ['label' => 'Draft<br><span class="status-header-sub">(Persen %)</span>', 'class' => 'status-head-yellow', 'key' => 'draft_pct'],
+            ];
+            foreach ($fields as $fieldKey => $label) {
+                $class = match ($fieldKey) {
+                    'open_count' => 'status-head-blue',
+                    'submitted_by_pencacah' => 'status-head-light-green',
+                    'approved_by_pengawas' => 'status-head-dark-green',
+                    'rejected_by_pengawas', 'pending_count' => 'status-head-red',
+                    default => 'status-head-blue',
+                };
+                $statusSortHeaders[] = ['label' => e($label), 'class' => $class, 'key' => $fieldKey];
+            }
+            $statusSortHeaders[] = ['label' => 'Progress<br><span class="status-header-sub">(Count)</span>', 'class' => 'status-head-light-green', 'key' => 'progress_count'];
+            $statusSortHeaders[] = ['label' => 'Progress<br><span class="status-header-sub">(Persen %)</span>', 'class' => 'status-head-light-green', 'key' => 'progress_pct'];
+          ?>
+          <?php foreach ($statusSortHeaders as $i => $header): ?>
+            <th class="<?= e($header['class']) ?>">
+              <div><?= $header['label'] ?></div>
+              <select class="form-control form-control-sm status-table-sort" data-status-sort-key="<?= e($header['key']) ?>">
+                <option value="">Sort</option>
+                <option value="asc" <?= $filters['sort_key']===$header['key'] && $filters['sort_dir']==='asc' ? 'selected' : '' ?>>Ascending</option>
+                <option value="desc" <?= $filters['sort_key']===$header['key'] && $filters['sort_dir']==='desc' ? 'selected' : '' ?>>Descending</option>
+                <option value="clear">Clear</option>
+              </select>
+            </th>
+          <?php endforeach; ?>
           <th>Last Update</th><th>Updated By</th><th>Status Selesai</th>
         </tr>
       </thead>
       <tbody>
-      <?php foreach ($rows as $r): ?>
-        <tr>
+      <?php foreach ($rows as $rowIndex => $r): ?>
+        <?php
+          $statusProgressCount = status_view_progress_count($r);
+          $statusProgressPct = status_view_progress_pct($r);
+          $draftPct = status_view_field_pct($r, 'draft_count');
+        ?>
+        <tr data-original-index="<?= (int)$rowIndex ?>">
           <td><?= e($r['kab_id'] . $r['kdkec'] . $r['kddesa'] . $r['kdsls'] . $r['kdsubsls']) ?></td>
           <td><?= e($r['nmdesa']) ?></td>
           <td><?= e($r['nmsls']) ?></td>
           <td><?= e($r['kdsubsls']) ?></td>
           <td><?= e(petugas_label($r['pengawas_email'], $r['pengawas_name'] ?? '')) ?></td>
           <td><?= e(petugas_label($r['pencacah_email'], $r['pencacah_name'] ?? '')) ?></td>
-          <td><?= number_format((int)$r['target'], 0, ',', '.') ?></td>
-          <td><?= number_format((int)$r['draft_count'], 0, ',', '.') ?></td>
-          <td class="status-pct-cell"><?= number_format(status_view_field_pct($r, 'draft_count'), 2, ',', '.') ?>%</td>
-          <?php foreach (array_keys($fields) as $field): ?><td><?= number_format((int)$r[$field], 0, ',', '.') ?></td><?php endforeach; ?>
-          <td><?= number_format(status_view_progress_count($r), 0, ',', '.') ?></td>
-          <td class="status-pct-cell"><?= number_format(status_view_progress_pct($r), 2, ',', '.') ?>%</td>
+          <td data-sort-value="<?= (int)$r['target'] ?>"><?= number_format((int)$r['target'], 0, ',', '.') ?></td>
+          <td data-sort-value="<?= (int)$r['draft_count'] ?>"><?= number_format((int)$r['draft_count'], 0, ',', '.') ?></td>
+          <td class="status-pct-cell" data-sort-value="<?= e((string)$draftPct) ?>"><?= number_format($draftPct, 2, ',', '.') ?>%</td>
+          <?php foreach (array_keys($fields) as $field): ?><td data-sort-value="<?= (int)$r[$field] ?>"><?= number_format((int)$r[$field], 0, ',', '.') ?></td><?php endforeach; ?>
+          <td data-sort-value="<?= $statusProgressCount ?>"><?= number_format($statusProgressCount, 0, ',', '.') ?></td>
+          <td class="status-pct-cell" data-sort-value="<?= e((string)$statusProgressPct) ?>"><?= number_format($statusProgressPct, 2, ',', '.') ?>%</td>
           <td><?= e($r['last_update'] ?: '-') ?></td>
           <td><?= e($r['updated_by'] ?: '-') ?></td>
           <td><?= e($r['status_selesai']) ?></td>
@@ -723,6 +858,15 @@ render_header('Status Terupdate');
         $start = max(1, $page - 2);
         $end = min($totalPages, $page + 2);
         $baseQuery = ['filter' => 1, 'kab_id' => $filters['kab_id'], 'kec_id' => $filters['kec_id'], 'desa_id' => $filters['desa_id'], 'view_mode' => $filters['view_mode']];
+        foreach ($statusSearchKeys as $key) {
+            if ($filters[$key] !== '') {
+                $baseQuery[$key] = $filters[$key];
+            }
+        }
+        if ($filters['sort_key'] !== '' && $filters['sort_dir'] !== '') {
+            $baseQuery['sort_key'] = $filters['sort_key'];
+            $baseQuery['sort_dir'] = $filters['sort_dir'];
+        }
       ?>
       <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>"><a class="page-link" href="?<?= e(http_build_query($baseQuery + ['page' => max(1, $page - 1)])) ?>">Prev</a></li>
       <?php for ($p = $start; $p <= $end; $p++): ?>
@@ -780,6 +924,51 @@ function applyLinkedCardSearch() {
 ['pmlSearch', 'pclSearch'].forEach(function (inputId) {
   const input = document.getElementById(inputId);
   if (input) input.addEventListener('input', applyLinkedCardSearch);
+});
+
+document.querySelectorAll('#statusTableView').forEach(function (table) {
+  const sortSelects = Array.from(table.querySelectorAll('[data-status-sort-key]'));
+
+  sortSelects.forEach(function (select) {
+    select.addEventListener('change', function () {
+      const direction = select.value;
+      const params = new URLSearchParams(window.location.search);
+      params.set('filter', '1');
+      params.set('view_mode', 'table');
+      params.delete('page');
+      if (direction === 'asc' || direction === 'desc') {
+        params.set('sort_key', select.dataset.statusSortKey || '');
+        params.set('sort_dir', direction);
+      } else {
+        params.delete('sort_key');
+        params.delete('sort_dir');
+      }
+      window.location.search = params.toString();
+    });
+  });
+});
+
+document.querySelectorAll('[data-status-server-search]').forEach(function (input) {
+  let timer = null;
+  input.addEventListener('input', function () {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(function () {
+      const params = new URLSearchParams(window.location.search);
+      params.set('filter', '1');
+      params.set('view_mode', 'table');
+      params.delete('page');
+      document.querySelectorAll('[data-status-server-search]').forEach(function (field) {
+        const key = field.dataset.statusServerSearch;
+        const value = (field.value || '').trim();
+        if (value) {
+          params.set(key, value);
+        } else {
+          params.delete(key);
+        }
+      });
+      window.location.search = params.toString();
+    }, 600);
+  });
 });
 </script>
 <?php render_footer(); ?>

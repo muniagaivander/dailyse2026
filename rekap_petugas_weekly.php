@@ -8,6 +8,10 @@ $filters = [
     'kab_id' => (string)($_GET['kab_id'] ?? ''),
     'kec_id' => (string)($_GET['kec_id'] ?? ''),
     'desa_id' => (string)($_GET['desa_id'] ?? ''),
+    'search_nama' => trim((string)($_GET['search_nama'] ?? '')),
+    'search_pml' => trim((string)($_GET['search_pml'] ?? '')),
+    'sort_col' => preg_match('/^\d+$/', (string)($_GET['sort_col'] ?? '')) ? (string)$_GET['sort_col'] : '',
+    'sort_dir' => ($_GET['sort_dir'] ?? '') === 'desc' ? 'desc' : (($_GET['sort_dir'] ?? '') === 'asc' ? 'asc' : ''),
 ];
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['tanggal'])) {
     $filters['tanggal'] = date('Y-m-d');
@@ -161,6 +165,30 @@ function rekap_weekly_pct(int $count, int $target): float
     return $target > 0 ? $count / $target * 100 : 0;
 }
 
+function rekap_weekly_apply_search(array $rows, array $filters): array
+{
+    $nameTerm = strtolower(trim((string)($filters['search_nama'] ?? '')));
+    $pmlTerm = strtolower(trim((string)($filters['search_pml'] ?? '')));
+    if ($nameTerm === '' && $pmlTerm === '') {
+        return $rows;
+    }
+    return array_values(array_filter($rows, function (array $row) use ($nameTerm, $pmlTerm): bool {
+        if ($nameTerm !== '') {
+            $nameHaystack = strtolower(trim((string)($row['petugas_name'] ?? '')) . ' ' . (string)($row['email'] ?? ''));
+            if (!str_contains($nameHaystack, $nameTerm)) {
+                return false;
+            }
+        }
+        if ($pmlTerm !== '') {
+            $pmlHaystack = strtolower((string)($row['pml_names'] ?? ''));
+            if (!str_contains($pmlHaystack, $pmlTerm)) {
+                return false;
+            }
+        }
+        return true;
+    }));
+}
+
 function rekap_weekly_latest_daily(array $dailyRows, string $dateEnd): ?array
 {
     $latestDate = null;
@@ -261,6 +289,31 @@ function rekap_weekly_header_html(string $header): string
         return 'Submit<br>Tanggal<br>' . e($m[1]);
     }
     return e($header);
+}
+
+function rekap_weekly_sort_table_rows(array $headers, array $rows, array $filters): array
+{
+    $colText = (string)($filters['sort_col'] ?? '');
+    $dir = (string)($filters['sort_dir'] ?? '');
+    if ($colText === '' || !in_array($dir, ['asc', 'desc'], true)) {
+        return $rows;
+    }
+    $col = (int)$colText;
+    if (!array_key_exists($col, $headers)) {
+        return $rows;
+    }
+    $numeric = rekap_weekly_xlsx_header_is_numeric((string)$headers[$col]);
+    usort($rows, function (array $a, array $b) use ($col, $dir, $numeric): int {
+        $av = $a[$col] ?? '';
+        $bv = $b[$col] ?? '';
+        if ($numeric) {
+            $cmp = ((float)$av) <=> ((float)$bv);
+        } else {
+            $cmp = strnatcasecmp((string)$av, (string)$bv);
+        }
+        return $dir === 'asc' ? $cmp : -$cmp;
+    });
+    return $rows;
 }
 
 function rekap_weekly_xlsx_col(int $index): string
@@ -423,9 +476,10 @@ $rows = [];
 $headers = [];
 $tableRows = [];
 if ($hasFiltered) {
-    $rows = rekap_weekly_petugas_rows($user, $filters);
+    $rows = rekap_weekly_apply_search(rekap_weekly_petugas_rows($user, $filters), $filters);
     $matrix = rekap_weekly_values($user, $filters, $dateStart, $dateEnd);
     [$headers, $tableRows] = rekap_weekly_export_payload($rows, $dates, $matrix, $filters);
+    $tableRows = rekap_weekly_sort_table_rows($headers, $tableRows, $filters);
     if (($_GET['action'] ?? '') === 'export') {
         $format = ($_GET['format'] ?? 'csv') === 'xlsx' ? 'xlsx' : 'csv';
         rekap_weekly_export($headers, $tableRows, $filters, $format);
@@ -539,6 +593,8 @@ render_header('Rekap Petugas Weekly');
 
 <form class="card card-body mb-3" method="get">
   <div class="form-row align-items-end">
+    <input type="hidden" name="search_nama" value="<?= e($filters['search_nama']) ?>">
+    <input type="hidden" name="search_pml" value="<?= e($filters['search_pml']) ?>">
     <div class="form-group col-12 col-md-2">
       <label>Tanggal</label>
       <input type="date" class="form-control" name="tanggal" value="<?= e($filters['tanggal']) ?>">
@@ -649,12 +705,13 @@ render_header('Rekap Petugas Weekly');
                   <?php if ($isSortableHeader): ?>
                     <select class="form-control form-control-sm weekly-sort-select" data-sort-col="<?= (int)$i ?>" data-sort-type="<?= $isNumericHeader ? 'number' : 'text' ?>" aria-label="Sort <?= e((string)$header) ?>">
                       <option value="">Sort</option>
-                      <option value="asc">Ascending</option>
-                      <option value="desc">Descending</option>
+                      <option value="asc" <?= $filters['sort_col']===(string)$i && $filters['sort_dir']==='asc' ? 'selected' : '' ?>>Ascending</option>
+                      <option value="desc" <?= $filters['sort_col']===(string)$i && $filters['sort_dir']==='desc' ? 'selected' : '' ?>>Descending</option>
                       <option value="clear">Clear</option>
                     </select>
                   <?php elseif ($isSearchHeader): ?>
-                    <input class="form-control form-control-sm weekly-search-input" type="search" data-search-col="<?= (int)$i ?>" placeholder="Cari nama">
+                    <?php $searchKey = (string)$header === 'Nama PML' ? 'search_pml' : 'search_nama'; ?>
+                    <input class="form-control form-control-sm weekly-search-input" type="search" value="<?= e($filters[$searchKey]) ?>" data-weekly-server-search="<?= e($searchKey) ?>" placeholder="Cari nama">
                   <?php else: ?>
                     <span class="weekly-sort-spacer"></span>
                   <?php endif; ?>
@@ -708,18 +765,7 @@ document.querySelectorAll('.weekly-table').forEach(function (table) {
     });
   }
   function filteredRows() {
-    const terms = Array.from(table.querySelectorAll('.weekly-search-input')).map(function (input) {
-      return {
-        col: Number(input.dataset.searchCol || 0),
-        term: (input.value || '').trim().toLowerCase()
-      };
-    }).filter(function (item) { return item.term !== ''; });
-    return dataRows().filter(function (row) {
-      return terms.every(function (item) {
-        const text = row.children[item.col] ? row.children[item.col].textContent.toLowerCase() : '';
-        return text.indexOf(item.term) !== -1;
-      });
-    });
+    return dataRows();
   }
   function pageSize() {
     return Number((pageSizeSelect && pageSizeSelect.value) || 20);
@@ -758,47 +804,43 @@ document.querySelectorAll('.weekly-table').forEach(function (table) {
       renderPage();
     });
   }
-  table.querySelectorAll('.weekly-search-input').forEach(function (input) {
-    input.addEventListener('input', function () {
-      currentPage = 1;
-      renderPage();
-    });
-  });
   table.querySelectorAll('.weekly-sort-select').forEach(function (select) {
     select.addEventListener('change', function () {
-      const col = Number(select.dataset.sortCol || 0);
       const direction = select.value;
-      table.querySelectorAll('.weekly-sort-select').forEach(function (other) {
-        if (other !== select) other.value = '';
-      });
-      const rows = dataRows();
-      if (direction === 'clear' || direction === '') {
-        rows.sort(function (a, b) {
-          return Number(a.dataset.originalIndex || 0) - Number(b.dataset.originalIndex || 0);
-        });
-        select.value = '';
-        rows.forEach(function (row) { tbody.appendChild(row); });
-        currentPage = 1;
-        renderPage();
-        return;
+      const params = new URLSearchParams(window.location.search);
+      params.set('filter', '1');
+      if (direction === 'asc' || direction === 'desc') {
+        params.set('sort_col', select.dataset.sortCol || '0');
+        params.set('sort_dir', direction);
+      } else {
+        params.delete('sort_col');
+        params.delete('sort_dir');
       }
-      rows.sort(function (a, b) {
-        const sortType = select.dataset.sortType || 'number';
-        if (sortType === 'text') {
-          const at = (a.children[col] ? a.children[col].textContent : '').trim();
-          const bt = (b.children[col] ? b.children[col].textContent : '').trim();
-          return direction === 'asc' ? at.localeCompare(bt) : bt.localeCompare(at);
-        }
-        const av = Number((a.children[col] && a.children[col].dataset.sortValue) || 0);
-        const bv = Number((b.children[col] && b.children[col].dataset.sortValue) || 0);
-        return direction === 'asc' ? av - bv : bv - av;
-      });
-      rows.forEach(function (row) { tbody.appendChild(row); });
-      currentPage = 1;
-      renderPage();
+      window.location.search = params.toString();
     });
   });
   renderPage();
+});
+
+document.querySelectorAll('[data-weekly-server-search]').forEach(function (input) {
+  let timer = null;
+  input.addEventListener('input', function () {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(function () {
+      const params = new URLSearchParams(window.location.search);
+      params.set('filter', '1');
+      document.querySelectorAll('[data-weekly-server-search]').forEach(function (field) {
+        const key = field.dataset.weeklyServerSearch;
+        const value = (field.value || '').trim();
+        if (value) {
+          params.set(key, value);
+        } else {
+          params.delete(key);
+        }
+      });
+      window.location.search = params.toString();
+    }, 600);
+  });
 });
 </script>
 
