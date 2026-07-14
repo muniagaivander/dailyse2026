@@ -111,6 +111,7 @@ function rekap_weekly_values(array $user, array $filters, string $dateStart, str
             ds.$emailField email,
             ds.tanggal,
             SUM(ds.target) target,
+            SUM(ds.draft_count) draft_count,
             SUM(ds.submitted_by_pencacah + ds.rejected_by_pengawas + ds.pending_count + ds.approved_by_pengawas) progress_count
         FROM daily_status ds
         JOIN master_subsls ms ON ms.id=ds.subsls_id
@@ -127,6 +128,7 @@ function rekap_weekly_values(array $user, array $filters, string $dateStart, str
     foreach ($stmt->fetchAll() as $row) {
         $matrix[normalize_email((string)$row['email'])][(string)$row['tanggal']] = [
             'count' => (int)$row['progress_count'],
+            'draft_count' => (int)$row['draft_count'],
             'target' => (int)$row['target'],
         ];
     }
@@ -173,8 +175,10 @@ function rekap_weekly_export_payload(array $rows, array $dates, array $matrix, a
         'Wilayah Kerja Desa',
         'Jumlah SubSLS',
         'Total Assignment (' . $dateEndLabel . ')',
+        'Total Draft sd ' . $dateEndLabel,
+        '% Draft sd ' . $dateEndLabel,
         'Total Submit sd ' . $dateEndLabel,
-        '% Submit sd tanggal ' . $dateEndLabel,
+        '% Submit sd ' . $dateEndLabel,
     ]);
     foreach ($dates as $date) {
         $headers[] = 'Submit Tanggal ' . rekap_weekly_date_label($date);
@@ -185,6 +189,7 @@ function rekap_weekly_export_payload(array $rows, array $dates, array $matrix, a
         $email = normalize_email((string)$row['email']);
         $endDaily = $matrix[$email][$dateEnd] ?? null;
         $target = (int)($endDaily['target'] ?? 0);
+        $draftCount = (int)($endDaily['draft_count'] ?? 0);
         $rekapCount = (int)($endDaily['count'] ?? 0);
         $line = [
             trim((string)($row['petugas_name'] ?? '')) ?: '-',
@@ -198,6 +203,8 @@ function rekap_weekly_export_payload(array $rows, array $dates, array $matrix, a
         $line[] = $row['wilayah_kerja'] ?: '-';
         $line[] = (int)$row['subsls_total'];
         $line[] = $target;
+        $line[] = $draftCount;
+        $line[] = round(rekap_weekly_pct($draftCount, $target), 2);
         $line[] = $rekapCount;
         $line[] = round(rekap_weekly_pct($rekapCount, $target), 2);
         foreach ($dates as $date) {
@@ -229,8 +236,14 @@ function rekap_weekly_header_html(string $header): string
     if (preg_match('/^Total Submit sd (.+)$/', $header, $m)) {
         return 'Total<br>Submit sd<br>' . e($m[1]);
     }
-    if (preg_match('/^% Submit sd tanggal (.+)$/', $header, $m)) {
-        return '% Submit<br>sd tanggal<br>' . e($m[1]);
+    if (preg_match('/^% Submit sd (.+)$/', $header, $m)) {
+        return '% Submit<br>sd<br>' . e($m[1]);
+    }
+    if (preg_match('/^Total Draft sd (.+)$/', $header, $m)) {
+        return 'Total<br>Draft sd<br>' . e($m[1]);
+    }
+    if (preg_match('/^% Draft sd (.+)$/', $header, $m)) {
+        return '% Draft<br>sd<br>' . e($m[1]);
     }
     if (preg_match('/^Submit Tanggal (.+)$/', $header, $m)) {
         return 'Submit<br>Tanggal<br>' . e($m[1]);
@@ -276,7 +289,7 @@ function rekap_weekly_xlsx_header_is_numeric(string $header): bool
             return false;
         }
     }
-    foreach (['jumlah subsls', 'total assignment', 'total submit', '% submit', 'submit tanggal', 'count', 'persen'] as $numericPart) {
+    foreach (['jumlah subsls', 'total assignment', 'total draft', '% draft', 'total submit', '% submit', 'submit tanggal', 'count', 'persen'] as $numericPart) {
         if (str_contains($header, $numericPart)) {
             return true;
         }
@@ -603,7 +616,7 @@ render_header('Rekap Petugas Weekly');
                 }
                 if (in_array((string)$header, ['Jumlah SubSLS'], true) || str_starts_with((string)$header, 'Total Assignment')) {
                     $headerClass .= ' weekly-head-orange';
-                } elseif (str_starts_with((string)$header, 'Total Submit') || str_starts_with((string)$header, '% Submit')) {
+                } elseif (str_starts_with((string)$header, 'Total Draft') || str_starts_with((string)$header, '% Draft') || str_starts_with((string)$header, 'Total Submit') || str_starts_with((string)$header, '% Submit')) {
                     $headerClass .= ' weekly-head-blue';
                 } elseif (str_starts_with((string)$header, 'Submit Tanggal')) {
                     $headerClass .= ' weekly-head-green';
