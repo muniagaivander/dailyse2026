@@ -222,6 +222,29 @@ function dashboard_totals(array $rows, array $fields): array
     return $totals;
 }
 
+function dashboard_petugas_counts(array $user, array $filters): array
+{
+    [$sqlWhere, $params] = dashboard_where($user, $filters);
+    $stmt = db()->prepare("SELECT
+            COUNT(DISTINCT NULLIF(ms.pencacah_email,'')) pencacah_total,
+            COUNT(DISTINCT NULLIF(ms.pengawas_email,'')) pengawas_total
+        FROM master_subsls ms
+        JOIN master_sls sl ON sl.id=ms.sls_id
+        JOIN master_desa d ON d.id=sl.desa_id
+        JOIN master_kec kc ON kc.id=d.kec_id
+        JOIN master_kab k ON k.id=kc.kab_id
+        JOIN master_prov p ON p.id=k.prov_id
+        LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
+        LEFT JOIN subsls_completion_status cs ON cs.subsls_id=ms.id
+        $sqlWhere");
+    $stmt->execute($params);
+    $row = $stmt->fetch() ?: [];
+    return [
+        'pcl' => (int)($row['pencacah_total'] ?? 0),
+        'pml' => (int)($row['pengawas_total'] ?? 0),
+    ];
+}
+
 function dashboard_pendataan_count(array $row): int
 {
     return (int)($row['submitted_by_pencacah'] ?? 0)
@@ -922,17 +945,23 @@ function dashboard_xlsx_header_is_numeric(string $header): bool
     return false;
 }
 
-function dashboard_xlsx_cell($value, int $row, int $col, bool $numeric = false): string
+function dashboard_xlsx_header_is_pct(string $header): bool
+{
+    $header = strtolower($header);
+    return str_contains($header, 'pct') || str_contains($header, 'persen') || str_contains($header, 'percent');
+}
+
+function dashboard_xlsx_cell($value, int $row, int $col, bool $numeric = false, int $style = 0): string
 {
     $ref = dashboard_xlsx_col($col) . $row;
     if ($numeric) {
         $number = dashboard_xlsx_numeric_value($value);
         if ($number !== null) {
-            return '<c r="' . $ref . '"><v>' . htmlspecialchars($number, ENT_XML1) . '</v></c>';
+            return '<c r="' . $ref . '" s="' . $style . '"><v>' . htmlspecialchars($number, ENT_XML1) . '</v></c>';
         }
     }
     $value = (string)$value;
-    return '<c r="' . $ref . '" t="inlineStr"><is><t>' . htmlspecialchars($value, ENT_XML1) . '</t></is></c>';
+    return '<c r="' . $ref . '" s="' . $style . '" t="inlineStr"><is><t>' . htmlspecialchars($value, ENT_XML1) . '</t></is></c>';
 }
 
 function dashboard_export_rows(array $headers, array $rows, string $filename, string $format): void
@@ -980,15 +1009,20 @@ function dashboard_export_rows(array $headers, array $rows, string $filename, st
   <fills count="1"><fill><patternFill patternType="none"/></fill></fills>
   <borders count="1"><border/></borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
+  <cellXfs count="2">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="2" fontId="0" fillId="0" borderId="0" xfId="0"/>
+  </cellXfs>
 </styleSheet>');
     $sheet = '<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
     foreach ($sheetRows as $rIndex => $values) {
         $rowNumber = $rIndex + 1;
         $sheet .= '<row r="' . $rowNumber . '">';
         foreach ($values as $cIndex => $value) {
-            $numeric = $rowNumber > 1 && dashboard_xlsx_header_is_numeric((string)($headers[$cIndex] ?? ''));
-            $sheet .= dashboard_xlsx_cell($value, $rowNumber, $cIndex + 1, $numeric);
+            $header = (string)($headers[$cIndex] ?? '');
+            $numeric = $rowNumber > 1 && dashboard_xlsx_header_is_numeric($header);
+            $style = $rowNumber > 1 && dashboard_xlsx_header_is_pct($header) ? 1 : 0;
+            $sheet .= dashboard_xlsx_cell($value, $rowNumber, $cIndex + 1, $numeric, $style);
         }
         $sheet .= '</row>';
     }
@@ -1016,7 +1050,7 @@ function dashboard_chart_export_payload(array $rows, array $fields, string $tab)
                 $line[] = $row[$field] ?? 0;
             }
             foreach (array_keys($fields) as $field) {
-                $line[] = $target > 0 ? round(((float)($row[$field] ?? 0)) / $target * 100, 2) : 0;
+                $line[] = dashboard_export_pct_value($target > 0 ? ((float)($row[$field] ?? 0)) / $target * 100 : 0);
             }
             $out[] = $line;
         }
@@ -1034,7 +1068,7 @@ function dashboard_chart_export_payload(array $rows, array $fields, string $tab)
                 $row['label'] ?? '-',
                 $row['subsls_total'] ?? 0,
                 $row['selesai_count'] ?? 0,
-                $total > 0 ? round(((float)($row['selesai_count'] ?? 0)) / $total * 100, 2) : 0,
+                dashboard_export_pct_value($total > 0 ? ((float)($row['selesai_count'] ?? 0)) / $total * 100 : 0),
             ];
         } else {
             $target = (float)($row['target'] ?? 0);
@@ -1050,11 +1084,16 @@ function dashboard_chart_export_payload(array $rows, array $fields, string $tab)
                 $reject,
                 $pending,
                 $approved,
-                $target > 0 ? round($pendataan / $target * 100, 2) : 0,
+                dashboard_export_pct_value($target > 0 ? $pendataan / $target * 100 : 0),
             ];
         }
     }
     return [$headers, $out];
+}
+
+function dashboard_export_pct_value(float $pct): string
+{
+    return number_format($pct, 2, '.', '');
 }
 
 if (($_GET['action'] ?? '') === 'generate_performance_cache'
@@ -1229,6 +1268,7 @@ if (($_GET['action'] ?? '') === 'export_dashboard') {
 $opts = dashboard_filter_options($user, $filters);
 $chartRows = dashboard_rows($user, $filters, $fields);
 $totals = dashboard_totals($chartRows, $fields);
+$petugasCounts = dashboard_petugas_counts($user, $filters);
 $latestDailyStatusLabel = dashboard_latest_status_label($user, $filters);
 $completionPct = $totals['subsls_total'] > 0 ? round($totals['selesai_count'] / $totals['subsls_total'] * 100, 2) : 0;
 $submitApproveCount = dashboard_pendataan_count($totals);
@@ -1258,6 +1298,11 @@ function dashboard_table_count_pct_text(int $count, int $target): string
 {
     $pct = $target > 0 ? $count / $target * 100 : 0;
     return e(number_format($count, 0, ',', '.')) . ' <span class="dashboard-table-pct">(' . e(number_format($pct, 2, ',', '.')) . '%)</span>';
+}
+
+function dashboard_table_pct_only_text(float $pct): string
+{
+    return '<span class="dashboard-table-pct">' . e(number_format($pct, 2, ',', '.')) . '%</span>';
 }
 
 function performance_work_area_html(string $value): string
@@ -1470,11 +1515,11 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
   font-weight: 700;
 }
 .dashboard-stat-card {
-  background: linear-gradient(180deg, #fff3df 0%, #fffaf2 64%) !important;
+  background: #fff7ed !important;
   border: 1px solid #f0b35c;
   border-left: 5px solid #f59e0b;
   border-radius: 8px;
-  box-shadow: 0 8px 18px rgba(180, 83, 9, .12);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, .06);
   color: #374151;
 }
 .dashboard-stat-card .inner {
@@ -1489,6 +1534,42 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
   font-weight: 700;
   margin-bottom: 0;
 }
+.dashboard-stat-card.card-orange {
+  background: #fff7ed !important;
+  border-color: #f0b35c;
+  border-left-color: #f59e0b;
+}
+.dashboard-stat-card.card-orange p { color: #92400e; }
+.dashboard-stat-card.card-progress {
+  background: #d1fae5 !important;
+  border-color: #34d399;
+  border-left-color: #047857;
+}
+.dashboard-stat-card.card-progress p { color: #065f46; }
+.dashboard-stat-card.card-light-green {
+  background: #dcfce7 !important;
+  border-color: #86efac;
+  border-left-color: #22c55e;
+}
+.dashboard-stat-card.card-light-green p { color: #166534; }
+.dashboard-stat-card.card-blue {
+  background: #dbeafe !important;
+  border-color: #93c5fd;
+  border-left-color: #2563eb;
+}
+.dashboard-stat-card.card-blue p { color: #1e40af; }
+.dashboard-stat-card.card-yellow {
+  background: #fef3c7 !important;
+  border-color: #fcd34d;
+  border-left-color: #f59e0b;
+}
+.dashboard-stat-card.card-yellow p { color: #92400e; }
+.dashboard-stat-card.card-red {
+  background: #fee2e2 !important;
+  border-color: #fca5a5;
+  border-left-color: #dc2626;
+}
+.dashboard-stat-card.card-red p { color: #991b1b; }
 .best-progress {
   color: #16a34a;
   font-weight: 800;
@@ -1591,22 +1672,24 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
 <?php
   $targetTotal = (int)$totals['target'];
   $dashboardCards = [
-      ['label' => 'Target', 'value' => dashboard_count_only_text($targetTotal)],
-      ['label' => 'Open', 'value' => dashboard_count_pct_text((int)$totals['open_count'], $targetTotal ? (int)$totals['open_count'] / $targetTotal * 100 : 0)],
-      ['label' => 'Submit', 'value' => dashboard_count_pct_text((int)$totals['submitted_by_pencacah'], $targetTotal ? (int)$totals['submitted_by_pencacah'] / $targetTotal * 100 : 0)],
-      ['label' => 'Reject', 'value' => dashboard_count_pct_text((int)$totals['rejected_by_pengawas'], $targetTotal ? (int)$totals['rejected_by_pengawas'] / $targetTotal * 100 : 0)],
-      ['label' => 'Draft', 'value' => dashboard_count_pct_text((int)$totals['draft_count'], $targetTotal ? (int)$totals['draft_count'] / $targetTotal * 100 : 0)],
-      ['label' => 'Pending', 'value' => dashboard_count_pct_text((int)$totals['pending_count'], $targetTotal ? (int)$totals['pending_count'] / $targetTotal * 100 : 0)],
-      ['label' => 'Approve', 'value' => dashboard_count_pct_text((int)$totals['approved_by_pengawas'], $targetTotal ? (int)$totals['approved_by_pengawas'] / $targetTotal * 100 : 0)],
-      ['label' => 'Progress Pendataan', 'value' => dashboard_count_pct_text($submitApproveCount, $submitApprovePct)],
-      ['label' => 'SubSLS Selesai', 'value' => dashboard_count_pct_text((int)$totals['selesai_count'], $completionPct)],
-      ['label' => 'Total SubSLS', 'value' => dashboard_count_only_text((int)$totals['subsls_total'])],
+      ['label' => 'Target', 'value' => dashboard_count_only_text($targetTotal), 'variant' => 'card-orange'],
+      ['label' => 'Progress Pendataan', 'value' => dashboard_count_pct_text($submitApproveCount, $submitApprovePct), 'variant' => 'card-progress'],
+      ['label' => 'Approve', 'value' => dashboard_count_pct_text((int)$totals['approved_by_pengawas'], $targetTotal ? (int)$totals['approved_by_pengawas'] / $targetTotal * 100 : 0), 'variant' => 'card-light-green'],
+      ['label' => 'Submit', 'value' => dashboard_count_pct_text((int)$totals['submitted_by_pencacah'], $targetTotal ? (int)$totals['submitted_by_pencacah'] / $targetTotal * 100 : 0), 'variant' => 'card-blue'],
+      ['label' => 'Open', 'value' => dashboard_count_pct_text((int)$totals['open_count'], $targetTotal ? (int)$totals['open_count'] / $targetTotal * 100 : 0), 'variant' => 'card-orange'],
+      ['label' => 'Draft', 'value' => dashboard_count_pct_text((int)$totals['draft_count'], $targetTotal ? (int)$totals['draft_count'] / $targetTotal * 100 : 0), 'variant' => 'card-yellow'],
+      ['label' => 'Reject', 'value' => dashboard_count_pct_text((int)$totals['rejected_by_pengawas'], $targetTotal ? (int)$totals['rejected_by_pengawas'] / $targetTotal * 100 : 0), 'variant' => 'card-red'],
+      ['label' => 'Pending', 'value' => dashboard_count_pct_text((int)$totals['pending_count'], $targetTotal ? (int)$totals['pending_count'] / $targetTotal * 100 : 0), 'variant' => 'card-yellow'],
+      ['label' => 'SubSLS Selesai', 'value' => dashboard_count_pct_text((int)$totals['selesai_count'], $completionPct), 'variant' => 'card-orange'],
+      ['label' => 'Total SubSLS', 'value' => dashboard_count_only_text((int)$totals['subsls_total']), 'variant' => 'card-orange'],
+      ['label' => 'PCL', 'value' => dashboard_count_only_text((int)$petugasCounts['pcl']), 'variant' => 'card-orange'],
+      ['label' => 'PML', 'value' => dashboard_count_only_text((int)$petugasCounts['pml']), 'variant' => 'card-orange'],
   ];
 ?>
 <div class="row">
   <?php foreach ($dashboardCards as $card): ?>
     <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6">
-      <div class="small-box dashboard-stat-card">
+      <div class="small-box dashboard-stat-card <?= e($card['variant'] ?? 'card-orange') ?>">
         <div class="inner">
           <h4 class="mb-1"><?= $card['value'] ?></h4>
           <p><?= e($card['label']) ?></p>
@@ -1646,19 +1729,23 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
           <?php
             $summaryHeaders = [
                 ['label' => 'Target', 'class' => 'summary-head-blue'],
+                ['label' => 'Progress<br>(Count)', 'class' => 'summary-head-light-green'],
+                ['label' => 'Progress<br>(Persen %)', 'class' => 'summary-head-light-green'],
+                ['label' => 'Approve<br>(Count)', 'class' => 'summary-head-dark-green'],
+                ['label' => 'Approve<br>(Persen %)', 'class' => 'summary-head-dark-green'],
+                ['label' => 'Submit<br>(Count)', 'class' => 'summary-head-light-green'],
+                ['label' => 'Submit<br>(Persen %)', 'class' => 'summary-head-light-green'],
+                ['label' => 'Draft<br>(Count)', 'class' => 'summary-head-yellow'],
+                ['label' => 'Draft<br>(Persen %)', 'class' => 'summary-head-yellow'],
                 ['label' => 'Open', 'class' => 'summary-head-blue'],
-                ['label' => 'Draft', 'class' => 'summary-head-yellow'],
-                ['label' => 'Submit', 'class' => 'summary-head-light-green'],
                 ['label' => 'Reject', 'class' => 'summary-head-red'],
                 ['label' => 'Pending', 'class' => 'summary-head-red'],
-                ['label' => 'Approve', 'class' => 'summary-head-dark-green'],
-                ['label' => 'Progress Pendataan', 'class' => 'summary-head-light-green'],
-                ['label' => 'Jumlah SubSLS Selesai', 'class' => 'summary-head-dark-green'],
+                ['label' => 'Jumlah<br>SubSLS', 'class' => 'summary-head-blue'],
             ];
           ?>
           <?php foreach ($summaryHeaders as $index => $header): ?>
             <th class="text-right <?= e($header['class']) ?>">
-              <div><?= e($header['label']) ?></div>
+              <div><?= $header['label'] ?></div>
               <select class="form-control form-control-sm summary-sort-select" data-summary-sort-col="<?= $index + 1 ?>">
                 <option value="">Sort</option>
                 <option value="asc">Ascending</option>
@@ -1688,14 +1775,18 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
           <tr data-original-index="<?= (int)$rowIndex ?>">
             <td><?= e($row['label']) ?></td>
             <td class="text-right" data-sort-value="<?= $rowTarget ?>"><?= number_format($rowTarget, 0, ',', '.') ?></td>
+            <td class="text-right" data-sort-value="<?= $submitApproveCount ?>"><?= number_format($submitApproveCount, 0, ',', '.') ?></td>
+            <td class="text-right<?= e($pendataanClass) ?>" data-sort-value="<?= e((string)$pendataanPct) ?>"><?= dashboard_table_pct_only_text($pendataanPct) ?></td>
+            <td class="text-right" data-sort-value="<?= (int)$row['approved_by_pengawas'] ?>"><?= number_format((int)$row['approved_by_pengawas'], 0, ',', '.') ?></td>
+            <td class="text-right" data-sort-value="<?= e((string)$approvePct) ?>"><?= dashboard_table_pct_only_text($approvePct) ?></td>
+            <td class="text-right" data-sort-value="<?= (int)$row['submitted_by_pencacah'] ?>"><?= number_format((int)$row['submitted_by_pencacah'], 0, ',', '.') ?></td>
+            <td class="text-right" data-sort-value="<?= e((string)$submitPct) ?>"><?= dashboard_table_pct_only_text($submitPct) ?></td>
+            <td class="text-right" data-sort-value="<?= (int)$row['draft_count'] ?>"><?= number_format((int)$row['draft_count'], 0, ',', '.') ?></td>
+            <td class="text-right" data-sort-value="<?= e((string)$draftPct) ?>"><?= dashboard_table_pct_only_text($draftPct) ?></td>
             <td class="text-right" data-sort-value="<?= (int)$row['open_count'] ?>"><?= number_format((int)$row['open_count'], 0, ',', '.') ?></td>
-            <td class="text-right" data-sort-value="<?= e((string)$draftPct) ?>"><?= dashboard_table_count_pct_text((int)$row['draft_count'], $rowTarget) ?></td>
-            <td class="text-right" data-sort-value="<?= e((string)$submitPct) ?>"><?= dashboard_table_count_pct_text((int)$row['submitted_by_pencacah'], $rowTarget) ?></td>
             <td class="text-right" data-sort-value="<?= (int)$row['rejected_by_pengawas'] ?>"><?= number_format((int)$row['rejected_by_pengawas'], 0, ',', '.') ?></td>
             <td class="text-right" data-sort-value="<?= (int)$row['pending_count'] ?>"><?= number_format((int)$row['pending_count'], 0, ',', '.') ?></td>
-            <td class="text-right" data-sort-value="<?= e((string)$approvePct) ?>"><?= dashboard_table_count_pct_text((int)$row['approved_by_pengawas'], $rowTarget) ?></td>
-            <td class="text-right<?= e($pendataanClass) ?>" data-sort-value="<?= e((string)$pendataanPct) ?>"><?= dashboard_table_count_pct_text($submitApproveCount, $rowTarget) ?></td>
-            <td class="text-right" data-sort-value="<?= (int)$row['selesai_count'] ?>"><?= number_format((int)$row['selesai_count'], 0, ',', '.') ?></td>
+            <td class="text-right" data-sort-value="<?= (int)$row['subsls_total'] ?>"><?= number_format((int)$row['subsls_total'], 0, ',', '.') ?></td>
           </tr>
         <?php endforeach; ?>
       </tbody>
@@ -1707,14 +1798,18 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
         <tr>
           <td>Total</td>
           <td class="text-right"><?= number_format($totalTarget, 0, ',', '.') ?></td>
+          <td class="text-right"><?= number_format($totalSubmitApprove, 0, ',', '.') ?></td>
+          <td class="text-right"><?= dashboard_table_pct_only_text($totalTarget > 0 ? $totalSubmitApprove / $totalTarget * 100 : 0) ?></td>
+          <td class="text-right"><?= number_format((int)$totals['approved_by_pengawas'], 0, ',', '.') ?></td>
+          <td class="text-right"><?= dashboard_table_pct_only_text($totalTarget > 0 ? (int)$totals['approved_by_pengawas'] / $totalTarget * 100 : 0) ?></td>
+          <td class="text-right"><?= number_format((int)$totals['submitted_by_pencacah'], 0, ',', '.') ?></td>
+          <td class="text-right"><?= dashboard_table_pct_only_text($totalTarget > 0 ? (int)$totals['submitted_by_pencacah'] / $totalTarget * 100 : 0) ?></td>
+          <td class="text-right"><?= number_format((int)$totals['draft_count'], 0, ',', '.') ?></td>
+          <td class="text-right"><?= dashboard_table_pct_only_text($totalTarget > 0 ? (int)$totals['draft_count'] / $totalTarget * 100 : 0) ?></td>
           <td class="text-right"><?= number_format((int)$totals['open_count'], 0, ',', '.') ?></td>
-          <td class="text-right"><?= dashboard_table_count_pct_text((int)$totals['draft_count'], $totalTarget) ?></td>
-          <td class="text-right"><?= dashboard_table_count_pct_text((int)$totals['submitted_by_pencacah'], $totalTarget) ?></td>
           <td class="text-right"><?= number_format((int)$totals['rejected_by_pengawas'], 0, ',', '.') ?></td>
           <td class="text-right"><?= number_format((int)$totals['pending_count'], 0, ',', '.') ?></td>
-          <td class="text-right"><?= dashboard_table_count_pct_text((int)$totals['approved_by_pengawas'], $totalTarget) ?></td>
-          <td class="text-right"><?= dashboard_table_count_pct_text($totalSubmitApprove, $totalTarget) ?></td>
-          <td class="text-right"><?= number_format((int)$totals['selesai_count'], 0, ',', '.') ?></td>
+          <td class="text-right"><?= number_format((int)$totals['subsls_total'], 0, ',', '.') ?></td>
         </tr>
       </tfoot>
     </table>

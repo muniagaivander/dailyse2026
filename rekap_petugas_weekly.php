@@ -78,11 +78,15 @@ function rekap_weekly_petugas_rows(array $user, array $filters): array
             ms.$emailField email,
             u.name petugas_name,
             MIN(k.id) sort_kab_id,
+            MIN(kc.kdkec) sort_kec_code,
+            MIN(d.kddesa) sort_desa_code,
+            GROUP_CONCAT(DISTINCT ms.pengawas_email ORDER BY ms.pengawas_email SEPARATOR ',') pml_emails,
+            GROUP_CONCAT(DISTINCT ms.pencacah_email ORDER BY ms.pencacah_email SEPARATOR ',') pcl_emails,
             GROUP_CONCAT(DISTINCT CASE
                 WHEN up.name IS NULL OR up.name='' OR LOWER(up.name)=LOWER(ms.pengawas_email) THEN ms.pengawas_email
                 ELSE up.name
             END ORDER BY up.name, ms.pengawas_email SEPARATOR ', ') pml_names,
-            GROUP_CONCAT(DISTINCT CONCAT(k.id,' - ',k.nmkab) ORDER BY k.id SEPARATOR ', ') kabupaten,
+            GROUP_CONCAT(DISTINCT k.nmkab ORDER BY k.id SEPARATOR ', ') kabupaten,
             GROUP_CONCAT(DISTINCT kc.nmkec ORDER BY k.id, kc.kdkec SEPARATOR ', ') wilayah_kerja_kecamatan,
             GROUP_CONCAT(DISTINCT d.nmdesa ORDER BY kc.kdkec, d.kddesa SEPARATOR ', ') wilayah_kerja,
             COUNT(ms.id) subsls_total
@@ -95,7 +99,7 @@ function rekap_weekly_petugas_rows(array $user, array $filters): array
         LEFT JOIN users up ON up.email=ms.pengawas_email
         WHERE " . implode(' AND ', $where) . "
         GROUP BY ms.$emailField, u.name
-        ORDER BY sort_kab_id, u.name, ms.$emailField");
+        ORDER BY sort_kab_id, sort_kec_code, sort_desa_code, u.name, ms.$emailField");
     $stmt->execute($params);
     return $stmt->fetchAll();
 }
@@ -165,6 +169,41 @@ function rekap_weekly_pct(int $count, int $target): float
     return $target > 0 ? $count / $target * 100 : 0;
 }
 
+function rekap_weekly_pct_export(float $pct): string
+{
+    return number_format($pct, 2, '.', '');
+}
+
+function rekap_weekly_pct_web(float $pct): string
+{
+    return number_format($pct, 2, ',', '.') . '%';
+}
+
+function rekap_weekly_pct_class(float $pct): string
+{
+    if ($pct < 20) {
+        return 'weekly-progress-low';
+    }
+    if ($pct < 40) {
+        return 'weekly-progress-warning';
+    }
+    if ($pct < 75) {
+        return 'weekly-progress-mid';
+    }
+    return 'weekly-progress-high';
+}
+
+function rekap_weekly_draft_pct_class(float $pct): string
+{
+    if ($pct < 5) {
+        return 'weekly-draft-low';
+    }
+    if ($pct < 10) {
+        return 'weekly-draft-warning';
+    }
+    return 'weekly-draft-high';
+}
+
 function rekap_weekly_apply_search(array $rows, array $filters): array
 {
     $nameTerm = strtolower(trim((string)($filters['search_nama'] ?? '')));
@@ -200,6 +239,68 @@ function rekap_weekly_latest_daily(array $dailyRows, string $dateEnd): ?array
     return $latestDate === null ? null : $dailyRows[$latestDate];
 }
 
+function rekap_weekly_default_sort_rows(array $rows, array $matrix, array $dates, array $filters): array
+{
+    $dateEnd = (string)end($dates);
+    usort($rows, function (array $a, array $b) use ($matrix, $dateEnd, $filters): int {
+        foreach (['sort_kab_id', 'sort_kec_code'] as $key) {
+            $cmp = strnatcasecmp((string)($a[$key] ?? ''), (string)($b[$key] ?? ''));
+            if ($cmp !== 0) {
+                return $cmp;
+            }
+        }
+        if (($filters['kec_id'] ?? '') !== '') {
+            $cmp = strnatcasecmp((string)($a['sort_desa_code'] ?? ''), (string)($b['sort_desa_code'] ?? ''));
+            if ($cmp !== 0) {
+                return $cmp;
+            }
+        }
+        $aDaily = rekap_weekly_latest_daily($matrix[normalize_email((string)($a['email'] ?? ''))] ?? [], $dateEnd);
+        $bDaily = rekap_weekly_latest_daily($matrix[normalize_email((string)($b['email'] ?? ''))] ?? [], $dateEnd);
+        $aPct = rekap_weekly_pct((int)($aDaily['count'] ?? 0), (int)($aDaily['target'] ?? 0));
+        $bPct = rekap_weekly_pct((int)($bDaily['count'] ?? 0), (int)($bDaily['target'] ?? 0));
+        $cmp = $aPct <=> $bPct;
+        if ($cmp !== 0) {
+            return $cmp;
+        }
+        if (($filters['petugas_type'] ?? 'pcl') === 'pcl') {
+            $cmp = strnatcasecmp((string)($a['pml_names'] ?? ''), (string)($b['pml_names'] ?? ''));
+            if ($cmp !== 0) {
+                return $cmp;
+            }
+        }
+        $cmp = strnatcasecmp((string)($a['petugas_name'] ?? ''), (string)($b['petugas_name'] ?? ''));
+        return $cmp !== 0 ? $cmp : strnatcasecmp((string)($a['email'] ?? ''), (string)($b['email'] ?? ''));
+    });
+    return $rows;
+}
+
+function rekap_weekly_petugas_summary(array $rows, string $type): array
+{
+    if ($type === 'pcl') {
+        $pmlEmails = [];
+        foreach ($rows as $row) {
+            foreach (explode(',', (string)($row['pml_emails'] ?? '')) as $email) {
+                $email = normalize_email($email);
+                if ($email !== '') {
+                    $pmlEmails[$email] = true;
+                }
+            }
+        }
+        return ['pcl' => count($rows), 'pml' => count($pmlEmails)];
+    }
+    $pclEmails = [];
+    foreach ($rows as $row) {
+        foreach (explode(',', (string)($row['pcl_emails'] ?? '')) as $email) {
+            $email = normalize_email($email);
+            if ($email !== '') {
+                $pclEmails[$email] = true;
+            }
+        }
+    }
+    return ['pcl' => count($pclEmails), 'pml' => count($rows)];
+}
+
 function rekap_weekly_export_payload(array $rows, array $dates, array $matrix, array $filters): array
 {
     $dateEnd = end($dates);
@@ -212,7 +313,6 @@ function rekap_weekly_export_payload(array $rows, array $dates, array $matrix, a
         'Kabupaten',
         'Wilayah Kerja Kecamatan',
         'Wilayah Kerja Desa',
-        'Jumlah SubSLS',
         'Total Assignment (' . $dateEndLabel . ')',
         'Total Submit sd ' . $dateEndLabel,
         '% Submit sd ' . $dateEndLabel,
@@ -222,6 +322,7 @@ function rekap_weekly_export_payload(array $rows, array $dates, array $matrix, a
     foreach ($dates as $date) {
         $headers[] = 'Submit Tanggal ' . rekap_weekly_date_label($date);
     }
+    $headers[] = 'Jumlah SubSLS';
 
     $out = [];
     foreach ($rows as $row) {
@@ -241,12 +342,11 @@ function rekap_weekly_export_payload(array $rows, array $dates, array $matrix, a
         $line[] = $row['kabupaten'] ?: '-';
         $line[] = $row['wilayah_kerja_kecamatan'] ?: '-';
         $line[] = $row['wilayah_kerja'] ?: '-';
-        $line[] = (int)$row['subsls_total'];
         $line[] = $target;
         $line[] = $rekapCount;
-        $line[] = round(rekap_weekly_pct($rekapCount, $target), 2);
+        $line[] = rekap_weekly_pct_export(rekap_weekly_pct($rekapCount, $target));
         $line[] = $draftCount;
-        $line[] = round(rekap_weekly_pct($draftCount, $target), 2);
+        $line[] = rekap_weekly_pct_export(rekap_weekly_pct($draftCount, $target));
         foreach ($dates as $date) {
             $daily = $matrix[$email][$date] ?? null;
             $previous = $matrix[$email][date('Y-m-d', strtotime($date . ' -1 day'))] ?? null;
@@ -254,6 +354,7 @@ function rekap_weekly_export_payload(array $rows, array $dates, array $matrix, a
                 ? (int)$daily['count'] - (int)$previous['count']
                 : 0;
         }
+        $line[] = (int)$row['subsls_total'];
         $out[] = $line;
     }
     return [$headers, $out];
@@ -362,6 +463,32 @@ function rekap_weekly_xlsx_header_is_numeric(string $header): bool
     return false;
 }
 
+function rekap_weekly_xlsx_header_is_pct(string $header): bool
+{
+    $header = strtolower($header);
+    return str_contains($header, '% submit') || str_contains($header, '% draft');
+}
+
+function rekap_weekly_xlsx_draft_pct_style(string $header, $value): int
+{
+    $header = strtolower($header);
+    if (!str_contains($header, '% draft')) {
+        return 0;
+    }
+    $number = rekap_weekly_xlsx_numeric_value($value);
+    if ($number === null) {
+        return 0;
+    }
+    $pct = (float)$number;
+    if ($pct < 5) {
+        return 4;
+    }
+    if ($pct < 10) {
+        return 5;
+    }
+    return 6;
+}
+
 function rekap_weekly_xlsx_cell($value, int $row, int $col, int $style = 0, bool $numeric = false): string
 {
     $ref = rekap_weekly_xlsx_col($col) . $row;
@@ -417,10 +544,13 @@ function rekap_weekly_export(array $headers, array $rows, array $filters, string
 </Relationships>');
     $zip->addFromString('xl/styles.xml', '<?xml version="1.0" encoding="UTF-8"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="3">
+  <fonts count="6">
     <font><sz val="11"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><color rgb="FF1F2937"/><name val="Calibri"/></font>
     <font><sz val="9"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FF16A34A"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FFFB7185"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FFDC2626"/><name val="Calibri"/></font>
   </fonts>
   <fills count="2">
     <fill><patternFill patternType="none"/></fill>
@@ -431,10 +561,14 @@ function rekap_weekly_export(array $headers, array $rows, array $filters, string
     <border><left style="thin"><color rgb="FFCBD5E1"/></left><right style="thin"><color rgb="FFCBD5E1"/></right><top style="thin"><color rgb="FFCBD5E1"/></top><bottom style="thin"><color rgb="FFCBD5E1"/></bottom></border>
   </borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="3">
+  <cellXfs count="7">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="1" fillId="1" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
     <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="2" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="2" fontId="3" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="2" fontId="4" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="2" fontId="5" fillId="0" borderId="0" xfId="0"/>
   </cellXfs>
 </styleSheet>');
 
@@ -451,7 +585,15 @@ function rekap_weekly_export(array $headers, array $rows, array $filters, string
         foreach ($row as $cIndex => $value) {
             $columnNumber = $cIndex + 1;
             $style = $rowNumber === 1 ? 1 : (in_array($columnNumber, $smallFontColumns, true) ? 2 : 0);
-            $numeric = $rowNumber > 1 && rekap_weekly_xlsx_header_is_numeric((string)($headers[$cIndex] ?? ''));
+            $header = (string)($headers[$cIndex] ?? '');
+            $numeric = $rowNumber > 1 && rekap_weekly_xlsx_header_is_numeric($header);
+            if ($rowNumber > 1 && rekap_weekly_xlsx_header_is_pct($header)) {
+                $style = 3;
+            }
+            $draftStyle = $rowNumber > 1 ? rekap_weekly_xlsx_draft_pct_style($header, $value) : 0;
+            if ($draftStyle !== 0) {
+                $style = $draftStyle;
+            }
             $sheet .= rekap_weekly_xlsx_cell($value, $rowNumber, $columnNumber, $style, $numeric);
         }
         $sheet .= '</row>';
@@ -475,9 +617,12 @@ $dateEnd = $dates[count($dates) - 1];
 $rows = [];
 $headers = [];
 $tableRows = [];
+$petugasSummary = ['pcl' => 0, 'pml' => 0];
 if ($hasFiltered) {
     $rows = rekap_weekly_apply_search(rekap_weekly_petugas_rows($user, $filters), $filters);
     $matrix = rekap_weekly_values($user, $filters, $dateStart, $dateEnd);
+    $rows = rekap_weekly_default_sort_rows($rows, $matrix, $dates, $filters);
+    $petugasSummary = rekap_weekly_petugas_summary($rows, $filters['petugas_type']);
     [$headers, $tableRows] = rekap_weekly_export_payload($rows, $dates, $matrix, $filters);
     $tableRows = rekap_weekly_sort_table_rows($headers, $tableRows, $filters);
     if (($_GET['action'] ?? '') === 'export') {
@@ -485,6 +630,11 @@ if ($hasFiltered) {
         rekap_weekly_export($headers, $tableRows, $filters, $format);
     }
 }
+$showWeeklyKecamatanBreaks = $hasFiltered
+    && $filters['sort_col'] === ''
+    && $filters['sort_dir'] === ''
+    && $filters['search_nama'] === ''
+    && $filters['search_pml'] === '';
 
 render_header('Rekap Petugas Weekly');
 ?>
@@ -498,11 +648,127 @@ render_header('Rekap Petugas Weekly');
     margin-bottom: 16px;
     padding: 10px 14px;
   }
+  .weekly-note-line {
+    margin-top: 4px;
+  }
+  .weekly-progress-legend {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 6px;
+  }
+  .weekly-progress-legend span {
+    align-items: center;
+    display: inline-flex;
+    gap: 5px;
+  }
+  .weekly-progress-legend i {
+    border-radius: 999px;
+    display: inline-block;
+    height: 9px;
+    width: 9px;
+  }
+  .weekly-progress-low { color: #dc2626; font-weight: 800; }
+  .weekly-progress-warning { color: #f59e0b; font-weight: 800; }
+  .weekly-progress-mid { color: #2563eb; font-weight: 800; }
+  .weekly-progress-high { color: #16a34a; font-weight: 800; }
+  .weekly-draft-low { color: #16a34a; font-weight: 800; }
+  .weekly-draft-warning { color: #fb7185; font-weight: 800; }
+  .weekly-draft-high { color: #dc2626; font-weight: 800; }
   .weekly-table th {
     line-height: 1.1;
     text-align: center;
     vertical-align: middle !important;
     white-space: normal;
+  }
+  .weekly-freeze-pane {
+    max-height: 70vh;
+    overflow: auto;
+  }
+  .weekly-table {
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  .weekly-table thead th {
+    background: #f8fafc;
+    background-clip: padding-box;
+    position: sticky;
+    top: 0;
+    z-index: 8;
+  }
+  .weekly-table th:nth-child(1),
+  .weekly-table td:nth-child(1) {
+    left: 0;
+    min-width: 170px;
+    width: 170px;
+  }
+  .weekly-table th:nth-child(2),
+  .weekly-table td:nth-child(2) {
+    left: 170px;
+    min-width: 150px;
+    width: 150px;
+  }
+  .weekly-table th:nth-child(3),
+  .weekly-table td:nth-child(3) {
+    left: 320px;
+    min-width: 130px;
+    width: 130px;
+  }
+  .weekly-table th:nth-child(4),
+  .weekly-table td:nth-child(4) {
+    left: 450px;
+    min-width: 180px;
+    width: 180px;
+  }
+  .weekly-table.weekly-freeze-pcl th:nth-child(5),
+  .weekly-table.weekly-freeze-pcl td:nth-child(5) {
+    left: 630px;
+    min-width: 220px;
+    width: 220px;
+  }
+  .weekly-table.weekly-freeze-pml th:nth-child(4),
+  .weekly-table.weekly-freeze-pml td:nth-child(4) {
+    left: 450px;
+    min-width: 220px;
+    width: 220px;
+  }
+  .weekly-table.weekly-freeze-pml th:nth-child(-n+4),
+  .weekly-table.weekly-freeze-pml td:nth-child(-n+4) {
+    background-clip: padding-box;
+    position: sticky;
+    z-index: 7;
+  }
+  .weekly-table.weekly-freeze-pcl th:nth-child(-n+5),
+  .weekly-table.weekly-freeze-pcl td:nth-child(-n+5) {
+    background-clip: padding-box;
+    position: sticky;
+    z-index: 7;
+  }
+  .weekly-table.weekly-freeze-pml tbody td:nth-child(-n+4),
+  .weekly-table.weekly-freeze-pcl tbody td:nth-child(-n+5) {
+    background: #fff;
+  }
+  .weekly-table.weekly-freeze-pml tbody tr:nth-of-type(odd) td:nth-child(-n+4),
+  .weekly-table.weekly-freeze-pcl tbody tr:nth-of-type(odd) td:nth-child(-n+5) {
+    background: #f9fafb;
+  }
+  .weekly-table.weekly-freeze-pml tbody tr:hover td:nth-child(-n+4),
+  .weekly-table.weekly-freeze-pcl tbody tr:hover td:nth-child(-n+5) {
+    background: #eef2ff;
+  }
+  .weekly-table.weekly-freeze-pml thead th:nth-child(-n+4),
+  .weekly-table.weekly-freeze-pcl thead th:nth-child(-n+5) {
+    z-index: 10;
+  }
+  .weekly-table.weekly-freeze-pml th:nth-child(4),
+  .weekly-table.weekly-freeze-pml td:nth-child(4),
+  .weekly-table.weekly-freeze-pcl th:nth-child(5),
+  .weekly-table.weekly-freeze-pcl td:nth-child(5) {
+    box-shadow: 3px 0 0 #111827;
+  }
+  .weekly-kecamatan-break > td {
+    border-top: 3px solid #111827 !important;
   }
   .weekly-header-box {
     align-items: center;
@@ -529,23 +795,24 @@ render_header('Rekap Petugas Weekly');
   .weekly-table th.weekly-wide {
     min-width: 185px;
   }
-  .weekly-head-orange {
-    background: #ffedd5;
+  .weekly-table thead th.weekly-head-orange {
+    background: #ffedd5 !important;
     color: #7c2d12;
   }
-  .weekly-head-blue {
-    background: #dbeafe;
+  .weekly-table thead th.weekly-head-blue {
+    background: #dbeafe !important;
     color: #1e3a8a;
   }
-  .weekly-head-purple {
-    background: #ede9fe;
+  .weekly-table thead th.weekly-head-purple {
+    background: #ede9fe !important;
     color: #4c1d95;
   }
-  .weekly-head-green {
-    background: #dcfce7;
+  .weekly-table thead th.weekly-head-green {
+    background: #dcfce7 !important;
     color: #14532d;
   }
   .weekly-small { font-size: .82rem; }
+  .weekly-smaller { font-size: .66rem; }
   .weekly-sortable {
     user-select: none;
   }
@@ -645,7 +912,16 @@ render_header('Rekap Petugas Weekly');
   <div class="alert alert-info">Pilih filter lalu klik <strong>Filter</strong> untuk menampilkan Rekap Petugas Weekly.</div>
 <?php else: ?>
   <div class="weekly-note">
-    Periode <?= e(rekap_weekly_date_label($dateStart)) ?> - <?= e(rekap_weekly_date_label($dateEnd)) ?>
+    <div>Periode <?= e(rekap_weekly_date_label($dateStart)) ?> - <?= e(rekap_weekly_date_label($dateEnd)) ?></div>
+    <div class="weekly-note-line">Submit = submit+reject+pending+approve</div>
+    <div class="weekly-note-line">Diurutkan berdasarkan kecamatan lalu % Submit Ascending</div>
+    <div class="weekly-note-line">Rekap PCL (<?= number_format($petugasSummary['pcl'], 0, ',', '.') ?> petugas), PML (<?= number_format($petugasSummary['pml'], 0, ',', '.') ?> petugas)</div>
+    <div class="weekly-progress-legend small">
+      <span><i style="background:#dc2626"></i>&lt; 20%</span>
+      <span><i style="background:#f59e0b"></i>20% - &lt; 40%</span>
+      <span><i style="background:#2563eb"></i>40% - &lt; 75%</span>
+      <span><i style="background:#16a34a"></i>75% - 100%</span>
+    </div>
   </div>
   <div class="card mb-3">
     <div class="card-body weekly-toolbar">
@@ -669,12 +945,15 @@ render_header('Rekap Petugas Weekly');
     </div>
   </div>
   <div class="card">
-    <div class="card-body table-responsive p-0">
-      <table class="table table-sm table-bordered table-striped mb-0 weekly-table">
+    <div class="card-body table-responsive p-0 weekly-freeze-pane">
+      <table class="table table-sm table-bordered table-striped mb-0 weekly-table weekly-freeze-<?= $filters['petugas_type'] === 'pcl' ? 'pcl' : 'pml' ?>">
         <thead>
           <tr>
             <?php foreach ($headers as $i => $header): ?>
               <?php
+                if ((string)$header === 'Email Petugas') {
+                    continue;
+                }
                 $isNumericHeader = rekap_weekly_xlsx_header_is_numeric((string)$header);
                 $isKabupatenHeader = (string)$header === 'Kabupaten';
                 $isSearchHeader = in_array((string)$header, ['Nama Petugas', 'Nama PML'], true);
@@ -721,22 +1000,42 @@ render_header('Rekap Petugas Weekly');
           </tr>
         </thead>
         <tbody>
+          <?php
+            $weeklyKecIndex = array_search('Wilayah Kerja Kecamatan', $headers, true);
+            $previousWeeklyKecamatan = null;
+          ?>
           <?php foreach ($tableRows as $rowIndex => $row): ?>
-            <tr data-original-index="<?= (int)$rowIndex ?>">
+            <?php
+              $currentWeeklyKecamatan = $weeklyKecIndex === false ? '' : (string)($row[$weeklyKecIndex] ?? '');
+              $hasWeeklyKecamatanBreak = $showWeeklyKecamatanBreaks && $rowIndex > 0 && $currentWeeklyKecamatan !== $previousWeeklyKecamatan;
+              $previousWeeklyKecamatan = $currentWeeklyKecamatan;
+            ?>
+            <tr class="<?= $hasWeeklyKecamatanBreak ? 'weekly-kecamatan-break' : '' ?>" data-original-index="<?= (int)$rowIndex ?>">
               <?php foreach ($row as $i => $value): ?>
                 <?php
+                  if ((string)($headers[$i] ?? '') === 'Email Petugas') {
+                      continue;
+                  }
                   $header = strtolower((string)($headers[$i] ?? ''));
                   $isNumeric = rekap_weekly_xlsx_header_is_numeric($header);
                   $small = str_contains($header, 'email') || str_contains($header, 'wilayah kerja');
+                  $smaller = str_contains($header, 'wilayah kerja desa');
+                  $isPercent = str_contains($header, '% submit') || str_contains($header, '% draft');
+                  $isDraftPercent = str_contains($header, '% draft');
+                  $pctValue = $isPercent ? (float)$value : 0.0;
                 ?>
-                <td class="<?= $isNumeric ? 'text-right' : '' ?> <?= $small ? 'weekly-small' : '' ?>" <?= $isNumeric ? 'data-sort-value="' . e((string)(float)$value) . '"' : '' ?>>
-                  <?= $isNumeric ? e(number_format((float)$value, str_contains($header, 'persen') ? 2 : 0, ',', '.')) : e((string)$value) ?>
+                <td class="<?= $isNumeric ? 'text-right' : '' ?> <?= $smaller ? 'weekly-smaller' : ($small ? 'weekly-small' : '') ?>" <?= $isNumeric ? 'data-sort-value="' . e((string)(float)$value) . '"' : '' ?>>
+                  <?php if ($isPercent): ?>
+                    <span class="<?= e($isDraftPercent ? rekap_weekly_draft_pct_class($pctValue) : rekap_weekly_pct_class($pctValue)) ?>"><?= e(rekap_weekly_pct_web($pctValue)) ?></span>
+                  <?php else: ?>
+                    <?= $isNumeric ? e(number_format((float)$value, str_contains($header, 'persen') || str_contains($header, '%') ? 2 : 0, ',', '.')) : e((string)$value) ?>
+                  <?php endif; ?>
                 </td>
               <?php endforeach; ?>
             </tr>
           <?php endforeach; ?>
           <?php if (!$tableRows): ?>
-            <tr><td colspan="<?= max(1, count($headers)) ?>" class="text-center text-muted">Tidak ada data.</td></tr>
+            <tr><td colspan="<?= max(1, count($headers) - 1) ?>" class="text-center text-muted">Tidak ada data.</td></tr>
           <?php endif; ?>
         </tbody>
       </table>
