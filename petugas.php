@@ -6,7 +6,7 @@ $filters = [
     'kec_id' => $_GET['kec_id'] ?? '',
     'desa_id' => $_GET['desa_id'] ?? '',
 ];
-$petugasSearchKeys = ['search_kode', 'search_desa', 'search_sls', 'search_subsls', 'search_pengawas', 'search_pencacah'];
+$petugasSearchKeys = ['search_kode', 'search_kecamatan', 'search_desa', 'search_sls', 'search_subsls', 'search_pengawas', 'search_pencacah'];
 foreach ($petugasSearchKeys as $key) {
     $filters[$key] = trim((string)($_GET[$key] ?? ''));
 }
@@ -175,20 +175,8 @@ function petugas_download_assignment_template(array $user, array $filters): void
     exit;
 }
 
-if (($_GET['action'] ?? '') === 'download_petugas_template' && $user['role'] === 'admin_kab') {
-    petugas_download_assignment_template($user, $filters);
-}
-
-$opts = petugas_filter_options($user, $filters);
-$rows = [];
-$error = null;
-$page = max(1, (int)($_GET['page'] ?? 1));
-$perPage = 100;
-$totalRows = 0;
-$totalPages = 0;
-$petugasSummary = ['pengawas' => 0, 'pencacah' => 0];
-
-if (isset($_GET['filter'])) {
+function petugas_filtered_where(array $user, array $filters): array
+{
     $where = [];
     $params = [];
     if (in_array($user['role'], ['admin_kab', 'viewer_kab'], true)) {
@@ -208,6 +196,7 @@ if (isset($_GET['filter'])) {
     }
     $searchExpressions = [
         'search_kode' => "CONCAT(k.id, kc.kdkec, d.kddesa, sl.kdsls, ms.kdsubsls)",
+        'search_kecamatan' => "CONCAT(kc.kdkec, ' ', kc.nmkec)",
         'search_desa' => "d.nmdesa",
         'search_sls' => "CONCAT(sl.kdsls, ' ', sl.nmsls)",
         'search_subsls' => "ms.kdsubsls",
@@ -215,12 +204,159 @@ if (isset($_GET['filter'])) {
         'search_pencacah' => "CONCAT(COALESCE(uc.name, ''), ' ', COALESCE(ms.pencacah_email, ''))",
     ];
     foreach ($searchExpressions as $key => $expr) {
-        if ($filters[$key] !== '') {
+        if (($filters[$key] ?? '') !== '') {
             $where[] = $expr . ' LIKE ?';
             $params[] = '%' . $filters[$key] . '%';
         }
     }
-    $sqlWhere = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+    return [$where ? 'WHERE ' . implode(' AND ', $where) : '', $params];
+}
+
+function petugas_rows_sql(string $sqlWhere, string $limitSql = ''): string
+{
+    return "SELECT p.nmprov, k.id kab_id, k.nmkab, kc.kdkec, kc.nmkec, d.kddesa, d.nmdesa, sl.kdsls, sl.nmsls,
+                ms.kdsubsls, ms.nmsubsls, ms.pengawas_email, ms.pencacah_email,
+                up.name pengawas_name, uc.name pencacah_name
+            FROM master_subsls ms
+            JOIN master_sls sl ON sl.id=ms.sls_id
+            JOIN master_desa d ON d.id=sl.desa_id
+            JOIN master_kec kc ON kc.id=d.kec_id
+            JOIN master_kab k ON k.id=kc.kab_id
+            JOIN master_prov p ON p.id=k.prov_id
+            LEFT JOIN users up ON up.email=ms.pengawas_email
+            LEFT JOIN users uc ON uc.email=ms.pencacah_email
+            $sqlWhere
+            ORDER BY k.id, kc.kdkec, d.kddesa, sl.kdsls, ms.kdsubsls
+            $limitSql";
+}
+
+function petugas_fetch_rows(string $sqlWhere, array $params, ?int $limit = null, int $offset = 0): array
+{
+    $limitSql = $limit === null ? '' : 'LIMIT ' . (int)$limit . ' OFFSET ' . (int)$offset;
+    $stmt = db()->prepare(petugas_rows_sql($sqlWhere, $limitSql));
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
+function petugas_export_matrix(array $rows): array
+{
+    $out = [[
+        'Kode SubSLS',
+        'Kabupaten',
+        'Kecamatan',
+        'Desa',
+        'SLS',
+        'SubSLS',
+        'Nama Pengawas',
+        'Email Pengawas',
+        'Nama Pencacah',
+        'Email Pencacah',
+    ]];
+    foreach ($rows as $r) {
+        $out[] = [
+            $r['kab_id'] . $r['kdkec'] . $r['kddesa'] . $r['kdsls'] . $r['kdsubsls'],
+            $r['kab_id'] . ' - ' . $r['nmkab'],
+            $r['kdkec'] . ' - ' . $r['nmkec'],
+            $r['nmdesa'],
+            $r['kdsls'] . ' - ' . $r['nmsls'],
+            $r['kdsubsls'],
+            $r['pengawas_name'] ?: $r['pengawas_email'],
+            $r['pengawas_email'],
+            $r['pencacah_name'] ?: $r['pencacah_email'],
+            $r['pencacah_email'],
+        ];
+    }
+    return $out;
+}
+
+function petugas_download_export(array $user, array $filters, string $format): void
+{
+    [$sqlWhere, $params] = petugas_filtered_where($user, $filters);
+    $matrix = petugas_export_matrix(petugas_fetch_rows($sqlWhere, $params));
+    $timestamp = date('Ymd_His');
+    if ($format === 'csv') {
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="daftar_petugas_' . $timestamp . '.csv"');
+        echo "\xEF\xBB\xBF";
+        $out = fopen('php://output', 'w');
+        foreach ($matrix as $line) {
+            fputcsv($out, $line);
+        }
+        fclose($out);
+        exit;
+    }
+
+    $tmp = tempnam(sys_get_temp_dir(), 'petugas_export_');
+    $zip = new ZipArchive();
+    $zip->open($tmp, ZipArchive::OVERWRITE);
+    $zip->addFromString('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>');
+    $zip->addFromString('_rels/.rels', '<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>');
+    $zip->addFromString('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>');
+    $zip->addFromString('xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets><sheet name="daftar_petugas" sheetId="1" r:id="rId1"/></sheets>
+</workbook>');
+    $zip->addFromString('xl/styles.xml', '<?xml version="1.0" encoding="UTF-8"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
+  <fills count="1"><fill><patternFill patternType="none"/></fill></fills>
+  <borders count="1"><border/></borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
+</styleSheet>');
+    $sheet = '<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
+    foreach ($matrix as $rIndex => $values) {
+        $rowNumber = $rIndex + 1;
+        $sheet .= '<row r="' . $rowNumber . '">';
+        foreach ($values as $cIndex => $value) {
+            $sheet .= petugas_xlsx_cell((string)$value, $rowNumber, $cIndex + 1);
+        }
+        $sheet .= '</row>';
+    }
+    $sheet .= '</sheetData></worksheet>';
+    $zip->addFromString('xl/worksheets/sheet1.xml', $sheet);
+    $zip->close();
+
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Disposition: attachment; filename="daftar_petugas_' . $timestamp . '.xlsx"');
+    header('Content-Length: ' . filesize($tmp));
+    readfile($tmp);
+    unlink($tmp);
+    exit;
+}
+
+if (($_GET['action'] ?? '') === 'download_petugas_template' && $user['role'] === 'admin_kab') {
+    petugas_download_assignment_template($user, $filters);
+}
+if (($_GET['action'] ?? '') === 'export') {
+    petugas_download_export($user, $filters, ($_GET['format'] ?? 'csv') === 'xlsx' ? 'xlsx' : 'csv');
+}
+
+$opts = petugas_filter_options($user, $filters);
+$rows = [];
+$error = null;
+$page = max(1, (int)($_GET['page'] ?? 1));
+$perPage = 100;
+$totalRows = 0;
+$totalPages = 0;
+$petugasSummary = ['pengawas' => 0, 'pencacah' => 0];
+
+if (isset($_GET['filter'])) {
+    [$sqlWhere, $params] = petugas_filtered_where($user, $filters);
     $countStmt = db()->prepare("SELECT COUNT(*)
         FROM master_subsls ms
         JOIN master_sls sl ON sl.id=ms.sls_id
@@ -254,22 +390,7 @@ if (isset($_GET['filter'])) {
         'pencacah' => (int)($summary['jumlah_pencacah'] ?? 0),
     ];
 
-    $stmt = db()->prepare("SELECT p.nmprov, k.id kab_id, k.nmkab, kc.kdkec, kc.nmkec, d.kddesa, d.nmdesa, sl.kdsls, sl.nmsls,
-                ms.kdsubsls, ms.nmsubsls, ms.pengawas_email, ms.pencacah_email,
-                up.name pengawas_name, uc.name pencacah_name
-            FROM master_subsls ms
-            JOIN master_sls sl ON sl.id=ms.sls_id
-            JOIN master_desa d ON d.id=sl.desa_id
-            JOIN master_kec kc ON kc.id=d.kec_id
-            JOIN master_kab k ON k.id=kc.kab_id
-            JOIN master_prov p ON p.id=k.prov_id
-            LEFT JOIN users up ON up.email=ms.pengawas_email
-            LEFT JOIN users uc ON uc.email=ms.pencacah_email
-            $sqlWhere
-            ORDER BY k.id, kc.kdkec, d.kddesa, sl.kdsls, ms.kdsubsls
-            LIMIT $perPage OFFSET $offset");
-    $stmt->execute($params);
-    $rows = $stmt->fetchAll();
+    $rows = petugas_fetch_rows($sqlWhere, $params, $perPage, $offset);
 }
 
 render_header('Daftar Petugas');
@@ -337,10 +458,22 @@ render_header('Daftar Petugas');
     <div><a class="btn btn-success" href="petugas.php?<?= e(http_build_query($downloadQuery)) ?>"><i class="fas fa-download mr-1"></i>Download Template Ganti Petugas</a></div>
   </div>
 <?php endif; ?>
-<?php if ($rows): ?>
+<?php if (isset($_GET['filter'])): ?>
 <div class="card">
-  <div class="card-header py-2">
+  <div class="card-header py-2 d-flex flex-wrap align-items-center justify-content-between">
     <span>Menampilkan <?= number_format(count($rows), 0, ',', '.') ?> dari <?= number_format($totalRows, 0, ',', '.') ?> SubSLS</span>
+    <?php
+      $exportQuery = ['filter' => 1, 'kab_id' => $filters['kab_id'], 'kec_id' => $filters['kec_id'], 'desa_id' => $filters['desa_id'], 'action' => 'export'];
+      foreach ($petugasSearchKeys as $key) {
+          if ($filters[$key] !== '') {
+              $exportQuery[$key] = $filters[$key];
+          }
+      }
+    ?>
+    <div class="btn-group btn-group-sm mt-2 mt-md-0">
+      <a class="btn btn-outline-secondary" href="petugas.php?<?= e(http_build_query($exportQuery + ['format' => 'csv'])) ?>"><i class="fas fa-file-csv mr-1"></i>Export CSV</a>
+      <a class="btn btn-outline-success" href="petugas.php?<?= e(http_build_query($exportQuery + ['format' => 'xlsx'])) ?>"><i class="fas fa-file-excel mr-1"></i>Export XLSX</a>
+    </div>
   </div>
   <div class="card-body table-responsive p-0">
     <table class="table table-sm table-bordered table-striped mb-0 petugas-table" id="petugasTable">
@@ -349,6 +482,7 @@ render_header('Daftar Petugas');
           <?php
             $petugasSearchHeaders = [
                 ['label' => 'Kode SubSLS', 'key' => 'search_kode'],
+                ['label' => 'Kecamatan', 'key' => 'search_kecamatan'],
                 ['label' => 'Desa', 'key' => 'search_desa'],
                 ['label' => 'SLS', 'key' => 'search_sls'],
                 ['label' => 'SubSLS', 'key' => 'search_subsls'],
@@ -368,6 +502,7 @@ render_header('Daftar Petugas');
       <?php foreach ($rows as $r): ?>
         <tr>
           <td><?= e($r['kab_id'] . $r['kdkec'] . $r['kddesa'] . $r['kdsls'] . $r['kdsubsls']) ?></td>
+          <td><?= e($r['kdkec'] . ' - ' . $r['nmkec']) ?></td>
           <td><?= e($r['nmdesa']) ?></td>
           <td><?= e($r['kdsls'] . ' - ' . $r['nmsls']) ?></td>
           <td><?= e($r['kdsubsls']) ?></td>
@@ -375,6 +510,11 @@ render_header('Daftar Petugas');
           <td><?= e(petugas_label($r['pencacah_email'], $r['pencacah_name'] ?? '')) ?></td>
         </tr>
       <?php endforeach; ?>
+      <?php if (!$rows): ?>
+        <tr>
+          <td colspan="<?= count($petugasSearchHeaders) ?>" class="text-center text-muted py-3">Tidak ada data sesuai filter/search.</td>
+        </tr>
+      <?php endif; ?>
       </tbody>
     </table>
   </div>
@@ -400,8 +540,6 @@ render_header('Daftar Petugas');
     </ul>
   </nav>
 <?php endif; ?>
-<?php elseif (isset($_GET['filter']) && !$error): ?>
-  <div class="alert alert-info">Tidak ada SubSLS pada desa ini.</div>
 <?php endif; ?>
 <script>
 const kabupaten = document.getElementById('kab_id');

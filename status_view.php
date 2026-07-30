@@ -383,6 +383,27 @@ function status_view_xlsx_pct_style(string $header, $value): int
     return 4;
 }
 
+function status_view_xlsx_header_style(string $header): int
+{
+    $header = strtolower($header);
+    if (str_contains($header, 'target') || str_contains($header, 'open')) {
+        return 9;
+    }
+    if (str_contains($header, 'draft')) {
+        return 10;
+    }
+    if (str_contains($header, 'progress') || str_contains($header, 'submit')) {
+        return 11;
+    }
+    if (str_contains($header, 'reject') || str_contains($header, 'pending')) {
+        return 12;
+    }
+    if (str_contains($header, 'approved')) {
+        return 13;
+    }
+    return 8;
+}
+
 function status_view_xlsx_cell($value, int $row, int $col, int $style = 0, bool $numeric = false): string
 {
     $ref = status_view_xlsx_col($col) . $row;
@@ -449,10 +470,22 @@ function status_view_export(array $headers, array $rows, string $format): void
     <font><b/><sz val="11"/><color rgb="FFFB7185"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><color rgb="FFDC2626"/><name val="Calibri"/></font>
   </fonts>
-  <fills count="1"><fill><patternFill patternType="none"/></fill></fills>
-  <borders count="1"><border/></borders>
+  <fills count="8">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFF8FAFC"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFDBEAFE"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFFEF3C7"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFDCFCE7"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFFEE2E2"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFBBF7D0"/><bgColor indexed="64"/></patternFill></fill>
+  </fills>
+  <borders count="2">
+    <border/>
+    <border><left style="thin"><color rgb="FFCBD5E1"/></left><right style="thin"><color rgb="FFCBD5E1"/></right><top style="thin"><color rgb="FFCBD5E1"/></top><bottom style="thin"><color rgb="FFCBD5E1"/></bottom></border>
+  </borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="8">
+  <cellXfs count="14">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0"/>
@@ -461,6 +494,12 @@ function status_view_export(array $headers, array $rows, string $format): void
     <xf numFmtId="0" fontId="5" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="6" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="7" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="0" fillId="2" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="4" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="5" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="6" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="7" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
   </cellXfs>
 </styleSheet>');
     $sheet = '<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
@@ -471,7 +510,7 @@ function status_view_export(array $headers, array $rows, string $format): void
         foreach ($row as $cIndex => $value) {
             $header = (string)($headers[$cIndex] ?? '');
             $numeric = $rowNumber > 1 && status_view_xlsx_header_is_numeric($header);
-            $style = $rowNumber > 1 ? status_view_xlsx_pct_style($header, $value) : 0;
+            $style = $rowNumber === 1 ? status_view_xlsx_header_style($header) : status_view_xlsx_pct_style($header, $value);
             $sheet .= status_view_xlsx_cell($value, $rowNumber, $cIndex + 1, $style, $numeric);
         }
         $sheet .= '</row>';

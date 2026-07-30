@@ -120,6 +120,7 @@ function rekap_weekly_values(array $user, array $filters, string $dateStart, str
             ds.tanggal,
             SUM(ds.target) target,
             SUM(ds.draft_count) draft_count,
+            SUM(ds.approved_by_pengawas) approve_count,
             SUM(ds.submitted_by_pencacah + ds.rejected_by_pengawas + ds.pending_count + ds.approved_by_pengawas) progress_count
         FROM daily_status ds
         JOIN master_subsls ms ON ms.id=ds.subsls_id
@@ -137,6 +138,7 @@ function rekap_weekly_values(array $user, array $filters, string $dateStart, str
         $matrix[normalize_email((string)$row['email'])][(string)$row['tanggal']] = [
             'count' => (int)$row['progress_count'],
             'draft_count' => (int)$row['draft_count'],
+            'approve_count' => (int)$row['approve_count'],
             'target' => (int)$row['target'],
         ];
     }
@@ -314,6 +316,12 @@ function rekap_weekly_export_payload(array $rows, array $dates, array $matrix, a
         'Wilayah Kerja Kecamatan',
         'Wilayah Kerja Desa',
         'Total Assignment (' . $dateEndLabel . ')',
+    ]);
+    if ($filters['petugas_type'] === 'pml') {
+        $headers[] = 'Total Approve sd ' . $dateEndLabel;
+        $headers[] = '% Approve sd ' . $dateEndLabel;
+    }
+    $headers = array_merge($headers, [
         'Total Submit sd ' . $dateEndLabel,
         '% Submit sd ' . $dateEndLabel,
         'Total Draft sd ' . $dateEndLabel,
@@ -331,6 +339,7 @@ function rekap_weekly_export_payload(array $rows, array $dates, array $matrix, a
         $endDaily = rekap_weekly_latest_daily($petugasDailyRows, (string)$dateEnd);
         $target = (int)($endDaily['target'] ?? 0);
         $draftCount = (int)($endDaily['draft_count'] ?? 0);
+        $approveCount = (int)($endDaily['approve_count'] ?? 0);
         $rekapCount = (int)($endDaily['count'] ?? 0);
         $line = [
             trim((string)($row['petugas_name'] ?? '')) ?: '-',
@@ -343,6 +352,10 @@ function rekap_weekly_export_payload(array $rows, array $dates, array $matrix, a
         $line[] = $row['wilayah_kerja_kecamatan'] ?: '-';
         $line[] = $row['wilayah_kerja'] ?: '-';
         $line[] = $target;
+        if ($filters['petugas_type'] === 'pml') {
+            $line[] = $approveCount;
+            $line[] = rekap_weekly_pct_export(rekap_weekly_pct($approveCount, $target));
+        }
         $line[] = $rekapCount;
         $line[] = rekap_weekly_pct_export(rekap_weekly_pct($rekapCount, $target));
         $line[] = $draftCount;
@@ -379,6 +392,12 @@ function rekap_weekly_header_html(string $header): string
     }
     if (preg_match('/^% Submit sd (.+)$/', $header, $m)) {
         return '% Submit<br>sd<br>' . e($m[1]);
+    }
+    if (preg_match('/^Total Approve sd (.+)$/', $header, $m)) {
+        return 'Total<br>Approve sd<br>' . e($m[1]);
+    }
+    if (preg_match('/^% Approve sd (.+)$/', $header, $m)) {
+        return '% Approve<br>sd<br>' . e($m[1]);
     }
     if (preg_match('/^Total Draft sd (.+)$/', $header, $m)) {
         return 'Total<br>Draft sd<br>' . e($m[1]);
@@ -455,7 +474,7 @@ function rekap_weekly_xlsx_header_is_numeric(string $header): bool
             return false;
         }
     }
-    foreach (['jumlah subsls', 'total assignment', 'total draft', '% draft', 'total submit', '% submit', 'submit tanggal', 'count', 'persen'] as $numericPart) {
+    foreach (['jumlah subsls', 'total assignment', 'total draft', '% draft', 'total submit', '% submit', 'total approve', '% approve', 'submit tanggal', 'count', 'persen'] as $numericPart) {
         if (str_contains($header, $numericPart)) {
             return true;
         }
@@ -466,7 +485,7 @@ function rekap_weekly_xlsx_header_is_numeric(string $header): bool
 function rekap_weekly_xlsx_header_is_pct(string $header): bool
 {
     $header = strtolower($header);
-    return str_contains($header, '% submit') || str_contains($header, '% draft');
+    return str_contains($header, '% submit') || str_contains($header, '% draft') || str_contains($header, '% approve');
 }
 
 function rekap_weekly_xlsx_draft_pct_style(string $header, $value): int
@@ -487,6 +506,65 @@ function rekap_weekly_xlsx_draft_pct_style(string $header, $value): int
         return 5;
     }
     return 6;
+}
+
+function rekap_weekly_xlsx_submit_pct_style(string $header, $value): int
+{
+    $header = strtolower($header);
+    if (!str_contains($header, '% submit') && !str_contains($header, '% approve')) {
+        return 0;
+    }
+    $number = rekap_weekly_xlsx_numeric_value($value);
+    if ($number === null) {
+        return 0;
+    }
+    $pct = (float)$number;
+    if ($pct < 20) {
+        return 17;
+    }
+    if ($pct < 40) {
+        return 18;
+    }
+    if ($pct < 75) {
+        return 19;
+    }
+    return 20;
+}
+
+function rekap_weekly_xlsx_header_style(string $header): int
+{
+    if ($header === 'Jumlah SubSLS' || str_starts_with($header, 'Total Assignment')) {
+        return 7;
+    }
+    if (str_starts_with($header, 'Total Draft') || str_starts_with($header, '% Draft')) {
+        return 9;
+    }
+    if (str_starts_with($header, 'Total Submit') || str_starts_with($header, '% Submit')) {
+        return 8;
+    }
+    if (str_starts_with($header, 'Total Approve') || str_starts_with($header, '% Approve')) {
+        return 10;
+    }
+    if (str_starts_with($header, 'Submit Tanggal')) {
+        return 10;
+    }
+    return 1;
+}
+
+function rekap_weekly_xlsx_kecamatan_break_style(int $style): int
+{
+    return match ($style) {
+        2 => 12,
+        3 => 13,
+        4 => 14,
+        5 => 15,
+        6 => 16,
+        17 => 21,
+        18 => 22,
+        19 => 23,
+        20 => 24,
+        default => 11,
+    };
 }
 
 function rekap_weekly_xlsx_cell($value, int $row, int $col, int $style = 0, bool $numeric = false): string
@@ -544,31 +622,60 @@ function rekap_weekly_export(array $headers, array $rows, array $filters, string
 </Relationships>');
     $zip->addFromString('xl/styles.xml', '<?xml version="1.0" encoding="UTF-8"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="6">
+  <fonts count="11">
     <font><sz val="11"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><color rgb="FF1F2937"/><name val="Calibri"/></font>
     <font><sz val="9"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><color rgb="FF16A34A"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><color rgb="FFFB7185"/><name val="Calibri"/></font>
-    <font><b/><sz val="11"/><color rgb="FFDC2626"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FFB91C1C"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FF9A3412"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FF1D4ED8"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FF6D28D9"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FF15803D"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FFEAB308"/><name val="Calibri"/></font>
   </fonts>
-  <fills count="2">
+  <fills count="7">
     <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFF8FAFC"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFFFEDD5"/><bgColor indexed="64"/></patternFill></fill>
     <fill><patternFill patternType="solid"><fgColor rgb="FFDBEAFE"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFEDE9FE"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFDCFCE7"/><bgColor indexed="64"/></patternFill></fill>
   </fills>
-  <borders count="2">
+  <borders count="3">
     <border/>
     <border><left style="thin"><color rgb="FFCBD5E1"/></left><right style="thin"><color rgb="FFCBD5E1"/></right><top style="thin"><color rgb="FFCBD5E1"/></top><bottom style="thin"><color rgb="FFCBD5E1"/></bottom></border>
+    <border><left style="thin"><color rgb="FFCBD5E1"/></left><right style="thin"><color rgb="FFCBD5E1"/></right><top style="medium"><color rgb="FF111827"/></top><bottom style="thin"><color rgb="FFCBD5E1"/></bottom></border>
   </borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="7">
+  <cellXfs count="25">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
-    <xf numFmtId="0" fontId="1" fillId="1" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
     <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="2" fontId="0" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="2" fontId="3" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="2" fontId="4" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="2" fontId="5" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="6" fillId="3" borderId="1" xfId="0" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="7" fillId="4" borderId="1" xfId="0" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="8" fillId="5" borderId="1" xfId="0" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="9" fillId="6" borderId="1" xfId="0" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="2" xfId="0"/>
+    <xf numFmtId="0" fontId="2" fillId="0" borderId="2" xfId="0"/>
+    <xf numFmtId="2" fontId="0" fillId="0" borderId="2" xfId="0"/>
+    <xf numFmtId="2" fontId="3" fillId="0" borderId="2" xfId="0"/>
+    <xf numFmtId="2" fontId="4" fillId="0" borderId="2" xfId="0"/>
+    <xf numFmtId="2" fontId="5" fillId="0" borderId="2" xfId="0"/>
+    <xf numFmtId="2" fontId="5" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="2" fontId="10" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="2" fontId="7" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="2" fontId="9" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="2" fontId="5" fillId="0" borderId="2" xfId="0"/>
+    <xf numFmtId="2" fontId="10" fillId="0" borderId="2" xfId="0"/>
+    <xf numFmtId="2" fontId="7" fillId="0" borderId="2" xfId="0"/>
+    <xf numFmtId="2" fontId="9" fillId="0" borderId="2" xfId="0"/>
   </cellXfs>
 </styleSheet>');
 
@@ -578,21 +685,36 @@ function rekap_weekly_export(array $headers, array $rows, array $filters, string
         . '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
         . '<cols><col min="1" max="2" width="28" customWidth="1"/><col min="3" max="' . $identityCols . '" width="28" customWidth="1"/>'
         . '<col min="' . ($identityCols + 1) . '" max="' . $lastColumn . '" width="15" customWidth="1"/></cols><sheetData>';
+    $kecamatanIndex = array_search('Wilayah Kerja Kecamatan', $headers, true);
+    $previousKecamatan = null;
     foreach (array_merge([$headers], $rows) as $rIndex => $row) {
         $rowNumber = $rIndex + 1;
+        $hasKecamatanBreak = false;
+        if ($rowNumber > 1 && $kecamatanIndex !== false) {
+            $currentKecamatan = (string)($row[$kecamatanIndex] ?? '');
+            $hasKecamatanBreak = $rIndex > 1 && $previousKecamatan !== null && $currentKecamatan !== $previousKecamatan;
+            $previousKecamatan = $currentKecamatan;
+        }
         $sheet .= '<row r="' . $rowNumber . '"' . ($rowNumber === 1 ? ' ht="30" customHeight="1"' : '') . '>';
         $smallFontColumns = [2, $filters['petugas_type'] === 'pcl' ? 6 : 5];
         foreach ($row as $cIndex => $value) {
             $columnNumber = $cIndex + 1;
-            $style = $rowNumber === 1 ? 1 : (in_array($columnNumber, $smallFontColumns, true) ? 2 : 0);
             $header = (string)($headers[$cIndex] ?? '');
+            $style = $rowNumber === 1 ? rekap_weekly_xlsx_header_style($header) : (in_array($columnNumber, $smallFontColumns, true) ? 2 : 0);
             $numeric = $rowNumber > 1 && rekap_weekly_xlsx_header_is_numeric($header);
             if ($rowNumber > 1 && rekap_weekly_xlsx_header_is_pct($header)) {
                 $style = 3;
             }
+            $submitStyle = $rowNumber > 1 ? rekap_weekly_xlsx_submit_pct_style($header, $value) : 0;
+            if ($submitStyle !== 0) {
+                $style = $submitStyle;
+            }
             $draftStyle = $rowNumber > 1 ? rekap_weekly_xlsx_draft_pct_style($header, $value) : 0;
             if ($draftStyle !== 0) {
                 $style = $draftStyle;
+            }
+            if ($hasKecamatanBreak) {
+                $style = rekap_weekly_xlsx_kecamatan_break_style($style);
             }
             $sheet .= rekap_weekly_xlsx_cell($value, $rowNumber, $columnNumber, $style, $numeric);
         }
@@ -669,13 +791,13 @@ render_header('Rekap Petugas Weekly');
     height: 9px;
     width: 9px;
   }
-  .weekly-progress-low { color: #dc2626; font-weight: 800; }
-  .weekly-progress-warning { color: #f59e0b; font-weight: 800; }
+  .weekly-progress-low { color: #b91c1c; font-weight: 900; }
+  .weekly-progress-warning { color: #eab308; font-weight: 900; }
   .weekly-progress-mid { color: #2563eb; font-weight: 800; }
   .weekly-progress-high { color: #16a34a; font-weight: 800; }
   .weekly-draft-low { color: #16a34a; font-weight: 800; }
   .weekly-draft-warning { color: #fb7185; font-weight: 800; }
-  .weekly-draft-high { color: #dc2626; font-weight: 800; }
+  .weekly-draft-high { color: #b91c1c; font-weight: 900; }
   .weekly-table th {
     line-height: 1.1;
     text-align: center;
@@ -917,8 +1039,8 @@ render_header('Rekap Petugas Weekly');
     <div class="weekly-note-line">Diurutkan berdasarkan kecamatan lalu % Submit Ascending</div>
     <div class="weekly-note-line">Rekap PCL (<?= number_format($petugasSummary['pcl'], 0, ',', '.') ?> petugas), PML (<?= number_format($petugasSummary['pml'], 0, ',', '.') ?> petugas)</div>
     <div class="weekly-progress-legend small">
-      <span><i style="background:#dc2626"></i>&lt; 20%</span>
-      <span><i style="background:#f59e0b"></i>20% - &lt; 40%</span>
+      <span><i style="background:#b91c1c"></i>&lt; 20%</span>
+      <span><i style="background:#eab308"></i>20% - &lt; 40%</span>
       <span><i style="background:#2563eb"></i>40% - &lt; 75%</span>
       <span><i style="background:#16a34a"></i>75% - 100%</span>
     </div>
@@ -971,7 +1093,7 @@ render_header('Rekap Petugas Weekly');
                     $headerClass .= ' weekly-head-purple';
                 } elseif (str_starts_with((string)$header, 'Total Submit') || str_starts_with((string)$header, '% Submit')) {
                     $headerClass .= ' weekly-head-blue';
-                } elseif (str_starts_with((string)$header, 'Submit Tanggal')) {
+                } elseif (str_starts_with((string)$header, 'Total Approve') || str_starts_with((string)$header, '% Approve') || str_starts_with((string)$header, 'Submit Tanggal')) {
                     $headerClass .= ' weekly-head-green';
                 }
                 if (str_contains($headerText, 'email') || str_contains($headerText, 'wilayah kerja') || str_contains($headerText, 'nama pml')) {
@@ -1020,7 +1142,7 @@ render_header('Rekap Petugas Weekly');
                   $isNumeric = rekap_weekly_xlsx_header_is_numeric($header);
                   $small = str_contains($header, 'email') || str_contains($header, 'wilayah kerja');
                   $smaller = str_contains($header, 'wilayah kerja desa');
-                  $isPercent = str_contains($header, '% submit') || str_contains($header, '% draft');
+                  $isPercent = str_contains($header, '% submit') || str_contains($header, '% draft') || str_contains($header, '% approve');
                   $isDraftPercent = str_contains($header, '% draft');
                   $pctValue = $isPercent ? (float)$value : 0.0;
                 ?>

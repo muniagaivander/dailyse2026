@@ -12,7 +12,7 @@ $filters = [
     'sort_dir' => ($_GET['sort_dir'] ?? '') === 'desc' ? 'desc' : (($_GET['sort_dir'] ?? '') === 'asc' ? 'asc' : ''),
     'per_page' => in_array($requestedPerPage, [20, 50, 100], true) ? $requestedPerPage : 20,
 ];
-$rekapSearchKeys = ['search_nama', 'search_kabupaten', 'search_kecamatan', 'search_desa'];
+$rekapSearchKeys = ['search_nama', 'search_pml', 'search_kabupaten', 'search_kecamatan', 'search_desa'];
 foreach ($rekapSearchKeys as $key) {
     $filters[$key] = trim((string)($_GET[$key] ?? ''));
 }
@@ -157,6 +157,7 @@ function rekap_petugas_apply_search(array $rows, array $filters): array
 {
     $map = [
         'search_nama' => fn(array $row): string => trim((string)($row['petugas_name'] ?? '')) . ' ' . (string)($row['email'] ?? ''),
+        'search_pml' => fn(array $row): string => (string)($row['pml_names'] ?? '') . ' ' . (string)($row['pml_emails'] ?? ''),
         'search_kabupaten' => fn(array $row): string => (string)($row['kabupaten'] ?? '') . ' ' . (string)($row['kabupaten_nama'] ?? ''),
         'search_kecamatan' => fn(array $row): string => (string)($row['wilayah_kerja_kecamatan'] ?? ''),
         'search_desa' => fn(array $row): string => (string)($row['wilayah_kerja'] ?? ''),
@@ -323,6 +324,42 @@ function rekap_petugas_xlsx_pct_style(string $header, $value, int $defaultStyle 
     return 5;
 }
 
+function rekap_petugas_xlsx_header_style(string $header): int
+{
+    $header = strtolower($header);
+    if (str_contains($header, 'target') || str_contains($header, 'open') || str_contains($header, 'jumlah subsls')) {
+        return 10;
+    }
+    if (str_contains($header, 'draft')) {
+        return 11;
+    }
+    if (str_contains($header, 'progress') || str_contains($header, 'submit')) {
+        return 12;
+    }
+    if (str_contains($header, 'reject') || str_contains($header, 'pending')) {
+        return 13;
+    }
+    if (str_contains($header, 'approve')) {
+        return 14;
+    }
+    return 9;
+}
+
+function rekap_petugas_xlsx_kecamatan_break_style(int $style): int
+{
+    return match ($style) {
+        1 => 16,
+        2 => 17,
+        3 => 18,
+        4 => 19,
+        5 => 20,
+        6 => 21,
+        7 => 22,
+        8 => 23,
+        default => 15,
+    };
+}
+
 function rekap_petugas_xlsx_cell($value, int $row, int $col, int $style = 0, bool $numeric = false): string
 {
     $ref = rekap_petugas_xlsx_col($col) . $row;
@@ -382,18 +419,31 @@ function rekap_petugas_export(array $headers, array $rows, string $format, strin
   <fonts count="9">
     <font><sz val="11"/><name val="Calibri"/></font>
     <font><sz val="9"/><name val="Calibri"/></font>
-    <font><b/><sz val="11"/><color rgb="FFDC2626"/><name val="Calibri"/></font>
-    <font><b/><sz val="11"/><color rgb="FFF59E0B"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FFB91C1C"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FFEAB308"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><color rgb="FF2563EB"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><color rgb="FF16A34A"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><color rgb="FF16A34A"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><color rgb="FFFB7185"/><name val="Calibri"/></font>
-    <font><b/><sz val="11"/><color rgb="FFDC2626"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FFB91C1C"/><name val="Calibri"/></font>
   </fonts>
-  <fills count="1"><fill><patternFill patternType="none"/></fill></fills>
-  <borders count="1"><border/></borders>
+  <fills count="8">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFF8FAFC"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFDBEAFE"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFFEF3C7"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFDCFCE7"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFFEE2E2"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFBBF7D0"/><bgColor indexed="64"/></patternFill></fill>
+  </fills>
+  <borders count="3">
+    <border/>
+    <border><left style="thin"><color rgb="FFCBD5E1"/></left><right style="thin"><color rgb="FFCBD5E1"/></right><top style="thin"><color rgb="FFCBD5E1"/></top><bottom style="thin"><color rgb="FFCBD5E1"/></bottom></border>
+    <border><left style="thin"><color rgb="FFCBD5E1"/></left><right style="thin"><color rgb="FFCBD5E1"/></right><top style="medium"><color rgb="FF111827"/></top><bottom style="thin"><color rgb="FFCBD5E1"/></bottom></border>
+  </borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="9">
+  <cellXfs count="24">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0"/>
@@ -403,19 +453,45 @@ function rekap_petugas_export(array $headers, array $rows, string $format, strin
     <xf numFmtId="0" fontId="6" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="7" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="8" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="0" fillId="2" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="4" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="5" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="6" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="7" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="2" xfId="0"/>
+    <xf numFmtId="0" fontId="1" fillId="0" borderId="2" xfId="0"/>
+    <xf numFmtId="0" fontId="2" fillId="0" borderId="2" xfId="0"/>
+    <xf numFmtId="0" fontId="3" fillId="0" borderId="2" xfId="0"/>
+    <xf numFmtId="0" fontId="4" fillId="0" borderId="2" xfId="0"/>
+    <xf numFmtId="0" fontId="5" fillId="0" borderId="2" xfId="0"/>
+    <xf numFmtId="0" fontId="6" fillId="0" borderId="2" xfId="0"/>
+    <xf numFmtId="0" fontId="7" fillId="0" borderId="2" xfId="0"/>
+    <xf numFmtId="0" fontId="8" fillId="0" borderId="2" xfId="0"/>
   </cellXfs>
 </styleSheet>');
     $smallFontColumns = [2, $type === 'pcl' ? 6 : 5];
     $sheet = '<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
+    $kecamatanIndex = array_search('Wilayah Kerja Kecamatan', $headers, true);
+    $previousKecamatan = null;
     foreach (array_merge([$headers], $rows) as $rIndex => $row) {
         $rowNumber = $rIndex + 1;
+        $hasKecamatanBreak = false;
+        if ($rowNumber > 1 && $kecamatanIndex !== false) {
+            $currentKecamatan = (string)($row[$kecamatanIndex] ?? '');
+            $hasKecamatanBreak = $rIndex > 1 && $previousKecamatan !== null && $currentKecamatan !== $previousKecamatan;
+            $previousKecamatan = $currentKecamatan;
+        }
         $sheet .= '<row r="' . $rowNumber . '">';
         foreach ($row as $cIndex => $value) {
             $columnNumber = $cIndex + 1;
-            $style = $rowNumber > 1 && in_array($columnNumber, $smallFontColumns, true) ? 1 : 0;
+            $style = $rowNumber === 1 ? rekap_petugas_xlsx_header_style((string)($headers[$cIndex] ?? '')) : (in_array($columnNumber, $smallFontColumns, true) ? 1 : 0);
             $header = (string)($headers[$cIndex] ?? '');
             $numeric = $rowNumber > 1 && rekap_petugas_xlsx_header_is_numeric($header);
             $style = $rowNumber > 1 ? rekap_petugas_xlsx_pct_style($header, $value, $style) : $style;
+            if ($hasKecamatanBreak) {
+                $style = rekap_petugas_xlsx_kecamatan_break_style($style);
+            }
             $sheet .= rekap_petugas_xlsx_cell($value, $rowNumber, $columnNumber, $style, $numeric);
         }
         $sheet .= '</row>';
@@ -681,12 +757,12 @@ render_header('Rekap Petugas');
     max-width: 96px;
   }
   .rekap-progress-low {
-    color: #dc2626 !important;
-    font-weight: 800;
+    color: #b91c1c !important;
+    font-weight: 900;
   }
   .rekap-progress-warning {
-    color: #f59e0b !important;
-    font-weight: 800;
+    color: #eab308 !important;
+    font-weight: 900;
   }
   .rekap-progress-mid {
     color: #2563eb !important;
@@ -705,8 +781,8 @@ render_header('Rekap Petugas');
     font-weight: 800;
   }
   .rekap-draft-high {
-    color: #dc2626 !important;
-    font-weight: 800;
+    color: #b91c1c !important;
+    font-weight: 900;
   }
   .rekap-progress-legend {
     align-items: center;
@@ -771,8 +847,8 @@ render_header('Rekap Petugas');
   <div><em>Progress Pendataan = Submit+Reject+Pending+Approve</em></div>
   <div class="small mt-1">Diurutkan <em>default</em> berdasarkan kecamatan dan % Progress Pendataan Ascending</div>
   <div class="small mt-2 rekap-progress-legend">
-    <span><i style="background:#dc2626"></i>&lt; 20%</span>
-    <span><i style="background:#f59e0b"></i>20% - &lt; 40%</span>
+    <span><i style="background:#b91c1c"></i>&lt; 20%</span>
+    <span><i style="background:#eab308"></i>20% - &lt; 40%</span>
     <span><i style="background:#2563eb"></i>40% - &lt; 75%</span>
     <span><i style="background:#16a34a"></i>75% - 100%</span>
   </div>
@@ -840,7 +916,7 @@ render_header('Rekap Petugas');
       <thead>
         <tr>
           <th><div class="rekap-header-label">Nama Petugas</div><input class="form-control form-control-sm rekap-search-input" type="search" placeholder="Cari nama" value="<?= e($filters['search_nama']) ?>" data-rekap-server-search="search_nama"></th>
-          <?php if ($filters['petugas_type'] === 'pcl'): ?><th><div class="rekap-header-label">Nama PML</div><span class="rekap-control-spacer"></span></th><?php endif; ?>
+          <?php if ($filters['petugas_type'] === 'pcl'): ?><th><div class="rekap-header-label">Nama PML</div><input class="form-control form-control-sm rekap-search-input" type="search" placeholder="Cari PML" value="<?= e($filters['search_pml']) ?>" data-rekap-server-search="search_pml"></th><?php endif; ?>
           <th><div class="rekap-header-label">Kabupaten</div><input class="form-control form-control-sm rekap-search-input" type="search" placeholder="Cari kab" value="<?= e($filters['search_kabupaten']) ?>" data-rekap-server-search="search_kabupaten"></th>
           <th><div class="rekap-header-label">Wilayah<br>Kerja<br>Kecamatan</div><input class="form-control form-control-sm rekap-search-input" type="search" placeholder="Cari kec" value="<?= e($filters['search_kecamatan']) ?>" data-rekap-server-search="search_kecamatan"></th>
           <th><div class="rekap-header-label">Wilayah<br>Kerja<br>Desa</div><input class="form-control form-control-sm rekap-search-input" type="search" placeholder="Cari desa" value="<?= e($filters['search_desa']) ?>" data-rekap-server-search="search_desa"></th>
@@ -984,6 +1060,7 @@ document.querySelectorAll('#rekapPetugasTable').forEach(function (table) {
     select.addEventListener('change', function () {
       const direction = select.value;
       const params = new URLSearchParams(window.location.search);
+      params.set('filter', '1');
       params.delete('page');
       if (direction === 'asc' || direction === 'desc') {
         params.set('sort_key', select.dataset.rekapSortKey || '');
