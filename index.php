@@ -2566,7 +2566,14 @@ function initDashboardProgressMap() {
         if (!item.getBounds || !item.feature) return;
         const label = dashboardMapAreaLabel(item.feature, level);
         if (!label || label === '-') return;
-        const center = item.getCenter ? item.getCenter() : item.getBounds().getCenter();
+        let center = item.getBounds().getCenter();
+        if (item.getCenter) {
+          try {
+            center = item.getCenter();
+          } catch (e) {
+            center = item.getBounds().getCenter();
+          }
+        }
         L.marker(center, {
           interactive: false,
           keyboard: false,
