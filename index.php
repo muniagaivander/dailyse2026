@@ -7,10 +7,12 @@ ensure_completion_status_table();
 $fields = status_fields();
 $statusColors = ['#2563eb', '#f59e0b', '#16a34a', '#dc2626', '#7c3aed', '#0f766e'];
 $rangeColors = [
-    ['label' => '< 20%', 'color' => '#dc2626'],
-    ['label' => '20% - < 40%', 'color' => '#f59e0b'],
-    ['label' => '40% - < 75%', 'color' => '#2563eb'],
-    ['label' => '75% - 100%', 'color' => '#16a34a'],
+    ['label' => '< 20%', 'color' => '#b91c1c'],
+    ['label' => '20% - < 40%', 'color' => '#f87171'],
+    ['label' => '40% - < 60%', 'color' => '#d97706'],
+    ['label' => '60% - < 75%', 'color' => '#facc15'],
+    ['label' => '75% - < 85%', 'color' => '#22c55e'],
+    ['label' => '85% - < 100%', 'color' => '#15803d'],
 ];
 $activeTab = $_GET['tab'] ?? 'submit_approve';
 $allowedTabs = ['submit_approve', 'status', 'selesai'];
@@ -27,6 +29,7 @@ $filters = [
     'kab_id' => $_GET['kab_id'] ?? '',
     'kec_id' => $_GET['kec_id'] ?? '',
     'desa_id' => $_GET['desa_id'] ?? '',
+    'subsls_id' => $_GET['subsls_id'] ?? '',
     'pengawas_email' => normalize_email($_GET['pengawas_email'] ?? ''),
     'pencacah_email' => normalize_email($_GET['pencacah_email'] ?? ''),
 ];
@@ -42,7 +45,7 @@ if ($user['role'] === 'pencacah') {
 
 function dashboard_filter_options(array $user, array $filters): array
 {
-    $out = ['kabupaten' => [], 'kecamatan' => [], 'desa' => [], 'pengawas' => [], 'pencacah' => []];
+    $out = ['kabupaten' => [], 'kecamatan' => [], 'desa' => [], 'subsls' => [], 'pengawas' => [], 'pencacah' => []];
     if (in_array($user['role'], ['superadmin', 'viewer_prov'], true)) {
         $out['kabupaten'] = db()->query("SELECT id value, CONCAT(id,' - ',nmkab) label FROM master_kab ORDER BY id")->fetchAll();
     } elseif (in_array($user['role'], ['admin_kab', 'viewer_kab'], true)) {
@@ -62,6 +65,14 @@ function dashboard_filter_options(array $user, array $filters): array
         $out['desa'] = $stmt->fetchAll();
     }
     if (!empty($filters['desa_id'])) {
+        $stmt = db()->prepare("SELECT ms.id value, CONCAT(sl.kdsls, ms.kdsubsls, ' - ', sl.nmsls, ' - ', ms.kdsubsls) label
+            FROM master_subsls ms
+            JOIN master_sls sl ON sl.id=ms.sls_id
+            WHERE sl.desa_id=?
+            ORDER BY sl.kdsls, ms.kdsubsls");
+        $stmt->execute([$filters['desa_id']]);
+        $out['subsls'] = $stmt->fetchAll();
+
         $stmt = db()->prepare("SELECT DISTINCT ms.pengawas_email value, up.name
             FROM master_subsls ms
             JOIN master_sls sl ON sl.id=ms.sls_id
@@ -138,6 +149,10 @@ function dashboard_where(array $user, array $filters): array
         $where[] = 'd.id=?';
         $params[] = $filters['desa_id'];
     }
+    if (!empty($filters['subsls_id'])) {
+        $where[] = 'ms.id=?';
+        $params[] = $filters['subsls_id'];
+    }
     if ($user['role'] === 'pengawas') {
         $where[] = 'ms.pengawas_email=?';
         $params[] = $user['email'];
@@ -157,17 +172,8 @@ function dashboard_where(array $user, array $filters): array
 
 function dashboard_grouping(array $user, array $filters): array
 {
-    if ($user['role'] === 'pencacah') {
-        return ['ms.id', "CONCAT(sl.nmsls,' - ',ms.kdsubsls)"];
-    }
-    if (!empty($filters['pencacah_email'])) {
-        return ['ms.id', "CONCAT(sl.nmsls,' - ',ms.kdsubsls)"];
-    }
-    if ($user['role'] === 'pengawas' || !empty($filters['pengawas_email'])) {
-        return ['ms.pencacah_email', 'ms.pencacah_email'];
-    }
-    if (!empty($filters['desa_id'])) {
-        return ['ms.pengawas_email', 'ms.pengawas_email'];
+    if (!empty($filters['subsls_id']) || !empty($filters['desa_id']) || $user['role'] === 'pencacah') {
+        return ['ms.id', "CONCAT(sl.kdsls, ms.kdsubsls)"];
     }
     if (!empty($filters['kec_id'])) {
         return ['d.id', "CONCAT(d.kddesa,' - ',d.nmdesa)"];
@@ -209,6 +215,116 @@ function dashboard_rows(array $user, array $filters, array $fields): array
         unset($row);
     }
     return $rows;
+}
+
+function dashboard_map_grouping(array $filters): array
+{
+    if (!empty($filters['desa_id'])) {
+        return ['subsls', 'ms.id', "CONCAT(sl.kdsls, ms.kdsubsls)"];
+    }
+    if (!empty($filters['kec_id'])) {
+        return ['desa', 'd.id', "CONCAT(d.kddesa,' - ',d.nmdesa)"];
+    }
+    if (!empty($filters['kab_id'])) {
+        return ['kecamatan', 'kc.id', "CONCAT(kc.kdkec,' - ',kc.nmkec)"];
+    }
+    return ['kabupaten', 'k.id', "CONCAT(k.id,' - ',k.nmkab)"];
+}
+
+function dashboard_map_rows(array $user, array $filters, array $fields): array
+{
+    [$sqlWhere, $params] = dashboard_where($user, $filters);
+    [$level, $codeExpr, $labelExpr] = dashboard_map_grouping($filters);
+    $selects = [];
+    foreach (array_keys($fields) as $f) {
+        $selects[] = "COALESCE(SUM(ss.$f),0) $f";
+    }
+    $petugasSelect = $level === 'subsls'
+        ? ", MAX(up.name) pengawas_name, MAX(ms.pengawas_email) pengawas_email, MAX(uc.name) pencacah_name, MAX(ms.pencacah_email) pencacah_email"
+        : "";
+    $petugasJoin = $level === 'subsls'
+        ? "LEFT JOIN users up ON up.email=ms.pengawas_email
+        LEFT JOIN users uc ON uc.email=ms.pencacah_email"
+        : "";
+    $stmt = db()->prepare("SELECT $codeExpr code, $labelExpr label, COALESCE(SUM(ss.target),0) target, " . implode(',', $selects) . ",
+            COUNT(ms.id) subsls_total
+            $petugasSelect
+        FROM master_subsls ms
+        JOIN master_sls sl ON sl.id=ms.sls_id
+        JOIN master_desa d ON d.id=sl.desa_id
+        JOIN master_kec kc ON kc.id=d.kec_id
+        JOIN master_kab k ON k.id=kc.kab_id
+        JOIN master_prov p ON p.id=k.prov_id
+        LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
+        $petugasJoin
+        $sqlWhere
+        GROUP BY $codeExpr, label
+        ORDER BY $codeExpr");
+    $stmt->execute($params);
+    return ['level' => $level, 'rows' => $stmt->fetchAll()];
+}
+
+function dashboard_area_breadcrumb(array $user, array $filters): string
+{
+    return implode(' >> ', array_map(fn($item) => $item['label'], dashboard_area_breadcrumb_items($user, $filters)));
+}
+
+function dashboard_area_breadcrumb_items(array $user, array $filters): array
+{
+    $parts = [];
+    $base = ['tab' => 'submit_approve'];
+    $kabId = in_array($user['role'], ['admin_kab', 'viewer_kab'], true) ? (string)$user['kab_id'] : (string)($filters['kab_id'] ?? '');
+    if (in_array($user['role'], ['superadmin', 'viewer_prov'], true)) {
+        $parts[] = [
+            'label' => 'Kaltim',
+            'href' => '?' . http_build_query($base),
+        ];
+    }
+    if ($kabId !== '') {
+        $stmt = db()->prepare("SELECT nmkab FROM master_kab WHERE id=?");
+        $stmt->execute([$kabId]);
+        $parts[] = [
+            'label' => (string)($stmt->fetchColumn() ?: $kabId),
+            'href' => '?' . http_build_query($base + ['kab_id' => $kabId]),
+        ];
+    } elseif (!in_array($user['role'], ['superadmin', 'viewer_prov'], true)) {
+        $parts[] = [
+            'label' => 'Kaltim',
+            'href' => null,
+        ];
+    }
+
+    if (!empty($filters['kec_id'])) {
+        $stmt = db()->prepare("SELECT kdkec, nmkec FROM master_kec WHERE id=?");
+        $stmt->execute([$filters['kec_id']]);
+        $row = $stmt->fetch() ?: [];
+        $parts[] = [
+            'label' => ($row ? (string)$row['kdkec'] . '-' . (string)$row['nmkec'] : (string)$filters['kec_id']),
+            'href' => '?' . http_build_query($base + ['kab_id' => $kabId, 'kec_id' => $filters['kec_id']]),
+        ];
+    }
+    if (!empty($filters['desa_id'])) {
+        $stmt = db()->prepare("SELECT kddesa, nmdesa FROM master_desa WHERE id=?");
+        $stmt->execute([$filters['desa_id']]);
+        $row = $stmt->fetch() ?: [];
+        $parts[] = [
+            'label' => ($row ? (string)$row['kddesa'] . '-' . (string)$row['nmdesa'] : (string)$filters['desa_id']),
+            'href' => '?' . http_build_query($base + ['kab_id' => $kabId, 'kec_id' => $filters['kec_id'], 'desa_id' => $filters['desa_id']]),
+        ];
+    }
+    if (!empty($filters['subsls_id'])) {
+        $stmt = db()->prepare("SELECT CONCAT(sl.kdsls, '-', ms.kdsubsls, ' ', sl.nmsls, ' - Sub ', ms.kdsubsls)
+            FROM master_subsls ms
+            JOIN master_sls sl ON sl.id=ms.sls_id
+            WHERE ms.id=?");
+        $stmt->execute([$filters['subsls_id']]);
+        $parts[] = [
+            'label' => (string)($stmt->fetchColumn() ?: $filters['subsls_id']),
+            'href' => '?' . http_build_query($base + ['kab_id' => $kabId, 'kec_id' => $filters['kec_id'], 'desa_id' => $filters['desa_id'], 'subsls_id' => $filters['subsls_id']]),
+        ];
+    }
+
+    return array_values(array_filter($parts, fn($part) => trim((string)$part['label']) !== ''));
 }
 
 function dashboard_totals(array $rows, array $fields): array
@@ -1187,7 +1303,6 @@ if (($_GET['action'] ?? '') === 'export_performance_temporary'
             round($progressPct, 2),
             (int)ceil((float)$row['average_per_day']),
             (int)$row['yesterday_achievement'],
-            $row['required_daily_target'] === null ? 'Lewat Target' : (int)$row['required_daily_target'],
             round((float)$row['stddev'], 2),
             round((float)$row['consistency_score'], 2),
             $row['projected_finish_iso'] ?? $row['projected_finish'],
@@ -1196,7 +1311,7 @@ if (($_GET['action'] ?? '') === 'export_performance_temporary'
         ];
     }
     dashboard_export_rows(
-        ['rank', 'petugas', 'kode_kab', 'kecamatan', 'wilayah_kerja', 'target', 'progress_count', 'progress_persen', 'rata_rata_per_hari', 'capaian_kemarin_assignment', 'target_hari_ini_assignment', 'standar_deviasi', 'konsistensi_persen', 'prediksi_selesai', 'status', 'skor'],
+        ['rank', 'petugas', 'kode_kab', 'kecamatan', 'wilayah_kerja', 'target', 'progress_count', 'progress_persen', 'rata_rata_per_hari', 'capaian_kemarin_assignment', 'standar_deviasi', 'konsistensi_persen', 'prediksi_selesai', 'status', 'skor'],
         $exportRows,
         'performa_sementara_' . $type . '_' . $scopeId . '_' . date('Ymd_His'),
         'xlsx'
@@ -1267,6 +1382,7 @@ if (($_GET['action'] ?? '') === 'export_dashboard') {
 
 $opts = dashboard_filter_options($user, $filters);
 $chartRows = dashboard_rows($user, $filters, $fields);
+$dashboardMap = dashboard_map_rows($user, $filters, $fields);
 $totals = dashboard_totals($chartRows, $fields);
 $petugasCounts = dashboard_petugas_counts($user, $filters);
 $latestDailyStatusLabel = dashboard_latest_status_label($user, $filters);
@@ -1325,6 +1441,11 @@ function performance_petugas_html(string $email, string $name): string
     }
     return e($name) . ' <span class="performance-staff-email">(' . e($email) . ')</span>';
 }
+
+$EXTRA_HEAD = ($EXTRA_HEAD ?? '') . '
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>';
+$HIDE_PAGE_TITLE = true;
 
 render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role'] === 'pencacah' ? 'Dashboard Pencacah' : 'Dashboard'));
 ?>
@@ -1472,7 +1593,7 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
 .dashboard-summary-table .summary-head-red,
 .attention-table .summary-head-red {
   background: #fee2e2 !important;
-  color: #7f1d1d;
+  color: #b91c1c;
 }
 .dashboard-summary-table .summary-head-dark-green,
 .attention-table .summary-head-dark-green {
@@ -1570,6 +1691,182 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
   border-left-color: #dc2626;
 }
 .dashboard-stat-card.card-red p { color: #991b1b; }
+.dashboard-map-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, .65fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.dashboard-map-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.dashboard-map-header {
+  align-items: center;
+  background: #fb923c;
+  border-bottom: 1px solid #ea580c;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+.dashboard-map-title {
+  color: #111827;
+  font-size: .92rem;
+  font-weight: 800;
+  line-height: 1.15;
+}
+.dashboard-map-subtitle {
+  color: #111827;
+  font-size: .72rem;
+  line-height: 1.15;
+}
+.dashboard-map-header .btn {
+  background: #2563eb;
+  border-color: #1d4ed8;
+  color: #ffffff;
+  font-weight: 800;
+}
+.dashboard-map-header .btn i {
+  color: #ffffff;
+}
+.dashboard-map-header .btn:hover {
+  background: #1d4ed8;
+  border-color: #1e40af;
+  color: #ffffff;
+}
+.dashboard-map-breadcrumb {
+  background: #ffffff;
+  border: 1px solid #fdba74;
+  border-radius: 999px;
+  color: #1f2937;
+  font-size: .95rem;
+  font-weight: 800;
+  margin: 10px 12px 12px;
+  overflow: hidden;
+  padding: 7px 14px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: normal;
+}
+.dashboard-map-breadcrumb a {
+  color: #1d4ed8;
+  text-decoration: none;
+}
+.dashboard-map-breadcrumb a:hover {
+  color: #ea580c;
+  text-decoration: underline;
+}
+.dashboard-map-breadcrumb .breadcrumb-separator {
+  color: #9ca3af;
+  margin: 0 7px;
+}
+#dashboardProgressMap {
+  background: #f8fafc;
+  height: 520px;
+  width: 100%;
+}
+.dashboard-map-loading {
+  align-items: center;
+  color: #6b7280;
+  display: flex;
+  height: 100%;
+  justify-content: center;
+}
+.dashboard-map-popup {
+  font-size: .82rem;
+  line-height: 1.45;
+}
+.dashboard-map-popup strong {
+  color: #111827;
+}
+.dashboard-map-tooltip {
+  background: rgba(255, 255, 255, .95);
+  border: 1px solid rgba(148, 163, 184, .85);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, .18);
+  color: #111827;
+  font-size: 11px;
+  line-height: 1.35;
+  padding: 7px 8px;
+}
+.dashboard-map-tooltip .map-tooltip-title {
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+.dashboard-map-tooltip .map-tooltip-row {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-width: 155px;
+}
+.dashboard-map-tooltip hr {
+  border: 0;
+  border-top: 1px solid #e5e7eb;
+  margin: 5px 0;
+}
+.dashboard-map-legend {
+  background: rgba(255, 255, 255, .92);
+  border: 1px solid rgba(148, 163, 184, .7);
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, .16);
+  color: #111827;
+  font-size: 10px;
+  line-height: 1.15;
+  padding: 6px 7px;
+}
+.dashboard-map-legend-row {
+  align-items: center;
+  display: flex;
+  gap: 5px;
+  white-space: nowrap;
+}
+.dashboard-map-legend-row + .dashboard-map-legend-row {
+  margin-top: 3px;
+}
+.dashboard-map-legend-swatch {
+  border-radius: 999px;
+  display: inline-block;
+  height: 8px;
+  width: 8px;
+}
+.dashboard-map-opacity-control {
+  background: rgba(255, 255, 255, .94);
+  border: 1px solid rgba(148, 163, 184, .7);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, .16);
+  color: #111827;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 6px 7px;
+  width: 38px;
+}
+.dashboard-map-opacity-control input[type="range"] {
+  display: block;
+  height: 86px;
+  margin: 0 auto;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  accent-color: #ea580c;
+}
+.dashboard-side-card-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.dashboard-side-card-grid .dashboard-stat-card {
+  margin-bottom: 0;
+}
+.dashboard-side-card-grid .dashboard-stat-card .inner {
+  padding: 11px;
+}
+.dashboard-side-card-grid .dashboard-stat-card h4 {
+  font-size: 1.12rem;
+}
+.dashboard-side-card-grid .dashboard-stat-card p {
+  font-size: .78rem;
+}
 .best-progress {
   color: #16a34a;
   font-weight: 800;
@@ -1584,16 +1881,22 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
 }
 @media (max-width: 767.98px) {
   .dashboard-chart-wrap { height: 340px; }
+  .dashboard-map-summary {
+    grid-template-columns: 1fr;
+  }
+  #dashboardProgressMap {
+    height: 380px;
+  }
 }
 </style>
 
 <div class="dashboard-tabs">
-  <a class="dashboard-tab <?= $activeTab==='submit_approve'?'active':'' ?>" href="?<?= e(http_build_query(array_merge($_GET, ['tab' => 'submit_approve']))) ?>">Progress Pendataan</a>
-  <a class="dashboard-tab <?= $activeTab==='status'?'active':'' ?>" href="?<?= e(http_build_query(array_merge($_GET, ['tab' => 'status']))) ?>">Progress By Status</a>
-  <a class="dashboard-tab <?= $activeTab==='selesai'?'active':'' ?>" href="?<?= e(http_build_query(array_merge($_GET, ['tab' => 'selesai']))) ?>">Progress Selesai SubSLS</a>
+  <a class="dashboard-tab <?= $activeTab==='submit_approve'?'active':'' ?>" href="?<?= e(http_build_query(array_merge($_GET, ['tab' => 'submit_approve']))) ?>">Pendataan</a>
+  <a class="dashboard-tab <?= $activeTab==='status'?'active':'' ?>" href="?<?= e(http_build_query(array_merge($_GET, ['tab' => 'status']))) ?>">Status</a>
+  <a class="dashboard-tab <?= $activeTab==='selesai'?'active':'' ?>" href="?<?= e(http_build_query(array_merge($_GET, ['tab' => 'selesai']))) ?>">Selesai SubSLS</a>
   <?php if ($canSeePerformance): ?>
-    <a class="dashboard-tab <?= $activeTab==='performa_pengawas'?'active':'' ?>" href="?tab=performa_pengawas">Performa Pengawas</a>
-    <a class="dashboard-tab <?= $activeTab==='performa_pencacah'?'active':'' ?>" href="?tab=performa_pencacah">Performa Pencacah</a>
+    <a class="dashboard-tab <?= $activeTab==='performa_pengawas'?'active':'' ?>" href="?tab=performa_pengawas">Performa PML</a>
+    <a class="dashboard-tab <?= $activeTab==='performa_pencacah'?'active':'' ?>" href="?tab=performa_pencacah">Performa PCL</a>
   <?php endif; ?>
 </div>
 
@@ -1609,6 +1912,103 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
   <a class="btn btn-outline-success btn-sm mr-2" href="?<?= e(http_build_query($exportCsvQuery)) ?>"><i class="fas fa-file-csv mr-1"></i>Export CSV</a>
   <a class="btn btn-outline-success btn-sm" href="?<?= e(http_build_query($exportXlsxQuery)) ?>"><i class="fas fa-file-excel mr-1"></i>Export Excel</a>
 </div>
+<?php
+  $targetTotal = (int)$totals['target'];
+  $dashboardCards = [
+      ['label' => 'Target', 'value' => dashboard_count_only_text($targetTotal), 'variant' => 'card-orange'],
+      ['label' => 'Progress Pendataan', 'value' => dashboard_count_pct_text($submitApproveCount, $submitApprovePct), 'variant' => 'card-progress'],
+      ['label' => 'Approve', 'value' => dashboard_count_pct_text((int)$totals['approved_by_pengawas'], $targetTotal ? (int)$totals['approved_by_pengawas'] / $targetTotal * 100 : 0), 'variant' => 'card-light-green'],
+      ['label' => 'Submit', 'value' => dashboard_count_pct_text((int)$totals['submitted_by_pencacah'], $targetTotal ? (int)$totals['submitted_by_pencacah'] / $targetTotal * 100 : 0), 'variant' => 'card-blue'],
+      ['label' => 'Open', 'value' => dashboard_count_pct_text((int)$totals['open_count'], $targetTotal ? (int)$totals['open_count'] / $targetTotal * 100 : 0), 'variant' => 'card-orange'],
+      ['label' => 'Draft', 'value' => dashboard_count_pct_text((int)$totals['draft_count'], $targetTotal ? (int)$totals['draft_count'] / $targetTotal * 100 : 0), 'variant' => 'card-yellow'],
+      ['label' => 'Reject', 'value' => dashboard_count_pct_text((int)$totals['rejected_by_pengawas'], $targetTotal ? (int)$totals['rejected_by_pengawas'] / $targetTotal * 100 : 0), 'variant' => 'card-red'],
+      ['label' => 'Pending', 'value' => dashboard_count_pct_text((int)$totals['pending_count'], $targetTotal ? (int)$totals['pending_count'] / $targetTotal * 100 : 0), 'variant' => 'card-yellow'],
+      ['label' => 'SubSLS Selesai', 'value' => dashboard_count_pct_text((int)$totals['selesai_count'], $completionPct), 'variant' => 'card-orange'],
+      ['label' => 'Total SubSLS', 'value' => dashboard_count_only_text((int)$totals['subsls_total']), 'variant' => 'card-orange'],
+      ['label' => 'PCL', 'value' => dashboard_count_only_text((int)$petugasCounts['pcl']), 'variant' => 'card-orange'],
+      ['label' => 'PML', 'value' => dashboard_count_only_text((int)$petugasCounts['pml']), 'variant' => 'card-orange'],
+  ];
+?>
+<?php if ($activeTab === 'submit_approve'): ?>
+  <?php
+    $mapLevelLabels = [
+        'kabupaten' => 'Kabupaten',
+        'kecamatan' => 'Kecamatan',
+        'desa' => 'Desa',
+        'subsls' => 'SubSLS',
+    ];
+    $mapTitle = 'Progres per ' . ($mapLevelLabels[$dashboardMap['level']] ?? 'Wilayah');
+    $mapBreadcrumb = dashboard_area_breadcrumb($user, $filters);
+    $mapBreadcrumbItems = dashboard_area_breadcrumb_items($user, $filters);
+    $mapBackLabel = null;
+    $mapBackQuery = $_GET;
+    $mapBackQuery['tab'] = 'submit_approve';
+    if ($dashboardMap['level'] === 'kecamatan') {
+        unset($mapBackQuery['kab_id'], $mapBackQuery['kec_id'], $mapBackQuery['desa_id'], $mapBackQuery['subsls_id'], $mapBackQuery['pengawas_email'], $mapBackQuery['pencacah_email']);
+        $mapBackLabel = 'Kembali';
+    } elseif ($dashboardMap['level'] === 'desa') {
+        unset($mapBackQuery['kec_id'], $mapBackQuery['desa_id'], $mapBackQuery['subsls_id'], $mapBackQuery['pengawas_email'], $mapBackQuery['pencacah_email']);
+        $mapBackLabel = 'Kembali';
+    } elseif ($dashboardMap['level'] === 'subsls') {
+        unset($mapBackQuery['desa_id'], $mapBackQuery['subsls_id'], $mapBackQuery['pengawas_email'], $mapBackQuery['pencacah_email']);
+        $mapBackLabel = 'Kembali';
+    }
+  ?>
+  <div class="dashboard-map-summary">
+    <div class="dashboard-map-card">
+      <div class="dashboard-map-header">
+        <div>
+          <div class="dashboard-map-title"><?= e($mapTitle) ?></div>
+          <div class="dashboard-map-subtitle">Klik untuk menyesuaikan filter</div>
+        </div>
+        <?php if ($mapBackLabel): ?>
+          <a class="btn btn-outline-secondary btn-sm" href="?<?= e(http_build_query($mapBackQuery)) ?>"><i class="fas fa-arrow-left mr-1"></i><?= e($mapBackLabel) ?></a>
+        <?php endif; ?>
+      </div>
+      <div id="dashboardProgressMap"><div class="dashboard-map-loading">Memuat peta...</div></div>
+      <div class="dashboard-map-breadcrumb" title="<?= e($mapBreadcrumb) ?>">
+        <?php foreach ($mapBreadcrumbItems as $i => $item): ?>
+          <?php if ($i > 0): ?><span class="breadcrumb-separator">&gt;&gt;</span><?php endif; ?>
+          <?php if (!empty($item['href'])): ?>
+            <a href="<?= e($item['href']) ?>"><?= e($item['label']) ?></a>
+          <?php else: ?>
+            <span><?= e($item['label']) ?></span>
+          <?php endif; ?>
+        <?php endforeach; ?>
+      </div>
+    </div>
+    <div class="dashboard-side-card-grid">
+      <?php foreach ($dashboardCards as $card): ?>
+        <div class="small-box dashboard-stat-card <?= e($card['variant'] ?? 'card-orange') ?>">
+          <div class="inner">
+            <h4 class="mb-1"><?= $card['value'] ?></h4>
+            <p><?= e($card['label']) ?></p>
+          </div>
+        </div>
+      <?php endforeach; ?>
+    </div>
+  </div>
+<?php else: ?>
+  <div class="row">
+    <?php foreach ($dashboardCards as $card): ?>
+      <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6">
+        <div class="small-box dashboard-stat-card <?= e($card['variant'] ?? 'card-orange') ?>">
+          <div class="inner">
+            <h4 class="mb-1"><?= $card['value'] ?></h4>
+            <p><?= e($card['label']) ?></p>
+          </div>
+        </div>
+      </div>
+    <?php endforeach; ?>
+  </div>
+<?php endif; ?>
+
+<?php if (in_array($activeTab, ['submit_approve', 'selesai'], true)): ?>
+  <div class="range-legend">
+    <?php foreach ($rangeColors as $item): ?><span><i style="background:<?= e($item['color']) ?>"></i><?= e($item['label']) ?></span><?php endforeach; ?>
+  </div>
+<?php endif; ?>
+
 <form class="card card-body mb-3" method="get">
   <input type="hidden" name="tab" value="<?= e($activeTab) ?>">
   <div class="form-row align-items-end">
@@ -1640,20 +2040,10 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
         </select>
       </div>
       <div class="form-group col-md-3">
-        <label>Pengawas</label>
-        <select class="form-control" name="pengawas_email" id="pengawas_email" <?= $filters['desa_id'] ? '' : 'disabled' ?>>
-          <option value=""><?= $filters['desa_id'] ? 'Semua Pengawas' : 'Pilih desa dulu' ?></option>
-          <?php foreach ($opts['pengawas'] as $o): ?><option value="<?= e($o['value']) ?>" <?= $filters['pengawas_email']===$o['value']?'selected':'' ?>><?= e($o['label']) ?></option><?php endforeach; ?>
-        </select>
-      </div>
-    <?php endif; ?>
-
-    <?php if ($user['role'] !== 'pencacah'): ?>
-      <div class="form-group col-md-3">
-        <label>Pencacah</label>
-        <select class="form-control" name="pencacah_email" id="pencacah_email" <?= ($user['role'] === 'pengawas' || $filters['pengawas_email']) ? '' : 'disabled' ?>>
-          <option value=""><?= ($user['role'] === 'pengawas' || $filters['pengawas_email']) ? 'Semua Pencacah' : 'Pilih pengawas dulu' ?></option>
-          <?php foreach ($opts['pencacah'] as $o): ?><option value="<?= e($o['value']) ?>" <?= $filters['pencacah_email']===$o['value']?'selected':'' ?>><?= e($o['label']) ?></option><?php endforeach; ?>
+        <label>SubSLS</label>
+        <select class="form-control" name="subsls_id" id="subsls_id" <?= $filters['desa_id'] ? '' : 'disabled' ?>>
+          <option value=""><?= $filters['desa_id'] ? 'Semua SubSLS' : 'Pilih desa dulu' ?></option>
+          <?php foreach ($opts['subsls'] as $o): ?><option value="<?= e($o['value']) ?>" <?= $filters['subsls_id']===$o['value']?'selected':'' ?>><?= e($o['label']) ?></option><?php endforeach; ?>
         </select>
       </div>
     <?php endif; ?>
@@ -1666,42 +2056,6 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
   <div class="card card-body py-2 mb-3">
     <div class="mb-1"><span class="data-update-dot"></span><strong>Terakhir Update Data:</strong> <?= e($latestDailyStatusLabel) ?></div>
     <div><strong><em>Progress Pendataan = Submit+Reject+Pending+Approve</em></strong></div>
-  </div>
-<?php endif; ?>
-
-<?php
-  $targetTotal = (int)$totals['target'];
-  $dashboardCards = [
-      ['label' => 'Target', 'value' => dashboard_count_only_text($targetTotal), 'variant' => 'card-orange'],
-      ['label' => 'Progress Pendataan', 'value' => dashboard_count_pct_text($submitApproveCount, $submitApprovePct), 'variant' => 'card-progress'],
-      ['label' => 'Approve', 'value' => dashboard_count_pct_text((int)$totals['approved_by_pengawas'], $targetTotal ? (int)$totals['approved_by_pengawas'] / $targetTotal * 100 : 0), 'variant' => 'card-light-green'],
-      ['label' => 'Submit', 'value' => dashboard_count_pct_text((int)$totals['submitted_by_pencacah'], $targetTotal ? (int)$totals['submitted_by_pencacah'] / $targetTotal * 100 : 0), 'variant' => 'card-blue'],
-      ['label' => 'Open', 'value' => dashboard_count_pct_text((int)$totals['open_count'], $targetTotal ? (int)$totals['open_count'] / $targetTotal * 100 : 0), 'variant' => 'card-orange'],
-      ['label' => 'Draft', 'value' => dashboard_count_pct_text((int)$totals['draft_count'], $targetTotal ? (int)$totals['draft_count'] / $targetTotal * 100 : 0), 'variant' => 'card-yellow'],
-      ['label' => 'Reject', 'value' => dashboard_count_pct_text((int)$totals['rejected_by_pengawas'], $targetTotal ? (int)$totals['rejected_by_pengawas'] / $targetTotal * 100 : 0), 'variant' => 'card-red'],
-      ['label' => 'Pending', 'value' => dashboard_count_pct_text((int)$totals['pending_count'], $targetTotal ? (int)$totals['pending_count'] / $targetTotal * 100 : 0), 'variant' => 'card-yellow'],
-      ['label' => 'SubSLS Selesai', 'value' => dashboard_count_pct_text((int)$totals['selesai_count'], $completionPct), 'variant' => 'card-orange'],
-      ['label' => 'Total SubSLS', 'value' => dashboard_count_only_text((int)$totals['subsls_total']), 'variant' => 'card-orange'],
-      ['label' => 'PCL', 'value' => dashboard_count_only_text((int)$petugasCounts['pcl']), 'variant' => 'card-orange'],
-      ['label' => 'PML', 'value' => dashboard_count_only_text((int)$petugasCounts['pml']), 'variant' => 'card-orange'],
-  ];
-?>
-<div class="row">
-  <?php foreach ($dashboardCards as $card): ?>
-    <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6">
-      <div class="small-box dashboard-stat-card <?= e($card['variant'] ?? 'card-orange') ?>">
-        <div class="inner">
-          <h4 class="mb-1"><?= $card['value'] ?></h4>
-          <p><?= e($card['label']) ?></p>
-        </div>
-      </div>
-    </div>
-  <?php endforeach; ?>
-</div>
-
-<?php if (in_array($activeTab, ['submit_approve', 'selesai'], true)): ?>
-  <div class="range-legend">
-    <?php foreach ($rangeColors as $item): ?><span><i style="background:<?= e($item['color']) ?>"></i><?= e($item['label']) ?></span><?php endforeach; ?>
   </div>
 <?php endif; ?>
 
@@ -1872,19 +2226,279 @@ const fields = <?= json_encode(array_keys($fields)) ?>;
 const labels = <?= json_encode(array_values($fields)) ?>;
 const statusColors = <?= json_encode($statusColors) ?>;
 const activeTab = <?= json_encode($activeTab) ?>;
+const dashboardFilters = <?= json_encode($filters) ?>;
+const dashboardMapPayload = <?= json_encode($dashboardMap) ?>;
+const dashboardMapLegendRanges = <?= json_encode($rangeColors) ?>;
 if (window.ChartDataLabels) {
   Chart.register(ChartDataLabels);
   Chart.defaults.set('plugins.datalabels', { display: false });
 }
 function pctColor(value) {
-  if (value < 20) return '#dc2626';
-  if (value < 40) return '#f59e0b';
-  if (value < 75) return '#2563eb';
-  return '#16a34a';
+  if (value < 20) return '#b91c1c';
+  if (value < 40) return '#f87171';
+  if (value < 60) return '#d97706';
+  if (value < 75) return '#facc15';
+  if (value < 85) return '#22c55e';
+  return '#15803d';
 }
 function pctLabel(value) {
   return Number(value || 0).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
 }
+function formatCount(value) {
+  return Number(value || 0).toLocaleString('id-ID');
+}
+function mapTooltipRow(label, value) {
+  return '<div class="map-tooltip-row"><span>' + label + '</span><strong>' + value + '</strong></div>';
+}
+function mapTooltipBlueRow(label, value) {
+  return '<div class="map-tooltip-row" style="color:#2563eb;font-weight:800"><span>' + label + '</span><strong style="color:#2563eb">' + value + '</strong></div>';
+}
+function mapTooltipPctValue(count, pct) {
+  return formatCount(count) + ' <span style="color:' + mapProgressColor(pct) + ';font-weight:800">(' + pctLabel(pct) + ')</span>';
+}
+function mapProgressColor(value) {
+  if (value < 20) return '#b91c1c';
+  if (value < 40) return '#f87171';
+  if (value < 60) return '#d97706';
+  if (value < 75) return '#facc15';
+  if (value < 85) return '#22c55e';
+  return '#15803d';
+}
+function dashboardMapPropId(props, level) {
+  if (level === 'kabupaten') return String(props.idkab || ((props.kdprov || '') + (props.kdkab || '')));
+  if (level === 'kecamatan') return String(props.idkec || ((props.kdprov || '') + (props.kdkab || '') + (props.kdkec || '')));
+  if (level === 'desa') return String(props.iddesa || ((props.kdprov || '') + (props.kdkab || '') + (props.kdkec || '') + (props.kddesa || '')));
+  return String(props.idsubsls || '');
+}
+function dashboardMapCode(feature, level) {
+  const props = feature && feature.properties ? feature.properties : {};
+  return dashboardMapPropId(props, level);
+}
+function dashboardMapName(feature, level) {
+  const props = feature && feature.properties ? feature.properties : {};
+  if (level === 'kabupaten') {
+    const rawCode = String(props.kdkab || props.idkab || '');
+    const code = rawCode ? rawCode.slice(-2) : '';
+    const name = props.nmkab || props.namadaerah || props.idkab || '-';
+    return (code ? code + '-' : '') + name;
+  }
+  if (level === 'kecamatan') {
+    const rawCode = String(props.kdkec || props.idkec || '');
+    const code = rawCode ? rawCode.slice(-3) : '';
+    const name = props.nmkec || props.namadaerah || props.idkec || '-';
+    return (code ? code + '-' : '') + name;
+  }
+  if (level === 'desa') {
+    const rawCode = String(props.kddesa || props.iddesa || '');
+    const code = rawCode ? rawCode.slice(-3) : '';
+    const name = props.nmdesa || props.namadaerah || props.iddesa || '-';
+    return (code ? code + '-' : '') + name;
+  }
+  const slsCode = String(props.kdsls || (props.idsls ? String(props.idsls).slice(-4) : '') || '');
+  const subslsCode = String(props.kdsubsls || (props.idsubsls ? String(props.idsubsls).slice(-2) : '') || '');
+  const slsName = props.nmsls || '-';
+  if (slsCode || subslsCode || props.nmsls) {
+    return (slsCode || '-') + '-' + (subslsCode || '-') + ' ' + slsName + ' - Sub ' + (subslsCode || '-');
+  }
+  return String(props.idsubsls || '-');
+}
+function dashboardMapFeatureAllowed(feature, level) {
+  const props = feature && feature.properties ? feature.properties : {};
+  if (level === 'kecamatan' && dashboardFilters.kab_id && dashboardMapPropId(props, 'kabupaten') !== String(dashboardFilters.kab_id)) return false;
+  if (level === 'desa' && dashboardFilters.kec_id && dashboardMapPropId(props, 'kecamatan') !== String(dashboardFilters.kec_id)) return false;
+  if (level === 'subsls' && dashboardFilters.desa_id && dashboardMapPropId(props, 'desa') !== String(dashboardFilters.desa_id)) return false;
+  if (level === 'subsls' && dashboardFilters.subsls_id && dashboardMapPropId(props, 'subsls') !== String(dashboardFilters.subsls_id)) return false;
+  return true;
+}
+function dashboardMapUrl(level) {
+  const params = new URLSearchParams();
+  params.set('level', level);
+  if (dashboardFilters.kab_id) params.set('kab_id', dashboardFilters.kab_id);
+  if (dashboardFilters.kec_id) params.set('kec_id', dashboardFilters.kec_id);
+  if (dashboardFilters.desa_id) params.set('desa_id', dashboardFilters.desa_id);
+  if (dashboardFilters.subsls_id) params.set('subsls_id', dashboardFilters.subsls_id);
+  return 'map_geojson.php?' + params.toString();
+}
+function dashboardMapDrill(feature, level) {
+  const props = feature && feature.properties ? feature.properties : {};
+  const params = new URLSearchParams(window.location.search);
+  params.set('tab', 'submit_approve');
+  if (level === 'kabupaten') {
+    const code = dashboardMapPropId(props, 'kabupaten');
+    if (!code) return;
+    params.set('kab_id', code);
+    params.delete('kec_id');
+    params.delete('desa_id');
+    params.delete('subsls_id');
+    params.delete('pengawas_email');
+    params.delete('pencacah_email');
+  } else if (level === 'kecamatan') {
+    const code = dashboardMapPropId(props, 'kecamatan');
+    if (!code) return;
+    params.set('kab_id', dashboardMapPropId(props, 'kabupaten') || code.substring(0, 4));
+    params.set('kec_id', code);
+    params.delete('desa_id');
+    params.delete('subsls_id');
+    params.delete('pengawas_email');
+    params.delete('pencacah_email');
+  } else if (level === 'desa') {
+    const code = dashboardMapPropId(props, 'desa');
+    if (!code) return;
+    params.set('kab_id', dashboardMapPropId(props, 'kabupaten') || code.substring(0, 4));
+    params.set('kec_id', dashboardMapPropId(props, 'kecamatan') || code.substring(0, 7));
+    params.set('desa_id', code);
+    params.delete('subsls_id');
+    params.delete('pengawas_email');
+    params.delete('pencacah_email');
+  } else {
+    return;
+  }
+  window.location.search = params.toString();
+}
+function initDashboardProgressMap() {
+  const el = document.getElementById('dashboardProgressMap');
+  if (!el || !window.L || !dashboardMapPayload || !dashboardMapPayload.level) return;
+  const level = dashboardMapPayload.level;
+  let dashboardMapFillOpacity = 0.65;
+  const rowMap = new Map((dashboardMapPayload.rows || []).map(function (row) {
+    const target = Number(row.target || 0);
+    const progress = Number(row.submitted_by_pencacah || 0) + Number(row.rejected_by_pengawas || 0) + Number(row.pending_count || 0) + Number(row.approved_by_pengawas || 0);
+    const approved = Number(row.approved_by_pengawas || 0);
+    const draft = Number(row.draft_count || 0);
+    return [String(row.code || ''), {
+      label: row.label || '',
+      target: target,
+      progress: progress,
+      pct: target ? Math.round(progress / target * 10000) / 100 : 0,
+      approvedPct: target ? Math.round(approved / target * 10000) / 100 : 0,
+      draftPct: target ? Math.round(draft / target * 10000) / 100 : 0,
+      pengawasName: row.pengawas_name || '',
+      pengawasEmail: row.pengawas_email || '',
+      pencacahName: row.pencacah_name || '',
+      pencacahEmail: row.pencacah_email || '',
+      open: Number(row.open_count || 0),
+      draft: draft,
+      submitted: Number(row.submitted_by_pencacah || 0),
+      rejected: Number(row.rejected_by_pengawas || 0),
+      approved: approved,
+      subsls: Number(row.subsls_total || 0)
+    }];
+  }));
+  el.innerHTML = '';
+  const map = L.map(el, { preferCanvas: true, zoomControl: true, attributionControl: false });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19
+  }).addTo(map);
+  const legend = L.control({ position: 'bottomright' });
+  legend.onAdd = function () {
+    const div = L.DomUtil.create('div', 'dashboard-map-legend');
+    div.innerHTML = dashboardMapLegendRanges.map(function (item) {
+      return '<div class="dashboard-map-legend-row"><span class="dashboard-map-legend-swatch" style="background:' + item.color + '"></span><span>' + item.label + '</span></div>';
+    }).join('');
+    L.DomEvent.disableClickPropagation(div);
+    L.DomEvent.disableScrollPropagation(div);
+    return div;
+  };
+  legend.addTo(map);
+  const opacityControl = L.control({ position: 'topleft' });
+  opacityControl.onAdd = function () {
+    const div = L.DomUtil.create('div', 'dashboard-map-opacity-control');
+    div.innerHTML = '<input type="range" min="20" max="90" step="5" value="65" aria-label="Opacity peta">';
+    L.DomEvent.disableClickPropagation(div);
+    L.DomEvent.disableScrollPropagation(div);
+    return div;
+  };
+  opacityControl.addTo(map);
+  const emptyStyle = { color: '#94a3b8', weight: 1, fillColor: '#e5e7eb', fillOpacity: 0.55 };
+  let layer = null;
+  const opacityInput = el.querySelector('.dashboard-map-opacity-control input');
+  if (opacityInput) {
+    opacityInput.addEventListener('input', function () {
+      dashboardMapFillOpacity = Number(this.value || 65) / 100;
+      if (!layer) return;
+      layer.eachLayer(function (item) {
+        const code = dashboardMapCode(item.feature, level);
+        const hasData = rowMap.has(code);
+        item.setStyle({ fillOpacity: hasData ? dashboardMapFillOpacity : Math.max(0.25, dashboardMapFillOpacity - 0.1) });
+      });
+    });
+  }
+  fetch(dashboardMapUrl(level))
+    .then(function (response) {
+      if (!response.ok) {
+        return response.text().then(function (text) {
+          let message = text || 'Peta tidak ditemukan';
+          try {
+            const parsed = JSON.parse(text);
+            message = parsed.error || message;
+          } catch (e) {}
+          throw new Error('HTTP ' + response.status + ' - ' + message);
+        });
+      }
+      return response.json();
+    })
+    .then(function (geojson) {
+      layer = L.geoJSON(geojson, {
+        filter: function (feature) {
+          return dashboardMapFeatureAllowed(feature, level);
+        },
+        style: function (feature) {
+          const code = dashboardMapCode(feature, level);
+          const row = rowMap.get(code);
+          if (!row) return emptyStyle;
+          return {
+            color: '#ffffff',
+            fillColor: mapProgressColor(row.pct),
+            fillOpacity: dashboardMapFillOpacity,
+            weight: 1.2
+          };
+        },
+        onEachFeature: function (feature, layerItem) {
+          const code = dashboardMapCode(feature, level);
+          const row = rowMap.get(code) || { target: 0, progress: 0, pct: 0, approvedPct: 0, draftPct: 0, open: 0, draft: 0, submitted: 0, rejected: 0, approved: 0, subsls: 0 };
+          const name = dashboardMapName(feature, level);
+          const tooltipHtml = '<div class="map-tooltip-title">' + name + '</div>' +
+            mapTooltipRow('Target', formatCount(row.target)) +
+            mapTooltipRow('Progress', mapTooltipPctValue(row.progress, row.pct)) +
+            (level === 'subsls'
+              ? mapTooltipRow('PML', row.pengawasName || row.pengawasEmail || '-') +
+                mapTooltipBlueRow('PCL', row.pencacahName || row.pencacahEmail || '-')
+              : '') +
+            '<hr>' +
+            mapTooltipRow('Open', formatCount(row.open)) +
+            mapTooltipRow('Draft', formatCount(row.draft) + ' (' + pctLabel(row.draftPct) + ')') +
+            mapTooltipRow('Submitted', formatCount(row.submitted)) +
+            mapTooltipRow('Rejected', formatCount(row.rejected)) +
+            mapTooltipRow('Approved', mapTooltipPctValue(row.approved, row.approvedPct));
+          layerItem.bindTooltip(tooltipHtml, { className: 'dashboard-map-tooltip', sticky: true });
+          layerItem.on({
+            mouseover: function () {
+              layerItem.setStyle({ weight: 2.4, color: '#111827', fillOpacity: 0.82 });
+              layerItem.bringToFront();
+            },
+            mouseout: function () {
+              layer.resetStyle(layerItem);
+              const code = dashboardMapCode(feature, level);
+              layerItem.setStyle({ fillOpacity: rowMap.has(code) ? dashboardMapFillOpacity : Math.max(0.25, dashboardMapFillOpacity - 0.1) });
+            },
+            click: function () {
+              dashboardMapDrill(feature, level);
+            }
+          });
+        }
+      }).addTo(map);
+      const bounds = layer.getBounds();
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [12, 12] });
+      } else {
+        map.setView([0, 117], 6);
+      }
+    })
+    .catch(function (error) {
+      el.innerHTML = '<div class="dashboard-map-loading">Gagal memuat peta: ' + error.message + '</div>';
+    });
+}
+initDashboardProgressMap();
 const percentRows = rows.map(r => {
   const target = Number(r.target || 0);
   const submitApprove = target ? Math.round((Number(r.submitted_by_pencacah || 0) + Number(r.rejected_by_pengawas || 0) + Number(r.pending_count || 0) + Number(r.approved_by_pengawas || 0)) / target * 10000) / 100 : 0;
@@ -1937,38 +2551,36 @@ new Chart(document.getElementById('dashboardChart'), config);
 const kabupaten = document.getElementById('kab_id');
 if (kabupaten) {
   kabupaten.addEventListener('change', function () {
-    document.getElementById('kec_id').value = '';
-    document.getElementById('desa_id').value = '';
-    document.getElementById('pengawas_email').value = '';
-    const pencacah = document.getElementById('pencacah_email');
-    if (pencacah) pencacah.value = '';
+    const kec = document.getElementById('kec_id');
+    const desa = document.getElementById('desa_id');
+    const subsls = document.getElementById('subsls_id');
+    if (kec) kec.value = '';
+    if (desa) desa.value = '';
+    if (subsls) subsls.value = '';
     this.form.submit();
   });
 }
 const kecamatan = document.getElementById('kec_id');
 if (kecamatan) {
   kecamatan.addEventListener('change', function () {
-    document.getElementById('desa_id').value = '';
-    document.getElementById('pengawas_email').value = '';
-    const pencacah = document.getElementById('pencacah_email');
-    if (pencacah) pencacah.value = '';
+    const desa = document.getElementById('desa_id');
+    const subsls = document.getElementById('subsls_id');
+    if (desa) desa.value = '';
+    if (subsls) subsls.value = '';
     this.form.submit();
   });
 }
 const desa = document.getElementById('desa_id');
 if (desa) {
   desa.addEventListener('change', function () {
-    document.getElementById('pengawas_email').value = '';
-    const pencacah = document.getElementById('pencacah_email');
-    if (pencacah) pencacah.value = '';
+    const subsls = document.getElementById('subsls_id');
+    if (subsls) subsls.value = '';
     this.form.submit();
   });
 }
-const pengawas = document.getElementById('pengawas_email');
-if (pengawas) {
-  pengawas.addEventListener('change', function () {
-    const pencacah = document.getElementById('pencacah_email');
-    if (pencacah) pencacah.value = '';
+const subsls = document.getElementById('subsls_id');
+if (subsls) {
+  subsls.addEventListener('change', function () {
     this.form.submit();
   });
 }
@@ -2038,7 +2650,6 @@ if (pengawas) {
                   <th class="text-right">Progress<br>(%)</th>
                   <th class="performance-compact-header">Rata-rata/<br>Hari<br>(Assignment)</th>
                   <th class="performance-compact-header">Capaian<br>Hari Ini<br>dibanding<br>Kemarin<br>(Assignment)</th>
-                  <th class="performance-compact-header">Target<br>Hari Ini<br>(Assignment)</th>
                   <th>Konsistensi (%)</th>
                   <th>Prediksi Selesai</th>
                   <th>Status</th>
@@ -2058,7 +2669,6 @@ if (pengawas) {
                   <td class="text-right"><?= number_format((int)$r['target'] > 0 ? (int)$r['progress_count'] / (int)$r['target'] * 100 : 0,2,',','.') ?></td>
                   <td class="text-right"><?= number_format((int)ceil((float)$r['average_per_day']),0,',','.') ?></td>
                   <td class="text-right"><?= number_format((int)$r['yesterday_achievement'],0,',','.') ?></td>
-                  <td class="text-right"><?= $r['required_daily_target'] === null ? 'Lewat Target' : number_format((int)$r['required_daily_target'],0,',','.') ?></td>
                   <td class="text-right"><?= number_format((float)$r['consistency_score'],2,',','.') ?></td>
                   <td><?= e($r['projected_finish']) ?></td>
                   <td><span class="performance-status"><?= e($r['performance_status']) ?></span></td>

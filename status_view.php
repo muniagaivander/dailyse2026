@@ -184,10 +184,16 @@ function status_view_progress_pct_class(float $pct): string
     if ($pct < 40) {
         return 'status-progress-warning';
     }
+    if ($pct < 60) {
+        return 'status-progress-orange';
+    }
     if ($pct < 75) {
         return 'status-progress-mid';
     }
-    return 'status-progress-high';
+    if ($pct < 85) {
+        return 'status-progress-high';
+    }
+    return 'status-progress-very-high';
 }
 
 function status_view_draft_pct_class(float $pct): string
@@ -377,10 +383,16 @@ function status_view_xlsx_pct_style(string $header, $value): int
     if ($pct < 40) {
         return 2;
     }
+    if ($pct < 60) {
+        return 14;
+    }
     if ($pct < 75) {
         return 3;
     }
-    return 4;
+    if ($pct < 85) {
+        return 4;
+    }
+    return 15;
 }
 
 function status_view_xlsx_header_style(string $header): int
@@ -460,15 +472,17 @@ function status_view_export(array $headers, array $rows, string $format): void
 </Relationships>');
     $zip->addFromString('xl/styles.xml', '<?xml version="1.0" encoding="UTF-8"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="8">
+  <fonts count="10">
     <font><sz val="11"/><name val="Calibri"/></font>
-    <font><b/><sz val="11"/><color rgb="FFDC2626"/><name val="Calibri"/></font>
-    <font><b/><sz val="11"/><color rgb="FFF59E0B"/><name val="Calibri"/></font>
-    <font><b/><sz val="11"/><color rgb="FF2563EB"/><name val="Calibri"/></font>
-    <font><b/><sz val="11"/><color rgb="FF16A34A"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FFB91C1C"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FFF87171"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FFFACC15"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FF22C55E"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><color rgb="FF16A34A"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><color rgb="FFFB7185"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><color rgb="FFDC2626"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FFD97706"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FF15803D"/><name val="Calibri"/></font>
   </fonts>
   <fills count="8">
     <fill><patternFill patternType="none"/></fill>
@@ -485,7 +499,7 @@ function status_view_export(array $headers, array $rows, string $format): void
     <border><left style="thin"><color rgb="FFCBD5E1"/></left><right style="thin"><color rgb="FFCBD5E1"/></right><top style="thin"><color rgb="FFCBD5E1"/></top><bottom style="thin"><color rgb="FFCBD5E1"/></bottom></border>
   </borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="14">
+  <cellXfs count="16">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0"/>
@@ -500,6 +514,8 @@ function status_view_export(array $headers, array $rows, string $format): void
     <xf numFmtId="0" fontId="0" fillId="5" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
     <xf numFmtId="0" fontId="0" fillId="6" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
     <xf numFmtId="0" fontId="0" fillId="7" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="8" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="9" fillId="0" borderId="0" xfId="0"/>
   </cellXfs>
 </styleSheet>');
     $sheet = '<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
@@ -538,13 +554,13 @@ if (($_GET['action'] ?? '') === 'export' && isset($_GET['filter'])) {
     $exportSource = $stmt->fetchAll();
     $headers = [
         'Kode SubSLS',
+        'Nama Pencacah',
+        'Email Pencacah',
+        'Nama Pengawas',
+        'Email Pengawas',
         'Desa',
         'SLS',
         'SubSLS',
-        'Nama Pengawas',
-        'Email Pengawas',
-        'Nama Pencacah',
-        'Email Pencacah',
         'Target',
         'Progress (Count)',
         'Progress (Persen %)',
@@ -564,13 +580,13 @@ if (($_GET['action'] ?? '') === 'export' && isset($_GET['filter'])) {
     foreach ($exportSource as $r) {
         $row = [
             $r['kab_id'] . $r['kdkec'] . $r['kddesa'] . $r['kdsls'] . $r['kdsubsls'],
+            trim((string)($r['pencacah_name'] ?? '')) ?: '-',
+            $r['pencacah_email'],
+            trim((string)($r['pengawas_name'] ?? '')) ?: '-',
+            $r['pengawas_email'],
             $r['nmdesa'],
             $r['nmsls'],
             $r['kdsubsls'],
-            trim((string)($r['pengawas_name'] ?? '')) ?: '-',
-            $r['pengawas_email'],
-            trim((string)($r['pencacah_name'] ?? '')) ?: '-',
-            $r['pencacah_email'],
             (string)(int)$r['target'],
             (string)status_view_progress_count($r),
             number_format(status_view_progress_pct($r), 2, ',', '.') . '%',
@@ -768,19 +784,27 @@ render_header('Status Terupdate');
   font-weight: 700;
 }
 .status-progress-low {
-  color: #dc2626 !important;
+  color: #b91c1c !important;
   font-weight: 800;
 }
 .status-progress-warning {
-  color: #f59e0b !important;
+  color: #f87171 !important;
+  font-weight: 800;
+}
+.status-progress-orange {
+  color: #d97706 !important;
   font-weight: 800;
 }
 .status-progress-mid {
-  color: #2563eb !important;
+  color: #facc15 !important;
   font-weight: 800;
 }
 .status-progress-high {
-  color: #16a34a !important;
+  color: #22c55e !important;
+  font-weight: 800;
+}
+.status-progress-very-high {
+  color: #15803d !important;
   font-weight: 800;
 }
 .status-draft-low {
@@ -818,57 +842,27 @@ render_header('Status Terupdate');
 }
 .status-table-view th:nth-child(1),
 .status-table-view td:nth-child(1) {
+  box-shadow: 3px 0 0 #111827;
   left: 0;
   min-width: 155px;
   width: 155px;
 }
-.status-table-view th:nth-child(2),
-.status-table-view td:nth-child(2) {
-  left: 155px;
-  min-width: 150px;
-  width: 150px;
-}
-.status-table-view th:nth-child(3),
-.status-table-view td:nth-child(3) {
-  left: 305px;
-  min-width: 105px;
-  width: 105px;
-}
-.status-table-view th:nth-child(4),
-.status-table-view td:nth-child(4) {
-  left: 410px;
-  min-width: 85px;
-  width: 85px;
-}
-.status-table-view th:nth-child(5),
-.status-table-view td:nth-child(5) {
-  left: 495px;
-  min-width: 175px;
-  width: 175px;
-}
-.status-table-view th:nth-child(6),
-.status-table-view td:nth-child(6) {
-  box-shadow: 3px 0 0 #111827;
-  left: 670px;
-  min-width: 175px;
-  width: 175px;
-}
-.status-table-view th:nth-child(-n+6),
-.status-table-view td:nth-child(-n+6) {
+.status-table-view th:nth-child(1),
+.status-table-view td:nth-child(1) {
   background-clip: padding-box;
   position: sticky;
   z-index: 7;
 }
-.status-table-view tbody td:nth-child(-n+6) {
+.status-table-view tbody td:nth-child(1) {
   background: #fff;
 }
-.status-table-view tbody tr:nth-of-type(odd) td:nth-child(-n+6) {
+.status-table-view tbody tr:nth-of-type(odd) td:nth-child(1) {
   background: #f9fafb;
 }
-.status-table-view tbody tr:hover td:nth-child(-n+6) {
+.status-table-view tbody tr:hover td:nth-child(1) {
   background: #eef2ff;
 }
-.status-table-view thead th:nth-child(-n+6) {
+.status-table-view thead th:nth-child(1) {
   background: #f8fafc;
   z-index: 10;
 }
@@ -891,7 +885,7 @@ render_header('Status Terupdate');
 }
 .status-table-view .status-head-red {
   background: #fee2e2 !important;
-  color: #7f1d1d;
+  color: #b91c1c;
 }
 .status-table-view .status-head-dark-green {
   background: #bbf7d0 !important;
@@ -978,10 +972,12 @@ render_header('Status Terupdate');
   <?php if ($filters['view_mode'] === 'table' && isset($_GET['filter'])): ?>
     <div class="small mt-1">Rekap PCL (<?= number_format($statusPetugasSummary['pcl'], 0, ',', '.') ?> petugas), PML (<?= number_format($statusPetugasSummary['pml'], 0, ',', '.') ?> petugas)</div>
     <div class="small mt-2 status-progress-legend">
-      <span><i style="background:#dc2626"></i>&lt; 20%</span>
-      <span><i style="background:#f59e0b"></i>20% - &lt; 40%</span>
-      <span><i style="background:#2563eb"></i>40% - &lt; 75%</span>
-      <span><i style="background:#16a34a"></i>75% - 100%</span>
+      <span><i style="background:#b91c1c"></i>&lt; 20%</span>
+      <span><i style="background:#f87171"></i>20% - &lt; 40%</span>
+      <span><i style="background:#d97706"></i>40% - &lt; 60%</span>
+      <span><i style="background:#facc15"></i>60% - &lt; 75%</span>
+      <span><i style="background:#22c55e"></i>75% - &lt; 85%</span>
+      <span><i style="background:#15803d"></i>85% - &lt; 100%</span>
     </div>
   <?php endif; ?>
 </div>
@@ -1116,11 +1112,11 @@ render_header('Status Terupdate');
       <thead>
         <tr>
           <th><div>Kode SubSLS</div><input class="form-control form-control-sm status-table-search" type="search" placeholder="Cari kode" value="<?= e($filters['search_kode']) ?>" data-status-server-search="search_kode"></th>
+          <th><div>Nama Pencacah</div><input class="form-control form-control-sm status-table-search" type="search" placeholder="Cari pencacah" value="<?= e($filters['search_pencacah']) ?>" data-status-server-search="search_pencacah"></th>
+          <th><div>Nama Pengawas</div><input class="form-control form-control-sm status-table-search" type="search" placeholder="Cari pengawas" value="<?= e($filters['search_pengawas']) ?>" data-status-server-search="search_pengawas"></th>
           <th><div>Desa</div><input class="form-control form-control-sm status-table-search" type="search" placeholder="Cari desa" value="<?= e($filters['search_desa']) ?>" data-status-server-search="search_desa"></th>
           <th><div>SLS</div><span class="status-table-spacer"></span></th>
           <th><div>SubSLS</div><span class="status-table-spacer"></span></th>
-          <th><div>Nama Pengawas</div><input class="form-control form-control-sm status-table-search" type="search" placeholder="Cari pengawas" value="<?= e($filters['search_pengawas']) ?>" data-status-server-search="search_pengawas"></th>
-          <th><div>Nama Pencacah</div><input class="form-control form-control-sm status-table-search" type="search" placeholder="Cari pencacah" value="<?= e($filters['search_pencacah']) ?>" data-status-server-search="search_pencacah"></th>
           <?php
             $statusSortHeaders = [
                 ['label' => 'Target', 'class' => 'status-head-blue', 'key' => 'target'],
@@ -1161,11 +1157,11 @@ render_header('Status Terupdate');
         ?>
         <tr data-original-index="<?= (int)$rowIndex ?>">
           <td><?= e($r['kab_id'] . $r['kdkec'] . $r['kddesa'] . $r['kdsls'] . $r['kdsubsls']) ?></td>
+          <td><?= e(trim((string)($r['pencacah_name'] ?? '')) ?: '-') ?></td>
+          <td><?= e(trim((string)($r['pengawas_name'] ?? '')) ?: '-') ?></td>
           <td><?= e($r['nmdesa']) ?></td>
           <td><?= e($r['nmsls']) ?></td>
           <td><?= e($r['kdsubsls']) ?></td>
-          <td><?= e(trim((string)($r['pengawas_name'] ?? '')) ?: '-') ?></td>
-          <td><?= e(trim((string)($r['pencacah_name'] ?? '')) ?: '-') ?></td>
           <td data-sort-value="<?= (int)$r['target'] ?>"><?= number_format((int)$r['target'], 0, ',', '.') ?></td>
           <td data-sort-value="<?= $statusProgressCount ?>"><?= number_format($statusProgressCount, 0, ',', '.') ?></td>
           <td class="status-pct-cell <?= e(status_view_progress_pct_class($statusProgressPct)) ?>" data-sort-value="<?= e((string)$statusProgressPct) ?>"><?= number_format($statusProgressPct, 2, ',', '.') ?>%</td>

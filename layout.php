@@ -2,7 +2,7 @@
 require_once __DIR__ . '/bootstrap.php';
 
 function render_header(string $title): void {
-    global $APP_NAME, $EXTRA_HEAD;
+    global $APP_NAME, $EXTRA_HEAD, $HIDE_PAGE_TITLE;
     $user = current_user();
     $isActiveUser = $user ? user_active_status($user['email']) : false;
     $currentPage = basename(parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '');
@@ -187,7 +187,9 @@ function render_header(string $title): void {
     </div>
   </aside>
   <div class="content-wrapper">
-    <section class="content-header"><div class="container-fluid"><h1><?= e($title) ?></h1></div></section>
+    <?php if (empty($HIDE_PAGE_TITLE)): ?>
+      <section class="content-header"><div class="container-fluid"><h1><?= e($title) ?></h1></div></section>
+    <?php endif; ?>
     <section class="content"><div class="container-fluid">
       <?php if ($msg = flash('success')): ?><div class="alert alert-success"><?= nl2br(e($msg)) ?></div><?php endif; ?>
       <?php if ($msg = flash('error')): ?><div class="alert alert-danger"><?= nl2br(e($msg)) ?></div><?php endif; ?>

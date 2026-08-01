@@ -166,10 +166,12 @@ function public_dashboard_generate_cache(string $email): array
         'fields' => $fields,
         'status_colors' => ['#2563eb', '#f59e0b', '#16a34a', '#dc2626', '#7c3aed', '#0f766e'],
         'range_colors' => [
-            ['label' => '< 20%', 'color' => '#dc2626'],
-            ['label' => '20% - < 40%', 'color' => '#f59e0b'],
-            ['label' => '40% - < 75%', 'color' => '#2563eb'],
-            ['label' => '75% - 100%', 'color' => '#16a34a'],
+            ['label' => '< 20%', 'color' => '#b91c1c'],
+            ['label' => '20% - < 40%', 'color' => '#f87171'],
+            ['label' => '40% - < 60%', 'color' => '#d97706'],
+            ['label' => '60% - < 75%', 'color' => '#facc15'],
+            ['label' => '75% - < 85%', 'color' => '#22c55e'],
+            ['label' => '85% - < 100%', 'color' => '#15803d'],
         ],
         'dashboards' => $dashboards,
     ];

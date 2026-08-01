@@ -136,10 +136,16 @@ function rekap_petugas_pct_class(float $pct): string
     if ($pct < 40) {
         return 'rekap-progress-warning';
     }
+    if ($pct < 60) {
+        return 'rekap-progress-orange';
+    }
     if ($pct < 75) {
         return 'rekap-progress-mid';
     }
-    return 'rekap-progress-high';
+    if ($pct < 85) {
+        return 'rekap-progress-high';
+    }
+    return 'rekap-progress-very-high';
 }
 
 function rekap_petugas_draft_pct_class(float $pct): string
@@ -318,10 +324,16 @@ function rekap_petugas_xlsx_pct_style(string $header, $value, int $defaultStyle 
     if ($pct < 40) {
         return 3;
     }
+    if ($pct < 60) {
+        return 24;
+    }
     if ($pct < 75) {
         return 4;
     }
-    return 5;
+    if ($pct < 85) {
+        return 5;
+    }
+    return 25;
 }
 
 function rekap_petugas_xlsx_header_style(string $header): int
@@ -356,6 +368,8 @@ function rekap_petugas_xlsx_kecamatan_break_style(int $style): int
         6 => 21,
         7 => 22,
         8 => 23,
+        24 => 26,
+        25 => 27,
         default => 15,
     };
 }
@@ -416,16 +430,18 @@ function rekap_petugas_export(array $headers, array $rows, string $format, strin
 </Relationships>');
     $zip->addFromString('xl/styles.xml', '<?xml version="1.0" encoding="UTF-8"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="9">
+  <fonts count="11">
     <font><sz val="11"/><name val="Calibri"/></font>
     <font><sz val="9"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><color rgb="FFB91C1C"/><name val="Calibri"/></font>
-    <font><b/><sz val="11"/><color rgb="FFEAB308"/><name val="Calibri"/></font>
-    <font><b/><sz val="11"/><color rgb="FF2563EB"/><name val="Calibri"/></font>
-    <font><b/><sz val="11"/><color rgb="FF16A34A"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FFF87171"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FFFACC15"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FF22C55E"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><color rgb="FF16A34A"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><color rgb="FFFB7185"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><color rgb="FFB91C1C"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FFD97706"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FF15803D"/><name val="Calibri"/></font>
   </fonts>
   <fills count="8">
     <fill><patternFill patternType="none"/></fill>
@@ -443,7 +459,7 @@ function rekap_petugas_export(array $headers, array $rows, string $format, strin
     <border><left style="thin"><color rgb="FFCBD5E1"/></left><right style="thin"><color rgb="FFCBD5E1"/></right><top style="medium"><color rgb="FF111827"/></top><bottom style="thin"><color rgb="FFCBD5E1"/></bottom></border>
   </borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="24">
+  <cellXfs count="28">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0"/>
@@ -468,6 +484,10 @@ function rekap_petugas_export(array $headers, array $rows, string $format, strin
     <xf numFmtId="0" fontId="6" fillId="0" borderId="2" xfId="0"/>
     <xf numFmtId="0" fontId="7" fillId="0" borderId="2" xfId="0"/>
     <xf numFmtId="0" fontId="8" fillId="0" borderId="2" xfId="0"/>
+    <xf numFmtId="0" fontId="9" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="10" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="9" fillId="0" borderId="2" xfId="0"/>
+    <xf numFmtId="0" fontId="10" fillId="0" borderId="2" xfId="0"/>
   </cellXfs>
 </styleSheet>');
     $smallFontColumns = [2, $type === 'pcl' ? 6 : 5];
@@ -541,14 +561,30 @@ $showKecamatanBreaks = $filters['sort_key'] === ''
 
 if (($_GET['action'] ?? '') === 'export') {
     $format = ($_GET['format'] ?? 'csv') === 'xlsx' ? 'xlsx' : 'csv';
-    $headers = ['Nama Petugas', 'Email Petugas'];
     if ($filters['petugas_type'] === 'pcl') {
-        $headers[] = 'Nama PML';
+        $headers = ['Nama Petugas', 'Email Petugas', 'Nama PML'];
+        $leadingRow = fn(array $r): array => [
+            trim((string)($r['petugas_name'] ?? '')) ?: '-',
+            $r['email'],
+            $r['pml_names'] ?: '-',
+            $r['kabupaten_nama'] ?: '-',
+            $r['wilayah_kerja_kecamatan'] ?: '-',
+            $r['wilayah_kerja'] ?: '-',
+        ];
+        $headers[] = 'Kabupaten';
+        $headers[] = 'Wilayah Kerja Kecamatan';
+        $headers[] = 'Wilayah Kerja Desa';
+    } else {
+        $headers = ['Nama Petugas', 'Email Petugas', 'Wilayah Kerja Kecamatan', 'Wilayah Kerja Desa', 'Kabupaten'];
+        $leadingRow = fn(array $r): array => [
+            trim((string)($r['petugas_name'] ?? '')) ?: '-',
+            $r['email'],
+            $r['wilayah_kerja_kecamatan'] ?: '-',
+            $r['wilayah_kerja'] ?: '-',
+            $r['kabupaten_nama'] ?: '-',
+        ];
     }
     $headers = array_merge($headers, [
-        'Kabupaten',
-        'Wilayah Kerja Kecamatan',
-        'Wilayah Kerja Desa',
         'Target',
         'Progress Pendataan Count',
         'Progress Pendataan (Persen %)',
@@ -566,17 +602,7 @@ if (($_GET['action'] ?? '') === 'export') {
     foreach ($rows as $r) {
         $target = (int)$r['target'];
         $pendataanCount = rekap_petugas_pendataan_count($r);
-        $row = [
-            trim((string)($r['petugas_name'] ?? '')) ?: '-',
-            $r['email'],
-        ];
-        if ($filters['petugas_type'] === 'pcl') {
-            $row[] = $r['pml_names'] ?: '-';
-        }
-        $row = array_merge($row, [
-            $r['kabupaten_nama'] ?: '-',
-            $r['wilayah_kerja_kecamatan'] ?: '-',
-            $r['wilayah_kerja'] ?: '-',
+        $row = array_merge($leadingRow($r), [
             (string)$target,
             number_format($pendataanCount, 0, ',', '.'),
             rekap_petugas_pct_text($pendataanCount, $target),
@@ -639,73 +665,34 @@ render_header('Rekap Petugas');
   }
   .rekap-table th:nth-child(1),
   .rekap-table td:nth-child(1) {
+    box-shadow: 3px 0 0 #111827;
     left: 0;
     min-width: 170px;
     width: 170px;
   }
-  .rekap-table th:nth-child(2),
-  .rekap-table td:nth-child(2) {
-    left: 170px;
-    min-width: 150px;
-    width: 150px;
-  }
-  .rekap-table th:nth-child(3),
-  .rekap-table td:nth-child(3) {
-    left: 320px;
-    min-width: 130px;
-    width: 130px;
-  }
-  .rekap-table th:nth-child(4),
-  .rekap-table td:nth-child(4) {
-    left: 450px;
-    min-width: 180px;
-    width: 180px;
-  }
-  .rekap-table.rekap-freeze-pcl th:nth-child(5),
-  .rekap-table.rekap-freeze-pcl td:nth-child(5) {
-    left: 630px;
-    min-width: 220px;
-    width: 220px;
-  }
-  .rekap-table.rekap-freeze-pml th:nth-child(4),
-  .rekap-table.rekap-freeze-pml td:nth-child(4) {
-    left: 450px;
-    min-width: 220px;
-    width: 220px;
-  }
-  .rekap-table.rekap-freeze-pml th:nth-child(-n+4),
-  .rekap-table.rekap-freeze-pml td:nth-child(-n+4) {
+  .rekap-table.rekap-freeze-pml th:nth-child(1),
+  .rekap-table.rekap-freeze-pml td:nth-child(1),
+  .rekap-table.rekap-freeze-pcl th:nth-child(1),
+  .rekap-table.rekap-freeze-pcl td:nth-child(1) {
     background-clip: padding-box;
     position: sticky;
     z-index: 7;
   }
-  .rekap-table.rekap-freeze-pcl th:nth-child(-n+5),
-  .rekap-table.rekap-freeze-pcl td:nth-child(-n+5) {
-    background-clip: padding-box;
-    position: sticky;
-    z-index: 7;
-  }
-  .rekap-table.rekap-freeze-pml tbody td:nth-child(-n+4),
-  .rekap-table.rekap-freeze-pcl tbody td:nth-child(-n+5) {
+  .rekap-table.rekap-freeze-pml tbody td:nth-child(1),
+  .rekap-table.rekap-freeze-pcl tbody td:nth-child(1) {
     background: #fff;
   }
-  .rekap-table.rekap-freeze-pml tbody tr:nth-of-type(odd) td:nth-child(-n+4),
-  .rekap-table.rekap-freeze-pcl tbody tr:nth-of-type(odd) td:nth-child(-n+5) {
+  .rekap-table.rekap-freeze-pml tbody tr:nth-of-type(odd) td:nth-child(1),
+  .rekap-table.rekap-freeze-pcl tbody tr:nth-of-type(odd) td:nth-child(1) {
     background: #f9fafb;
   }
-  .rekap-table.rekap-freeze-pml tbody tr:hover td:nth-child(-n+4),
-  .rekap-table.rekap-freeze-pcl tbody tr:hover td:nth-child(-n+5) {
+  .rekap-table.rekap-freeze-pml tbody tr:hover td:nth-child(1),
+  .rekap-table.rekap-freeze-pcl tbody tr:hover td:nth-child(1) {
     background: #eef2ff;
   }
-  .rekap-table.rekap-freeze-pml thead th:nth-child(-n+4),
-  .rekap-table.rekap-freeze-pcl thead th:nth-child(-n+5) {
+  .rekap-table.rekap-freeze-pml thead th:nth-child(1),
+  .rekap-table.rekap-freeze-pcl thead th:nth-child(1) {
     z-index: 10;
-  }
-  .rekap-table.rekap-freeze-pml th:nth-child(4),
-  .rekap-table.rekap-freeze-pml td:nth-child(4),
-  .rekap-table.rekap-freeze-pcl th:nth-child(5),
-  .rekap-table.rekap-freeze-pcl td:nth-child(5) {
-    box-shadow: 3px 0 0 #111827;
   }
   .rekap-kecamatan-break > td {
     border-top: 3px solid #111827 !important;
@@ -735,7 +722,7 @@ render_header('Rekap Petugas');
   }
   .rekap-head-red {
     background: #fee2e2 !important;
-    color: #7f1d1d;
+    color: #b91c1c;
   }
   .rekap-head-dark-green {
     background: #bbf7d0 !important;
@@ -761,15 +748,23 @@ render_header('Rekap Petugas');
     font-weight: 900;
   }
   .rekap-progress-warning {
-    color: #eab308 !important;
+    color: #f87171 !important;
+    font-weight: 900;
+  }
+  .rekap-progress-orange {
+    color: #d97706 !important;
     font-weight: 900;
   }
   .rekap-progress-mid {
-    color: #2563eb !important;
+    color: #facc15 !important;
     font-weight: 800;
   }
   .rekap-progress-high {
-    color: #16a34a !important;
+    color: #22c55e !important;
+    font-weight: 800;
+  }
+  .rekap-progress-very-high {
+    color: #15803d !important;
     font-weight: 800;
   }
   .rekap-draft-low {
@@ -848,9 +843,11 @@ render_header('Rekap Petugas');
   <div class="small mt-1">Diurutkan <em>default</em> berdasarkan kecamatan dan % Progress Pendataan Ascending</div>
   <div class="small mt-2 rekap-progress-legend">
     <span><i style="background:#b91c1c"></i>&lt; 20%</span>
-    <span><i style="background:#eab308"></i>20% - &lt; 40%</span>
-    <span><i style="background:#2563eb"></i>40% - &lt; 75%</span>
-    <span><i style="background:#16a34a"></i>75% - 100%</span>
+    <span><i style="background:#f87171"></i>20% - &lt; 40%</span>
+    <span><i style="background:#d97706"></i>40% - &lt; 60%</span>
+    <span><i style="background:#facc15"></i>60% - &lt; 75%</span>
+    <span><i style="background:#22c55e"></i>75% - &lt; 85%</span>
+    <span><i style="background:#15803d"></i>85% - &lt; 100%</span>
   </div>
 </div>
 
@@ -916,10 +913,16 @@ render_header('Rekap Petugas');
       <thead>
         <tr>
           <th><div class="rekap-header-label">Nama Petugas</div><input class="form-control form-control-sm rekap-search-input" type="search" placeholder="Cari nama" value="<?= e($filters['search_nama']) ?>" data-rekap-server-search="search_nama"></th>
-          <?php if ($filters['petugas_type'] === 'pcl'): ?><th><div class="rekap-header-label">Nama PML</div><input class="form-control form-control-sm rekap-search-input" type="search" placeholder="Cari PML" value="<?= e($filters['search_pml']) ?>" data-rekap-server-search="search_pml"></th><?php endif; ?>
-          <th><div class="rekap-header-label">Kabupaten</div><input class="form-control form-control-sm rekap-search-input" type="search" placeholder="Cari kab" value="<?= e($filters['search_kabupaten']) ?>" data-rekap-server-search="search_kabupaten"></th>
-          <th><div class="rekap-header-label">Wilayah<br>Kerja<br>Kecamatan</div><input class="form-control form-control-sm rekap-search-input" type="search" placeholder="Cari kec" value="<?= e($filters['search_kecamatan']) ?>" data-rekap-server-search="search_kecamatan"></th>
-          <th><div class="rekap-header-label">Wilayah<br>Kerja<br>Desa</div><input class="form-control form-control-sm rekap-search-input" type="search" placeholder="Cari desa" value="<?= e($filters['search_desa']) ?>" data-rekap-server-search="search_desa"></th>
+          <?php if ($filters['petugas_type'] === 'pcl'): ?>
+            <th><div class="rekap-header-label">Nama PML</div><input class="form-control form-control-sm rekap-search-input" type="search" placeholder="Cari PML" value="<?= e($filters['search_pml']) ?>" data-rekap-server-search="search_pml"></th>
+            <th><div class="rekap-header-label">Kabupaten</div><input class="form-control form-control-sm rekap-search-input" type="search" placeholder="Cari kab" value="<?= e($filters['search_kabupaten']) ?>" data-rekap-server-search="search_kabupaten"></th>
+            <th><div class="rekap-header-label">Wilayah<br>Kerja<br>Kecamatan</div><input class="form-control form-control-sm rekap-search-input" type="search" placeholder="Cari kec" value="<?= e($filters['search_kecamatan']) ?>" data-rekap-server-search="search_kecamatan"></th>
+            <th><div class="rekap-header-label">Wilayah<br>Kerja<br>Desa</div><input class="form-control form-control-sm rekap-search-input" type="search" placeholder="Cari desa" value="<?= e($filters['search_desa']) ?>" data-rekap-server-search="search_desa"></th>
+          <?php else: ?>
+            <th><div class="rekap-header-label">Wilayah<br>Kerja<br>Kecamatan</div><input class="form-control form-control-sm rekap-search-input" type="search" placeholder="Cari kec" value="<?= e($filters['search_kecamatan']) ?>" data-rekap-server-search="search_kecamatan"></th>
+            <th><div class="rekap-header-label">Wilayah<br>Kerja<br>Desa</div><input class="form-control form-control-sm rekap-search-input" type="search" placeholder="Cari desa" value="<?= e($filters['search_desa']) ?>" data-rekap-server-search="search_desa"></th>
+            <th><div class="rekap-header-label">Kabupaten</div><input class="form-control form-control-sm rekap-search-input" type="search" placeholder="Cari kab" value="<?= e($filters['search_kabupaten']) ?>" data-rekap-server-search="search_kabupaten"></th>
+          <?php endif; ?>
           <?php
             $numericHeaders = [
                 ['label' => 'Target', 'class' => 'rekap-head-blue', 'key' => 'target'],
@@ -963,10 +966,16 @@ render_header('Rekap Petugas');
           ?>
           <tr class="<?= $hasKecamatanBreak ? 'rekap-kecamatan-break' : '' ?>" data-original-index="<?= (int)$rowIndex ?>">
             <td><?= e(trim((string)($r['petugas_name'] ?? '')) ?: '-') ?></td>
-            <?php if ($filters['petugas_type'] === 'pcl'): ?><td><?= e($r['pml_names'] ?: '-') ?></td><?php endif; ?>
-            <td><?= e($r['kabupaten_nama'] ?: '-') ?></td>
-            <td><?= e($r['wilayah_kerja_kecamatan'] ?: '-') ?></td>
-            <td class="rekap-small-text"><?= e($r['wilayah_kerja'] ?: '-') ?></td>
+            <?php if ($filters['petugas_type'] === 'pcl'): ?>
+              <td><?= e($r['pml_names'] ?: '-') ?></td>
+              <td><?= e($r['kabupaten_nama'] ?: '-') ?></td>
+              <td><?= e($r['wilayah_kerja_kecamatan'] ?: '-') ?></td>
+              <td class="rekap-small-text"><?= e($r['wilayah_kerja'] ?: '-') ?></td>
+            <?php else: ?>
+              <td><?= e($r['wilayah_kerja_kecamatan'] ?: '-') ?></td>
+              <td class="rekap-small-text"><?= e($r['wilayah_kerja'] ?: '-') ?></td>
+              <td><?= e($r['kabupaten_nama'] ?: '-') ?></td>
+            <?php endif; ?>
             <td class="text-right" data-sort-value="<?= $rowTarget ?>"><?= number_format($rowTarget, 0, ',', '.') ?></td>
             <td class="text-right" data-sort-value="<?= $pendataanCount ?>"><?= number_format($pendataanCount, 0, ',', '.') ?></td>
             <td class="text-right rekap-pct <?= e(rekap_petugas_pct_class($pendataanPct)) ?>" data-sort-value="<?= e((string)$pendataanPct) ?>"><?= e(rekap_petugas_pct_text($pendataanCount, $rowTarget)) ?></td>

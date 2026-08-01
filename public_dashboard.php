@@ -491,10 +491,12 @@ if (window.ChartDataLabels) {
 }
 
 function pctColor(value) {
-  if (value < 20) return '#dc2626';
-  if (value < 40) return '#f59e0b';
-  if (value < 75) return '#2563eb';
-  return '#16a34a';
+  if (value < 20) return '#b91c1c';
+  if (value < 40) return '#f87171';
+  if (value < 60) return '#d97706';
+  if (value < 75) return '#facc15';
+  if (value < 85) return '#22c55e';
+  return '#15803d';
 }
 
 function yAxisMax(value) {

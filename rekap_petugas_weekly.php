@@ -189,10 +189,16 @@ function rekap_weekly_pct_class(float $pct): string
     if ($pct < 40) {
         return 'weekly-progress-warning';
     }
+    if ($pct < 60) {
+        return 'weekly-progress-orange';
+    }
     if ($pct < 75) {
         return 'weekly-progress-mid';
     }
-    return 'weekly-progress-high';
+    if ($pct < 85) {
+        return 'weekly-progress-high';
+    }
+    return 'weekly-progress-very-high';
 }
 
 function rekap_weekly_draft_pct_class(float $pct): string
@@ -307,14 +313,12 @@ function rekap_weekly_export_payload(array $rows, array $dates, array $matrix, a
 {
     $dateEnd = end($dates);
     $dateEndLabel = rekap_weekly_date_label((string)$dateEnd);
-    $headers = ['Nama Petugas', 'Email Petugas'];
     if ($filters['petugas_type'] === 'pcl') {
-        $headers[] = 'Nama PML';
+        $headers = ['Nama Petugas', 'Email Petugas', 'Nama PML', 'Kabupaten', 'Wilayah Kerja Kecamatan', 'Wilayah Kerja Desa'];
+    } else {
+        $headers = ['Nama Petugas', 'Email Petugas', 'Wilayah Kerja Kecamatan', 'Wilayah Kerja Desa', 'Kabupaten'];
     }
     $headers = array_merge($headers, [
-        'Kabupaten',
-        'Wilayah Kerja Kecamatan',
-        'Wilayah Kerja Desa',
         'Total Assignment (' . $dateEndLabel . ')',
     ]);
     if ($filters['petugas_type'] === 'pml') {
@@ -347,10 +351,14 @@ function rekap_weekly_export_payload(array $rows, array $dates, array $matrix, a
         ];
         if ($filters['petugas_type'] === 'pcl') {
             $line[] = $row['pml_names'] ?: '-';
+            $line[] = $row['kabupaten'] ?: '-';
+            $line[] = $row['wilayah_kerja_kecamatan'] ?: '-';
+            $line[] = $row['wilayah_kerja'] ?: '-';
+        } else {
+            $line[] = $row['wilayah_kerja_kecamatan'] ?: '-';
+            $line[] = $row['wilayah_kerja'] ?: '-';
+            $line[] = $row['kabupaten'] ?: '-';
         }
-        $line[] = $row['kabupaten'] ?: '-';
-        $line[] = $row['wilayah_kerja_kecamatan'] ?: '-';
-        $line[] = $row['wilayah_kerja'] ?: '-';
         $line[] = $target;
         if ($filters['petugas_type'] === 'pml') {
             $line[] = $approveCount;
@@ -525,10 +533,16 @@ function rekap_weekly_xlsx_submit_pct_style(string $header, $value): int
     if ($pct < 40) {
         return 18;
     }
+    if ($pct < 60) {
+        return 25;
+    }
     if ($pct < 75) {
         return 19;
     }
-    return 20;
+    if ($pct < 85) {
+        return 20;
+    }
+    return 26;
 }
 
 function rekap_weekly_xlsx_header_style(string $header): int
@@ -563,6 +577,8 @@ function rekap_weekly_xlsx_kecamatan_break_style(int $style): int
         18 => 22,
         19 => 23,
         20 => 24,
+        25 => 27,
+        26 => 28,
         default => 11,
     };
 }
@@ -622,18 +638,19 @@ function rekap_weekly_export(array $headers, array $rows, array $filters, string
 </Relationships>');
     $zip->addFromString('xl/styles.xml', '<?xml version="1.0" encoding="UTF-8"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="11">
+  <fonts count="12">
     <font><sz val="11"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><color rgb="FF1F2937"/><name val="Calibri"/></font>
     <font><sz val="9"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><color rgb="FF16A34A"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><color rgb="FFFB7185"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><color rgb="FFB91C1C"/><name val="Calibri"/></font>
-    <font><b/><sz val="11"/><color rgb="FF9A3412"/><name val="Calibri"/></font>
-    <font><b/><sz val="11"/><color rgb="FF1D4ED8"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FFD97706"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FFFACC15"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><color rgb="FF6D28D9"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><color rgb="FF15803D"/><name val="Calibri"/></font>
-    <font><b/><sz val="11"/><color rgb="FFEAB308"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FFF87171"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><color rgb="FF22C55E"/><name val="Calibri"/></font>
   </fonts>
   <fills count="7">
     <fill><patternFill patternType="none"/></fill>
@@ -650,7 +667,7 @@ function rekap_weekly_export(array $headers, array $rows, array $filters, string
     <border><left style="thin"><color rgb="FFCBD5E1"/></left><right style="thin"><color rgb="FFCBD5E1"/></right><top style="medium"><color rgb="FF111827"/></top><bottom style="thin"><color rgb="FFCBD5E1"/></bottom></border>
   </borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="25">
+  <cellXfs count="29">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
     <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0"/>
@@ -671,15 +688,19 @@ function rekap_weekly_export(array $headers, array $rows, array $filters, string
     <xf numFmtId="2" fontId="5" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="2" fontId="10" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="2" fontId="7" fillId="0" borderId="0" xfId="0"/>
-    <xf numFmtId="2" fontId="9" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="2" fontId="11" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="2" fontId="5" fillId="0" borderId="2" xfId="0"/>
     <xf numFmtId="2" fontId="10" fillId="0" borderId="2" xfId="0"/>
     <xf numFmtId="2" fontId="7" fillId="0" borderId="2" xfId="0"/>
+    <xf numFmtId="2" fontId="11" fillId="0" borderId="2" xfId="0"/>
+    <xf numFmtId="2" fontId="6" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="2" fontId="9" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="2" fontId="6" fillId="0" borderId="2" xfId="0"/>
     <xf numFmtId="2" fontId="9" fillId="0" borderId="2" xfId="0"/>
   </cellXfs>
 </styleSheet>');
 
-    $identityCols = $filters['petugas_type'] === 'pcl' ? 7 : 6;
+    $identityCols = $filters['petugas_type'] === 'pcl' ? 7 : 5;
     $lastColumn = count($headers);
     $sheet = '<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
         . '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
@@ -696,7 +717,7 @@ function rekap_weekly_export(array $headers, array $rows, array $filters, string
             $previousKecamatan = $currentKecamatan;
         }
         $sheet .= '<row r="' . $rowNumber . '"' . ($rowNumber === 1 ? ' ht="30" customHeight="1"' : '') . '>';
-        $smallFontColumns = [2, $filters['petugas_type'] === 'pcl' ? 6 : 5];
+        $smallFontColumns = [2, $filters['petugas_type'] === 'pcl' ? 6 : 4];
         foreach ($row as $cIndex => $value) {
             $columnNumber = $cIndex + 1;
             $header = (string)($headers[$cIndex] ?? '');
@@ -792,9 +813,11 @@ render_header('Rekap Petugas Weekly');
     width: 9px;
   }
   .weekly-progress-low { color: #b91c1c; font-weight: 900; }
-  .weekly-progress-warning { color: #eab308; font-weight: 900; }
-  .weekly-progress-mid { color: #2563eb; font-weight: 800; }
-  .weekly-progress-high { color: #16a34a; font-weight: 800; }
+  .weekly-progress-warning { color: #f87171; font-weight: 900; }
+  .weekly-progress-orange { color: #d97706; font-weight: 900; }
+  .weekly-progress-mid { color: #facc15; font-weight: 800; }
+  .weekly-progress-high { color: #22c55e; font-weight: 800; }
+  .weekly-progress-very-high { color: #15803d; font-weight: 800; }
   .weekly-draft-low { color: #16a34a; font-weight: 800; }
   .weekly-draft-warning { color: #fb7185; font-weight: 800; }
   .weekly-draft-high { color: #b91c1c; font-weight: 900; }
@@ -821,73 +844,34 @@ render_header('Rekap Petugas Weekly');
   }
   .weekly-table th:nth-child(1),
   .weekly-table td:nth-child(1) {
+    box-shadow: 3px 0 0 #111827;
     left: 0;
     min-width: 170px;
     width: 170px;
   }
-  .weekly-table th:nth-child(2),
-  .weekly-table td:nth-child(2) {
-    left: 170px;
-    min-width: 150px;
-    width: 150px;
-  }
-  .weekly-table th:nth-child(3),
-  .weekly-table td:nth-child(3) {
-    left: 320px;
-    min-width: 130px;
-    width: 130px;
-  }
-  .weekly-table th:nth-child(4),
-  .weekly-table td:nth-child(4) {
-    left: 450px;
-    min-width: 180px;
-    width: 180px;
-  }
-  .weekly-table.weekly-freeze-pcl th:nth-child(5),
-  .weekly-table.weekly-freeze-pcl td:nth-child(5) {
-    left: 630px;
-    min-width: 220px;
-    width: 220px;
-  }
-  .weekly-table.weekly-freeze-pml th:nth-child(4),
-  .weekly-table.weekly-freeze-pml td:nth-child(4) {
-    left: 450px;
-    min-width: 220px;
-    width: 220px;
-  }
-  .weekly-table.weekly-freeze-pml th:nth-child(-n+4),
-  .weekly-table.weekly-freeze-pml td:nth-child(-n+4) {
+  .weekly-table.weekly-freeze-pml th:nth-child(1),
+  .weekly-table.weekly-freeze-pml td:nth-child(1),
+  .weekly-table.weekly-freeze-pcl th:nth-child(1),
+  .weekly-table.weekly-freeze-pcl td:nth-child(1) {
     background-clip: padding-box;
     position: sticky;
     z-index: 7;
   }
-  .weekly-table.weekly-freeze-pcl th:nth-child(-n+5),
-  .weekly-table.weekly-freeze-pcl td:nth-child(-n+5) {
-    background-clip: padding-box;
-    position: sticky;
-    z-index: 7;
-  }
-  .weekly-table.weekly-freeze-pml tbody td:nth-child(-n+4),
-  .weekly-table.weekly-freeze-pcl tbody td:nth-child(-n+5) {
+  .weekly-table.weekly-freeze-pml tbody td:nth-child(1),
+  .weekly-table.weekly-freeze-pcl tbody td:nth-child(1) {
     background: #fff;
   }
-  .weekly-table.weekly-freeze-pml tbody tr:nth-of-type(odd) td:nth-child(-n+4),
-  .weekly-table.weekly-freeze-pcl tbody tr:nth-of-type(odd) td:nth-child(-n+5) {
+  .weekly-table.weekly-freeze-pml tbody tr:nth-of-type(odd) td:nth-child(1),
+  .weekly-table.weekly-freeze-pcl tbody tr:nth-of-type(odd) td:nth-child(1) {
     background: #f9fafb;
   }
-  .weekly-table.weekly-freeze-pml tbody tr:hover td:nth-child(-n+4),
-  .weekly-table.weekly-freeze-pcl tbody tr:hover td:nth-child(-n+5) {
+  .weekly-table.weekly-freeze-pml tbody tr:hover td:nth-child(1),
+  .weekly-table.weekly-freeze-pcl tbody tr:hover td:nth-child(1) {
     background: #eef2ff;
   }
-  .weekly-table.weekly-freeze-pml thead th:nth-child(-n+4),
-  .weekly-table.weekly-freeze-pcl thead th:nth-child(-n+5) {
+  .weekly-table.weekly-freeze-pml thead th:nth-child(1),
+  .weekly-table.weekly-freeze-pcl thead th:nth-child(1) {
     z-index: 10;
-  }
-  .weekly-table.weekly-freeze-pml th:nth-child(4),
-  .weekly-table.weekly-freeze-pml td:nth-child(4),
-  .weekly-table.weekly-freeze-pcl th:nth-child(5),
-  .weekly-table.weekly-freeze-pcl td:nth-child(5) {
-    box-shadow: 3px 0 0 #111827;
   }
   .weekly-kecamatan-break > td {
     border-top: 3px solid #111827 !important;
@@ -1040,9 +1024,11 @@ render_header('Rekap Petugas Weekly');
     <div class="weekly-note-line">Rekap PCL (<?= number_format($petugasSummary['pcl'], 0, ',', '.') ?> petugas), PML (<?= number_format($petugasSummary['pml'], 0, ',', '.') ?> petugas)</div>
     <div class="weekly-progress-legend small">
       <span><i style="background:#b91c1c"></i>&lt; 20%</span>
-      <span><i style="background:#eab308"></i>20% - &lt; 40%</span>
-      <span><i style="background:#2563eb"></i>40% - &lt; 75%</span>
-      <span><i style="background:#16a34a"></i>75% - 100%</span>
+      <span><i style="background:#f87171"></i>20% - &lt; 40%</span>
+      <span><i style="background:#d97706"></i>40% - &lt; 60%</span>
+      <span><i style="background:#facc15"></i>60% - &lt; 75%</span>
+      <span><i style="background:#22c55e"></i>75% - &lt; 85%</span>
+      <span><i style="background:#15803d"></i>85% - &lt; 100%</span>
     </div>
   </div>
   <div class="card mb-3">
