@@ -1871,6 +1871,24 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
   direction: rtl;
   accent-color: #ea580c;
 }
+.dashboard-map-label-toggle {
+  background: #2563eb;
+  border: 1px solid #1d4ed8;
+  border-radius: 5px;
+  color: #ffffff;
+  display: block;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  margin: 7px auto 0;
+  padding: 5px 3px;
+  text-align: center;
+  width: 28px;
+}
+.dashboard-map-label-toggle.is-off {
+  background: #6b7280;
+  border-color: #4b5563;
+}
 .dashboard-side-card-grid {
   display: grid;
   gap: 10px;
@@ -2444,7 +2462,7 @@ function initDashboardProgressMap() {
   const opacityControl = L.control({ position: 'topleft' });
   opacityControl.onAdd = function () {
     const div = L.DomUtil.create('div', 'dashboard-map-opacity-control');
-    div.innerHTML = '<input type="range" min="20" max="90" step="5" value="65" aria-label="Opacity peta">';
+    div.innerHTML = '<input type="range" min="20" max="90" step="5" value="65" aria-label="Opacity peta"><button type="button" class="dashboard-map-label-toggle is-off" aria-pressed="false">Label<br>OFF</button>';
     L.DomEvent.disableClickPropagation(div);
     L.DomEvent.disableScrollPropagation(div);
     return div;
@@ -2452,7 +2470,10 @@ function initDashboardProgressMap() {
   opacityControl.addTo(map);
   const emptyStyle = { color: '#94a3b8', weight: 1, fillColor: '#e5e7eb', fillOpacity: 0.55 };
   let layer = null;
+  const labelLayer = L.layerGroup();
+  let labelsVisible = false;
   const opacityInput = el.querySelector('.dashboard-map-opacity-control input');
+  const labelToggle = el.querySelector('.dashboard-map-label-toggle');
   if (opacityInput) {
     opacityInput.addEventListener('input', function () {
       dashboardMapFillOpacity = Number(this.value || 65) / 100;
@@ -2462,6 +2483,19 @@ function initDashboardProgressMap() {
         const hasData = rowMap.has(code);
         item.setStyle({ fillOpacity: hasData ? dashboardMapFillOpacity : Math.max(0.25, dashboardMapFillOpacity - 0.1) });
       });
+    });
+  }
+  if (labelToggle) {
+    labelToggle.addEventListener('click', function () {
+      labelsVisible = !labelsVisible;
+      this.classList.toggle('is-off', !labelsVisible);
+      this.setAttribute('aria-pressed', labelsVisible ? 'true' : 'false');
+      this.innerHTML = labelsVisible ? 'Label<br>ON' : 'Label<br>OFF';
+      if (labelsVisible) {
+        labelLayer.addTo(map);
+      } else {
+        map.removeLayer(labelLayer);
+      }
     });
   }
   fetch(dashboardMapUrl(level))
@@ -2541,7 +2575,7 @@ function initDashboardProgressMap() {
             html: dashboardMapEscapeHtml(label),
             iconSize: null
           })
-        }).addTo(map);
+        }).addTo(labelLayer);
       });
       const bounds = layer.getBounds();
       if (bounds.isValid()) {
