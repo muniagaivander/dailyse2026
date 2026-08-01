@@ -1877,11 +1877,11 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
   border-radius: 5px;
   color: #ffffff;
   display: block;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 800;
-  line-height: 1;
+  line-height: .95;
   margin: 7px auto 0;
-  padding: 5px 3px;
+  padding: 4px 1px;
   text-align: center;
   width: 28px;
 }
