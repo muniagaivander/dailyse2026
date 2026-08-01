@@ -2325,7 +2325,11 @@ function dashboardMapName(feature, level) {
 }
 function dashboardMapSubslsRtLabel(feature) {
   const props = feature && feature.properties ? feature.properties : {};
-  return String(props.nmsls || '').trim() || '-';
+  const rtName = String(props.nmsls || '').trim();
+  const rawSubslsCode = String(props.kdsubsls || props.idsubsls || '');
+  const subslsCode = rawSubslsCode ? rawSubslsCode.slice(-2) : '';
+  if (rtName && subslsCode) return rtName + '-' + subslsCode;
+  return rtName || subslsCode || '-';
 }
 function dashboardMapAreaLabel(feature, level) {
   const props = feature && feature.properties ? feature.properties : {};
