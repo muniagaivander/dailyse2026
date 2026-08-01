@@ -1806,6 +1806,27 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
   border-top: 1px solid #e5e7eb;
   margin: 5px 0;
 }
+.dashboard-map-area-label {
+  background: transparent;
+  border: 0;
+  color: #111827;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  pointer-events: none;
+  text-align: center;
+  text-shadow:
+    -1px -1px 0 #ffffff,
+    0 -1px 0 #ffffff,
+    1px -1px 0 #ffffff,
+    -1px 0 0 #ffffff,
+    1px 0 0 #ffffff,
+    -1px 1px 0 #ffffff,
+    0 1px 0 #ffffff,
+    1px 1px 0 #ffffff,
+    0 2px 3px rgba(255, 255, 255, .9);
+  white-space: nowrap;
+}
 .dashboard-map-legend {
   background: rgba(255, 255, 255, .92);
   border: 1px solid rgba(148, 163, 184, .7);
@@ -2302,6 +2323,22 @@ function dashboardMapName(feature, level) {
   }
   return String(props.idsubsls || '-');
 }
+function dashboardMapSubslsRtLabel(feature) {
+  const props = feature && feature.properties ? feature.properties : {};
+  return String(props.nmsls || '').trim() || '-';
+}
+function dashboardMapAreaLabel(feature, level) {
+  const props = feature && feature.properties ? feature.properties : {};
+  if (level === 'kabupaten') return String(props.nmkab || props.namadaerah || '').trim() || '-';
+  if (level === 'kecamatan') return String(props.nmkec || props.namadaerah || '').trim() || '-';
+  if (level === 'desa') return String(props.nmdesa || props.namadaerah || '').trim() || '-';
+  return dashboardMapSubslsRtLabel(feature);
+}
+function dashboardMapEscapeHtml(value) {
+  return String(value || '').replace(/[&<>"']/g, function (char) {
+    return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[char];
+  });
+}
 function dashboardMapFeatureAllowed(feature, level) {
   const props = feature && feature.properties ? feature.properties : {};
   if (level === 'kecamatan' && dashboardFilters.kab_id && dashboardMapPropId(props, 'kabupaten') !== String(dashboardFilters.kab_id)) return false;
@@ -2487,6 +2524,21 @@ function initDashboardProgressMap() {
           });
         }
       }).addTo(map);
+      layer.eachLayer(function (item) {
+        if (!item.getBounds || !item.feature) return;
+        const label = dashboardMapAreaLabel(item.feature, level);
+        if (!label || label === '-') return;
+        const center = item.getBounds().getCenter();
+        L.marker(center, {
+          interactive: false,
+          keyboard: false,
+          icon: L.divIcon({
+            className: 'dashboard-map-area-label',
+            html: dashboardMapEscapeHtml(label),
+            iconSize: null
+          })
+        }).addTo(map);
+      });
       const bounds = layer.getBounds();
       if (bounds.isValid()) {
         map.fitBounds(bounds, { padding: [12, 12] });
