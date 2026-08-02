@@ -65,14 +65,6 @@ function dashboard_filter_options(array $user, array $filters): array
         $out['desa'] = $stmt->fetchAll();
     }
     if (!empty($filters['desa_id'])) {
-        $stmt = db()->prepare("SELECT ms.id value, CONCAT(sl.kdsls, ms.kdsubsls, ' - ', sl.nmsls, ' - ', ms.kdsubsls) label
-            FROM master_subsls ms
-            JOIN master_sls sl ON sl.id=ms.sls_id
-            WHERE sl.desa_id=?
-            ORDER BY sl.kdsls, ms.kdsubsls");
-        $stmt->execute([$filters['desa_id']]);
-        $out['subsls'] = $stmt->fetchAll();
-
         $stmt = db()->prepare("SELECT DISTINCT ms.pengawas_email value, up.name
             FROM master_subsls ms
             JOIN master_sls sl ON sl.id=ms.sls_id
@@ -126,6 +118,36 @@ function dashboard_filter_options(array $user, array $filters): array
             'value' => $row['value'],
             'label' => petugas_label($row['value'], $row['name'] ?? ''),
         ], $stmt->fetchAll());
+    }
+    if (!empty($filters['pencacah_email'])) {
+        $where = ['ms.pencacah_email=?'];
+        $params = [$filters['pencacah_email']];
+        if (!empty($filters['kab_id'])) {
+            $where[] = 'k.id=?';
+            $params[] = $filters['kab_id'];
+        }
+        if (!empty($filters['kec_id'])) {
+            $where[] = 'kc.id=?';
+            $params[] = $filters['kec_id'];
+        }
+        if (!empty($filters['desa_id'])) {
+            $where[] = 'd.id=?';
+            $params[] = $filters['desa_id'];
+        }
+        if (!empty($filters['pengawas_email'])) {
+            $where[] = 'ms.pengawas_email=?';
+            $params[] = $filters['pengawas_email'];
+        }
+        $stmt = db()->prepare("SELECT ms.id value, CONCAT(sl.kdsls, ms.kdsubsls, ' - ', sl.nmsls, ' - ', ms.kdsubsls) label
+            FROM master_subsls ms
+            JOIN master_sls sl ON sl.id=ms.sls_id
+            JOIN master_desa d ON d.id=sl.desa_id
+            JOIN master_kec kc ON kc.id=d.kec_id
+            JOIN master_kab k ON k.id=kc.kab_id
+            WHERE " . implode(' AND ', $where) . "
+            ORDER BY sl.kdsls, ms.kdsubsls");
+        $stmt->execute($params);
+        $out['subsls'] = $stmt->fetchAll();
     }
     return $out;
 }
@@ -274,23 +296,16 @@ function dashboard_area_breadcrumb_items(array $user, array $filters): array
     $parts = [];
     $base = ['tab' => 'submit_approve'];
     $kabId = in_array($user['role'], ['admin_kab', 'viewer_kab'], true) ? (string)$user['kab_id'] : (string)($filters['kab_id'] ?? '');
-    if (in_array($user['role'], ['superadmin', 'viewer_prov'], true)) {
-        $parts[] = [
-            'label' => 'Kaltim',
-            'href' => '?' . http_build_query($base),
-        ];
-    }
+    $parts[] = [
+        'label' => 'Kaltim',
+        'href' => in_array($user['role'], ['superadmin', 'viewer_prov'], true) ? '?' . http_build_query($base) : null,
+    ];
     if ($kabId !== '') {
         $stmt = db()->prepare("SELECT nmkab FROM master_kab WHERE id=?");
         $stmt->execute([$kabId]);
         $parts[] = [
             'label' => (string)($stmt->fetchColumn() ?: $kabId),
             'href' => '?' . http_build_query($base + ['kab_id' => $kabId]),
-        ];
-    } elseif (!in_array($user['role'], ['superadmin', 'viewer_prov'], true)) {
-        $parts[] = [
-            'label' => 'Kaltim',
-            'href' => null,
         ];
     }
 
@@ -2078,10 +2093,24 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
           <?php foreach ($opts['desa'] as $o): ?><option value="<?= e($o['value']) ?>" <?= $filters['desa_id']===$o['value']?'selected':'' ?>><?= e($o['label']) ?></option><?php endforeach; ?>
         </select>
       </div>
-      <div class="form-group col-md-3">
+      <div class="form-group col-md-2">
+        <label>PML</label>
+        <select class="form-control" name="pengawas_email" id="pengawas_email" <?= $filters['desa_id'] ? '' : 'disabled' ?>>
+          <option value=""><?= $filters['desa_id'] ? 'Semua PML' : 'Pilih desa dulu' ?></option>
+          <?php foreach ($opts['pengawas'] as $o): ?><option value="<?= e($o['value']) ?>" <?= $filters['pengawas_email']===$o['value']?'selected':'' ?>><?= e($o['label']) ?></option><?php endforeach; ?>
+        </select>
+      </div>
+      <div class="form-group col-md-2">
+        <label>PCL</label>
+        <select class="form-control" name="pencacah_email" id="pencacah_email" <?= $filters['pengawas_email'] ? '' : 'disabled' ?>>
+          <option value=""><?= $filters['pengawas_email'] ? 'Semua PCL' : 'Pilih PML dulu' ?></option>
+          <?php foreach ($opts['pencacah'] as $o): ?><option value="<?= e($o['value']) ?>" <?= $filters['pencacah_email']===$o['value']?'selected':'' ?>><?= e($o['label']) ?></option><?php endforeach; ?>
+        </select>
+      </div>
+      <div class="form-group col-md-2">
         <label>SubSLS</label>
-        <select class="form-control" name="subsls_id" id="subsls_id" <?= $filters['desa_id'] ? '' : 'disabled' ?>>
-          <option value=""><?= $filters['desa_id'] ? 'Semua SubSLS' : 'Pilih desa dulu' ?></option>
+        <select class="form-control" name="subsls_id" id="subsls_id" <?= $filters['pencacah_email'] ? '' : 'disabled' ?>>
+          <option value=""><?= $filters['pencacah_email'] ? 'Semua SubSLS' : 'Pilih PCL dulu' ?></option>
           <?php foreach ($opts['subsls'] as $o): ?><option value="<?= e($o['value']) ?>" <?= $filters['subsls_id']===$o['value']?'selected':'' ?>><?= e($o['label']) ?></option><?php endforeach; ?>
         </select>
       </div>
@@ -2643,9 +2672,13 @@ if (kabupaten) {
   kabupaten.addEventListener('change', function () {
     const kec = document.getElementById('kec_id');
     const desa = document.getElementById('desa_id');
+    const pengawas = document.getElementById('pengawas_email');
+    const pencacah = document.getElementById('pencacah_email');
     const subsls = document.getElementById('subsls_id');
     if (kec) kec.value = '';
     if (desa) desa.value = '';
+    if (pengawas) pengawas.value = '';
+    if (pencacah) pencacah.value = '';
     if (subsls) subsls.value = '';
     this.form.submit();
   });
@@ -2654,15 +2687,41 @@ const kecamatan = document.getElementById('kec_id');
 if (kecamatan) {
   kecamatan.addEventListener('change', function () {
     const desa = document.getElementById('desa_id');
+    const pengawas = document.getElementById('pengawas_email');
+    const pencacah = document.getElementById('pencacah_email');
     const subsls = document.getElementById('subsls_id');
     if (desa) desa.value = '';
+    if (pengawas) pengawas.value = '';
+    if (pencacah) pencacah.value = '';
     if (subsls) subsls.value = '';
     this.form.submit();
   });
 }
 const desa = document.getElementById('desa_id');
 if (desa) {
-  desa.addEventListener('change', function () {
+desa.addEventListener('change', function () {
+    const pengawas = document.getElementById('pengawas_email');
+    const pencacah = document.getElementById('pencacah_email');
+    const subsls = document.getElementById('subsls_id');
+    if (pengawas) pengawas.value = '';
+    if (pencacah) pencacah.value = '';
+    if (subsls) subsls.value = '';
+    this.form.submit();
+  });
+}
+const pengawas = document.getElementById('pengawas_email');
+if (pengawas) {
+  pengawas.addEventListener('change', function () {
+    const pencacah = document.getElementById('pencacah_email');
+    const subsls = document.getElementById('subsls_id');
+    if (pencacah) pencacah.value = '';
+    if (subsls) subsls.value = '';
+    this.form.submit();
+  });
+}
+const pencacah = document.getElementById('pencacah_email');
+if (pencacah) {
+  pencacah.addEventListener('change', function () {
     const subsls = document.getElementById('subsls_id');
     if (subsls) subsls.value = '';
     this.form.submit();

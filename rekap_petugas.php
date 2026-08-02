@@ -1308,15 +1308,15 @@ render_header('Rekap Petugas');
         <div>
           <h5 class="modal-title mb-0" id="rekapPclDetailTitle">Rekap SubSLS PCL</h5>
           <div class="small" id="rekapPclDetailSubtitle"></div>
+          <div class="mt-2">
+            <a class="btn btn-light btn-sm" id="rekapPclDetailExport" href="#" target="_blank">
+              <i class="fas fa-file-excel mr-1"></i>Export Excel
+            </a>
+          </div>
         </div>
-        <div class="d-flex align-items-center">
-          <a class="btn btn-light btn-sm mr-3" id="rekapPclDetailExport" href="#" target="_blank">
-            <i class="fas fa-file-excel mr-1"></i>Export Excel
-          </a>
-          <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
-            <span aria-hidden="true">&times;</span>
-          </button>
-        </div>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
       </div>
       <div class="modal-body" id="rekapPclDetailBody">
         <div class="text-muted">Memuat data...</div>
