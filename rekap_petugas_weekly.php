@@ -1339,9 +1339,6 @@ render_header('Rekap Petugas Weekly');
       <table class="table table-sm table-bordered table-striped mb-0 weekly-table weekly-freeze-<?= $filters['petugas_type'] === 'pcl' ? 'pcl' : 'pml' ?>">
         <thead>
           <tr>
-            <?php if ($showWeeklyDetailButton): ?>
-              <th class="weekly-identity"><div class="weekly-header-label">Detail<br>SubSLS</div></th>
-            <?php endif; ?>
             <?php foreach ($headers as $i => $header): ?>
               <?php
                 if ((string)$header === 'Email Petugas') {
@@ -1389,6 +1386,9 @@ render_header('Rekap Petugas Weekly');
                   <?php endif; ?>
                 </div>
               </th>
+              <?php if ($showWeeklyDetailButton && $i === 0): ?>
+                <th class="weekly-identity"><div class="weekly-header-label">Detail<br>SubSLS</div></th>
+              <?php endif; ?>
             <?php endforeach; ?>
           </tr>
         </thead>
@@ -1404,18 +1404,6 @@ render_header('Rekap Petugas Weekly');
               $previousWeeklyKecamatan = $currentWeeklyKecamatan;
             ?>
             <tr class="<?= $hasWeeklyKecamatanBreak ? 'weekly-kecamatan-break' : '' ?>" data-original-index="<?= (int)$rowIndex ?>">
-              <?php if ($showWeeklyDetailButton): ?>
-                <td class="text-center">
-                  <button type="button"
-                          class="btn btn-info btn-xs weekly-detail-btn"
-                          title="Lihat rekap SubSLS"
-                          data-weekly-detail-email="<?= e((string)($row[1] ?? '')) ?>"
-                          data-weekly-detail-name="<?= e((string)($row[0] ?? '')) ?>"
-                          data-weekly-detail-type="<?= e($filters['petugas_type']) ?>">
-                    <i class="fas fa-info"></i>
-                  </button>
-                </td>
-              <?php endif; ?>
               <?php foreach ($row as $i => $value): ?>
                 <?php
                   if ((string)($headers[$i] ?? '') === 'Email Petugas') {
@@ -1436,6 +1424,18 @@ render_header('Rekap Petugas Weekly');
                     <?= $isNumeric ? e(number_format((float)$value, str_contains($header, 'persen') || str_contains($header, '%') ? 2 : 0, ',', '.')) : e((string)$value) ?>
                   <?php endif; ?>
                 </td>
+                <?php if ($showWeeklyDetailButton && $i === 0): ?>
+                  <td class="text-center">
+                    <button type="button"
+                            class="btn btn-info btn-xs weekly-detail-btn"
+                            title="Lihat rekap SubSLS"
+                            data-weekly-detail-email="<?= e((string)($row[1] ?? '')) ?>"
+                            data-weekly-detail-name="<?= e((string)($row[0] ?? '')) ?>"
+                            data-weekly-detail-type="<?= e($filters['petugas_type']) ?>">
+                      <i class="fas fa-info"></i>
+                    </button>
+                  </td>
+                <?php endif; ?>
               <?php endforeach; ?>
             </tr>
           <?php endforeach; ?>
