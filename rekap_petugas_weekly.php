@@ -334,6 +334,21 @@ function rekap_weekly_subsls_payload(array $rows, array $dates, array $matrix): 
 function rekap_weekly_detail_payload(array $rows, array $dates, array $matrix): array
 {
     [$headers, $out] = rekap_weekly_subsls_payload($rows, $dates, $matrix);
+    $removeIndexes = [];
+    foreach (['Wilayah Kerja Kecamatan', 'Wilayah Kerja Desa'] as $removeHeader) {
+        $index = array_search($removeHeader, $headers, true);
+        if ($index !== false) {
+            $removeIndexes[] = (int)$index;
+        }
+    }
+    rsort($removeIndexes);
+    foreach ($removeIndexes as $index) {
+        array_splice($headers, $index, 1);
+        foreach ($out as &$row) {
+            array_splice($row, $index, 1);
+        }
+        unset($row);
+    }
     return [$headers, $out];
 }
 
@@ -342,7 +357,7 @@ function rekap_weekly_detail_html(array $headers, array $rows): string
     ob_start();
     ?>
     <div class="table-responsive weekly-freeze-pane">
-      <table class="table table-sm table-bordered table-striped mb-0 weekly-table">
+      <table class="table table-sm table-bordered table-striped mb-0 weekly-table weekly-detail-table">
         <thead><tr>
           <?php foreach ($headers as $header): ?>
             <?php
@@ -1110,6 +1125,35 @@ render_header('Rekap Petugas Weekly');
   .weekly-table {
     border-collapse: separate;
     border-spacing: 0;
+  }
+  .weekly-detail-table {
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  .weekly-detail-table th:nth-child(1),
+  .weekly-detail-table td:nth-child(1) {
+    background-clip: padding-box;
+    border-right: 3px solid #111827 !important;
+    box-shadow: 4px 0 0 #ffffff, 6px 0 0 #111827;
+    left: 0;
+    min-width: 160px;
+    position: sticky;
+    width: 160px;
+    z-index: 7;
+  }
+  .weekly-detail-table thead th:nth-child(1) {
+    background: #f8fafc !important;
+    z-index: 10;
+  }
+  .weekly-detail-table tbody td:nth-child(1) {
+    background: #ffffff !important;
+    font-weight: 700;
+  }
+  .weekly-detail-table tbody tr:nth-of-type(odd) td:nth-child(1) {
+    background: #f9fafb !important;
+  }
+  .weekly-detail-table tbody tr:hover td:nth-child(1) {
+    background: #eef2ff !important;
   }
   .weekly-table thead th {
     background: #f8fafc;
