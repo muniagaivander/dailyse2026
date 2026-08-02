@@ -1,6 +1,6 @@
 <?php
 require __DIR__ . '/layout.php';
-$user = require_role(['superadmin', 'admin_kab', 'viewer_prov', 'viewer_kab']);
+$user = require_role(['superadmin', 'admin_kab', 'viewer_prov', 'viewer_kab', 'pengawas', 'pencacah']);
 $requestedPerPage = (int)($_GET['per_page'] ?? 20);
 
 $filters = [
@@ -18,6 +18,12 @@ foreach ($rekapSearchKeys as $key) {
 }
 if (in_array($user['role'], ['admin_kab', 'viewer_kab'], true)) {
     $filters['kab_id'] = $user['kab_id'];
+}
+if (in_array($user['role'], ['pengawas', 'pencacah'], true)) {
+    $filters['petugas_type'] = 'pcl';
+    $filters['kab_id'] = '';
+    $filters['kec_id'] = '';
+    $filters['desa_id'] = '';
 }
 
 function rekap_petugas_filter_options(array $user, array $filters): array
@@ -64,6 +70,13 @@ function rekap_petugas_where(array $user, array $filters): array
     if ($filters['desa_id']) {
         $where[] = 'd.id=?';
         $params[] = $filters['desa_id'];
+    }
+    if ($user['role'] === 'pengawas') {
+        $where[] = 'ms.pengawas_email=?';
+        $params[] = normalize_email((string)$user['email']);
+    } elseif ($user['role'] === 'pencacah') {
+        $where[] = 'ms.pencacah_email=?';
+        $params[] = normalize_email((string)$user['email']);
     }
     return [$where ? 'WHERE ' . implode(' AND ', $where) : '', $params];
 }
@@ -714,7 +727,21 @@ if (($_GET['action'] ?? '') === 'pcl_detail') {
     exit;
 }
 
-$rows = rekap_petugas_sort_rows(rekap_petugas_apply_search(rekap_petugas_rows($user, $filters), $filters), $filters);
+$isDirectPclView = $user['role'] === 'pencacah';
+$directPclRows = $isDirectPclView ? rekap_petugas_pcl_detail_rows($user, $filters, normalize_email((string)$user['email'])) : [];
+if ($isDirectPclView && ($_GET['action'] ?? '') === 'export') {
+    $format = ($_GET['format'] ?? 'csv') === 'xlsx' ? 'xlsx' : 'csv';
+    [$headers, $exportRows] = rekap_petugas_detail_export_data($directPclRows);
+    rekap_petugas_export(
+        $headers,
+        $exportRows,
+        $format,
+        'pcl_subsls_' . preg_replace('/[^a-z0-9]+/i', '_', normalize_email((string)$user['email'])),
+        'Rekap Wilayah SubSLS ' . (trim((string)($user['name'] ?? '')) ?: normalize_email((string)$user['email']))
+    );
+}
+
+$rows = $isDirectPclView ? [] : rekap_petugas_sort_rows(rekap_petugas_apply_search(rekap_petugas_rows($user, $filters), $filters), $filters);
 $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = $filters['per_page'];
 $totalRows = count($rows);
@@ -1013,6 +1040,7 @@ render_header('Rekap Petugas');
     width: 9px;
   }
 </style>
+<?php if (!in_array($user['role'], ['pengawas', 'pencacah'], true)): ?>
 <form class="card card-body mb-3" method="get">
   <div class="form-row align-items-end">
     <?php foreach ($rekapSearchKeys as $key): ?>
@@ -1054,6 +1082,7 @@ render_header('Rekap Petugas');
     <div class="form-group col-12 col-md-1"><button class="btn btn-primary btn-block">Filter</button></div>
   </div>
 </form>
+<?php endif; ?>
 <div class="rekap-info-section">
   <div><em>Progress Pendataan = Submit+Reject+Pending+Approve</em></div>
   <div class="small mt-1">Diurutkan <em>default</em> berdasarkan kecamatan dan % Progress Pendataan Ascending</div>
@@ -1067,6 +1096,20 @@ render_header('Rekap Petugas');
   </div>
 </div>
 
+<?php if ($isDirectPclView): ?>
+  <div class="card">
+    <div class="card-header py-2 d-flex justify-content-between align-items-center">
+      <strong>Rekap Wilayah SubSLS PCL (<?= number_format(count($directPclRows), 0, ',', '.') ?> SubSLS)</strong>
+      <div>
+        <a class="btn btn-outline-success btn-sm mr-2" href="?<?= e(http_build_query(['action' => 'export', 'format' => 'csv'])) ?>"><i class="fas fa-file-csv mr-1"></i>Download CSV</a>
+        <a class="btn btn-outline-success btn-sm" href="?<?= e(http_build_query(['action' => 'export', 'format' => 'xlsx'])) ?>"><i class="fas fa-file-excel mr-1"></i>Download Excel</a>
+      </div>
+    </div>
+    <div class="card-body p-0">
+      <?= rekap_petugas_detail_html($directPclRows) ?>
+    </div>
+  </div>
+<?php else: ?>
 <div class="card">
   <div class="card-header py-2 d-flex justify-content-between align-items-center">
     <strong>
@@ -1255,6 +1298,7 @@ render_header('Rekap Petugas');
       <li class="page-item <?= $page >= $totalPages ? 'disabled' : '' ?>"><a class="page-link" href="?<?= e(http_build_query($baseQuery + ['page' => min($totalPages, $page + 1)])) ?>">Next</a></li>
     </ul>
   </nav>
+<?php endif; ?>
 <?php endif; ?>
 
 <div class="modal fade" id="rekapPclDetailModal" tabindex="-1" role="dialog" aria-hidden="true">

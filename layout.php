@@ -154,6 +154,10 @@ function render_header(string $title): void {
               <li class="nav-item"><a class="nav-link<?= $isActive(['rekap_petugas_weekly.php']) ?>" href="rekap_petugas_weekly.php"><i class="nav-icon fas fa-calendar-week"></i><p>Rekap Petugas Weekly</p></a></li>
               <li class="nav-item"><a class="nav-link<?= $isActive(['rekap_petugas_daily.php']) ?>" href="rekap_petugas_daily.php"><i class="nav-icon fas fa-calendar-days"></i><p>Rekap Petugas Daily</p></a></li>
             <?php endif; ?>
+            <?php if (in_array($user['role'], ['pengawas','pencacah'], true)): ?>
+              <li class="nav-item"><a class="nav-link<?= $isActive(['rekap_petugas.php']) ?>" href="rekap_petugas.php"><i class="nav-icon fas fa-clipboard-list"></i><p>Rekap Petugas</p></a></li>
+              <li class="nav-item"><a class="nav-link<?= $isActive(['rekap_petugas_weekly.php']) ?>" href="rekap_petugas_weekly.php"><i class="nav-icon fas fa-calendar-week"></i><p>Rekap Petugas Weekly</p></a></li>
+            <?php endif; ?>
             <?php if (in_array($user['role'], ['admin_kab','superadmin','pengawas'], true)): ?>
               <li class="nav-item"><a class="nav-link<?= $isActive(['status_selesai.php']) ?>" href="status_selesai.php"><i class="nav-icon fas fa-circle-check"></i><p>Status Selesai SubSLS</p></a></li>
             <?php endif; ?>

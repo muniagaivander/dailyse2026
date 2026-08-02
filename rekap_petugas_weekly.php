@@ -1,6 +1,6 @@
 <?php
 require __DIR__ . '/layout.php';
-$user = require_role(['superadmin', 'admin_kab', 'viewer_prov', 'viewer_kab']);
+$user = require_role(['superadmin', 'admin_kab', 'viewer_prov', 'viewer_kab', 'pengawas', 'pencacah']);
 
 $filters = [
     'tanggal' => (string)($_GET['tanggal'] ?? date('Y-m-d')),
@@ -19,7 +19,13 @@ if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters['tanggal'])) {
 if (in_array($user['role'], ['admin_kab', 'viewer_kab'], true)) {
     $filters['kab_id'] = (string)$user['kab_id'];
 }
-$hasFiltered = isset($_GET['filter']) || isset($_GET['action']);
+if (in_array($user['role'], ['pengawas', 'pencacah'], true)) {
+    $filters['petugas_type'] = 'pcl';
+    $filters['kab_id'] = '';
+    $filters['kec_id'] = '';
+    $filters['desa_id'] = '';
+}
+$hasFiltered = isset($_GET['filter']) || isset($_GET['action']) || in_array($user['role'], ['pengawas', 'pencacah'], true);
 
 function rekap_weekly_filter_options(array $user, array $filters): array
 {
@@ -63,6 +69,13 @@ function rekap_weekly_area_where(array $user, array $filters): array
     if ($filters['desa_id'] !== '') {
         $where[] = 'd.id=?';
         $params[] = $filters['desa_id'];
+    }
+    if ($user['role'] === 'pengawas') {
+        $where[] = 'ms.pengawas_email=?';
+        $params[] = normalize_email((string)$user['email']);
+    } elseif ($user['role'] === 'pencacah') {
+        $where[] = 'ms.pencacah_email=?';
+        $params[] = normalize_email((string)$user['email']);
     }
     return [$where, $params];
 }
@@ -143,6 +156,117 @@ function rekap_weekly_values(array $user, array $filters, string $dateStart, str
         ];
     }
     return $matrix;
+}
+
+function rekap_weekly_subsls_rows(array $user, array $filters): array
+{
+    [$where, $params] = rekap_weekly_area_where($user, $filters);
+    $stmt = db()->prepare("SELECT
+            ms.id subsls_id,
+            CONCAT(k.id, kc.kdkec, d.kddesa, sl.kdsls, ms.kdsubsls) kode_subsls,
+            sl.nmsls,
+            ms.kdsubsls,
+            kc.nmkec wilayah_kerja_kecamatan,
+            d.nmdesa wilayah_kerja
+        FROM master_subsls ms
+        JOIN master_sls sl ON sl.id=ms.sls_id
+        JOIN master_desa d ON d.id=sl.desa_id
+        JOIN master_kec kc ON kc.id=d.kec_id
+        JOIN master_kab k ON k.id=kc.kab_id
+        WHERE " . implode(' AND ', $where) . "
+        ORDER BY k.id, kc.kdkec, d.kddesa, sl.kdsls, ms.kdsubsls");
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
+function rekap_weekly_subsls_values(array $user, array $filters, string $dateStart, string $dateEnd): array
+{
+    [$where, $params] = rekap_weekly_area_where($user, $filters);
+    $queryStart = date('Y-m-d', strtotime($dateStart . ' -1 day'));
+    $where[] = 'ds.tanggal BETWEEN ? AND ?';
+    $params[] = $queryStart;
+    $params[] = $dateEnd;
+
+    $stmt = db()->prepare("SELECT
+            ds.subsls_id,
+            ds.tanggal,
+            SUM(ds.target) target,
+            SUM(ds.draft_count) draft_count,
+            SUM(ds.submitted_by_pencacah + ds.rejected_by_pengawas + ds.pending_count + ds.approved_by_pengawas) progress_count
+        FROM daily_status ds
+        JOIN master_subsls ms ON ms.id=ds.subsls_id
+        JOIN master_sls sl ON sl.id=ms.sls_id
+        JOIN master_desa d ON d.id=sl.desa_id
+        JOIN master_kec kc ON kc.id=d.kec_id
+        JOIN master_kab k ON k.id=kc.kab_id
+        WHERE " . implode(' AND ', $where) . "
+        GROUP BY ds.subsls_id, ds.tanggal
+        ORDER BY ds.tanggal, ds.subsls_id");
+    $stmt->execute($params);
+
+    $matrix = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $matrix[(string)$row['subsls_id']][(string)$row['tanggal']] = [
+            'count' => (int)$row['progress_count'],
+            'draft_count' => (int)$row['draft_count'],
+            'target' => (int)$row['target'],
+        ];
+    }
+    return $matrix;
+}
+
+function rekap_weekly_subsls_payload(array $rows, array $dates, array $matrix): array
+{
+    $dateEnd = (string)end($dates);
+    $dateEndLabel = rekap_weekly_date_label($dateEnd);
+    $headers = [
+        'Kode SubSLS',
+        'Nama SLS',
+        'SubSLS',
+        'Wilayah Kerja Kecamatan',
+        'Wilayah Kerja Desa',
+        'Total Assignment (' . $dateEndLabel . ')',
+        'Total Submit sd ' . $dateEndLabel,
+        '% Submit sd ' . $dateEndLabel,
+        'Total Draft sd ' . $dateEndLabel,
+        '% Draft sd ' . $dateEndLabel,
+    ];
+    foreach ($dates as $date) {
+        $headers[] = 'Submit Tanggal ' . rekap_weekly_date_label($date);
+    }
+    $headers[] = 'Jumlah SubSLS';
+
+    $out = [];
+    foreach ($rows as $row) {
+        $key = (string)$row['subsls_id'];
+        $dailyRows = $matrix[$key] ?? [];
+        $endDaily = rekap_weekly_latest_daily($dailyRows, $dateEnd);
+        $target = (int)($endDaily['target'] ?? 0);
+        $rekapCount = (int)($endDaily['count'] ?? 0);
+        $draftCount = (int)($endDaily['draft_count'] ?? 0);
+        $line = [
+            $row['kode_subsls'],
+            $row['nmsls'],
+            $row['kdsubsls'],
+            $row['wilayah_kerja_kecamatan'] ?: '-',
+            $row['wilayah_kerja'] ?: '-',
+            $target,
+            $rekapCount,
+            rekap_weekly_pct_export(rekap_weekly_pct($rekapCount, $target)),
+            $draftCount,
+            rekap_weekly_pct_export(rekap_weekly_pct($draftCount, $target)),
+        ];
+        foreach ($dates as $date) {
+            $daily = $dailyRows[$date] ?? null;
+            $previous = $dailyRows[date('Y-m-d', strtotime($date . ' -1 day'))] ?? null;
+            $line[] = $daily !== null && $previous !== null
+                ? max(0, (int)$daily['count'] - (int)$previous['count'])
+                : 0;
+        }
+        $line[] = 1;
+        $out[] = $line;
+    }
+    return [$headers, $out];
 }
 
 function rekap_weekly_dates(string $end): array
@@ -761,12 +885,20 @@ $rows = [];
 $headers = [];
 $tableRows = [];
 $petugasSummary = ['pcl' => 0, 'pml' => 0];
+$isDirectPclWeekly = $user['role'] === 'pencacah';
 if ($hasFiltered) {
-    $rows = rekap_weekly_apply_search(rekap_weekly_petugas_rows($user, $filters), $filters);
-    $matrix = rekap_weekly_values($user, $filters, $dateStart, $dateEnd);
-    $rows = rekap_weekly_default_sort_rows($rows, $matrix, $dates, $filters);
-    $petugasSummary = rekap_weekly_petugas_summary($rows, $filters['petugas_type']);
-    [$headers, $tableRows] = rekap_weekly_export_payload($rows, $dates, $matrix, $filters);
+    if ($isDirectPclWeekly) {
+        $rows = rekap_weekly_subsls_rows($user, $filters);
+        $matrix = rekap_weekly_subsls_values($user, $filters, $dateStart, $dateEnd);
+        [$headers, $tableRows] = rekap_weekly_subsls_payload($rows, $dates, $matrix);
+        $petugasSummary = ['pcl' => 1, 'pml' => 0];
+    } else {
+        $rows = rekap_weekly_apply_search(rekap_weekly_petugas_rows($user, $filters), $filters);
+        $matrix = rekap_weekly_values($user, $filters, $dateStart, $dateEnd);
+        $rows = rekap_weekly_default_sort_rows($rows, $matrix, $dates, $filters);
+        $petugasSummary = rekap_weekly_petugas_summary($rows, $filters['petugas_type']);
+        [$headers, $tableRows] = rekap_weekly_export_payload($rows, $dates, $matrix, $filters);
+    }
     $tableRows = rekap_weekly_sort_table_rows($headers, $tableRows, $filters);
     if (($_GET['action'] ?? '') === 'export') {
         $format = ($_GET['format'] ?? 'csv') === 'xlsx' ? 'xlsx' : 'csv';
@@ -964,6 +1096,7 @@ render_header('Rekap Petugas Weekly');
   }
 </style>
 
+<?php if (!in_array($user['role'], ['pengawas', 'pencacah'], true)): ?>
 <form class="card card-body mb-3" method="get">
   <div class="form-row align-items-end">
     <input type="hidden" name="search_nama" value="<?= e($filters['search_nama']) ?>">
@@ -1013,6 +1146,7 @@ render_header('Rekap Petugas Weekly');
     </div>
   </div>
 </form>
+<?php endif; ?>
 
 <?php if (!$hasFiltered): ?>
   <div class="alert alert-info">Pilih filter lalu klik <strong>Filter</strong> untuk menampilkan Rekap Petugas Weekly.</div>
@@ -1021,7 +1155,11 @@ render_header('Rekap Petugas Weekly');
     <div>Periode <?= e(rekap_weekly_date_label($dateStart)) ?> - <?= e(rekap_weekly_date_label($dateEnd)) ?></div>
     <div class="weekly-note-line">Submit = submit+reject+pending+approve</div>
     <div class="weekly-note-line">Diurutkan berdasarkan kecamatan lalu % Submit Ascending</div>
-    <div class="weekly-note-line">Rekap PCL (<?= number_format($petugasSummary['pcl'], 0, ',', '.') ?> petugas), PML (<?= number_format($petugasSummary['pml'], 0, ',', '.') ?> petugas)</div>
+    <?php if ($isDirectPclWeekly): ?>
+      <div class="weekly-note-line">Rekap Wilayah SubSLS (<?= number_format(count($tableRows), 0, ',', '.') ?> SubSLS)</div>
+    <?php else: ?>
+      <div class="weekly-note-line">Rekap PCL (<?= number_format($petugasSummary['pcl'], 0, ',', '.') ?> petugas), PML (<?= number_format($petugasSummary['pml'], 0, ',', '.') ?> petugas)</div>
+    <?php endif; ?>
     <div class="weekly-progress-legend small">
       <span><i style="background:#b91c1c"></i>&lt; 20%</span>
       <span><i style="background:#f87171"></i>20% - &lt; 40%</span>
