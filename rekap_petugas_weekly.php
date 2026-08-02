@@ -215,6 +215,68 @@ function rekap_weekly_subsls_values(array $user, array $filters, string $dateSta
     return $matrix;
 }
 
+function rekap_weekly_petugas_subsls_rows(array $user, array $filters, string $type, string $email): array
+{
+    [$where, $params] = rekap_weekly_area_where($user, $filters);
+    $emailField = $type === 'pml' ? 'pengawas_email' : 'pencacah_email';
+    $where[] = "ms.$emailField=?";
+    $params[] = $email;
+
+    $stmt = db()->prepare("SELECT
+            ms.id subsls_id,
+            CONCAT(k.id, kc.kdkec, d.kddesa, sl.kdsls, ms.kdsubsls) kode_subsls,
+            sl.nmsls,
+            ms.kdsubsls
+        FROM master_subsls ms
+        JOIN master_sls sl ON sl.id=ms.sls_id
+        JOIN master_desa d ON d.id=sl.desa_id
+        JOIN master_kec kc ON kc.id=d.kec_id
+        JOIN master_kab k ON k.id=kc.kab_id
+        WHERE " . implode(' AND ', $where) . "
+        ORDER BY k.id, kc.kdkec, d.kddesa, sl.kdsls, ms.kdsubsls");
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
+function rekap_weekly_petugas_subsls_values(array $user, array $filters, string $type, string $email, string $dateStart, string $dateEnd): array
+{
+    [$where, $params] = rekap_weekly_area_where($user, $filters);
+    $emailField = $type === 'pml' ? 'pengawas_email' : 'pencacah_email';
+    $queryStart = date('Y-m-d', strtotime($dateStart . ' -1 day'));
+    $where[] = "ds.$emailField=?";
+    $params[] = $email;
+    $where[] = 'ds.tanggal BETWEEN ? AND ?';
+    $params[] = $queryStart;
+    $params[] = $dateEnd;
+
+    $stmt = db()->prepare("SELECT
+            ds.subsls_id,
+            ds.tanggal,
+            SUM(ds.target) target,
+            SUM(ds.draft_count) draft_count,
+            SUM(ds.submitted_by_pencacah + ds.rejected_by_pengawas + ds.pending_count + ds.approved_by_pengawas) progress_count
+        FROM daily_status ds
+        JOIN master_subsls ms ON ms.id=ds.subsls_id
+        JOIN master_sls sl ON sl.id=ms.sls_id
+        JOIN master_desa d ON d.id=sl.desa_id
+        JOIN master_kec kc ON kc.id=d.kec_id
+        JOIN master_kab k ON k.id=kc.kab_id
+        WHERE " . implode(' AND ', $where) . "
+        GROUP BY ds.subsls_id, ds.tanggal
+        ORDER BY ds.tanggal, ds.subsls_id");
+    $stmt->execute($params);
+
+    $matrix = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $matrix[(string)$row['subsls_id']][(string)$row['tanggal']] = [
+            'count' => (int)$row['progress_count'],
+            'draft_count' => (int)$row['draft_count'],
+            'target' => (int)$row['target'],
+        ];
+    }
+    return $matrix;
+}
+
 function rekap_weekly_subsls_payload(array $rows, array $dates, array $matrix): array
 {
     $dateEnd = (string)end($dates);
@@ -269,9 +331,69 @@ function rekap_weekly_subsls_payload(array $rows, array $dates, array $matrix): 
     return [$headers, $out];
 }
 
-function rekap_weekly_dates(string $end): array
+function rekap_weekly_detail_payload(array $rows, array $dates, array $matrix): array
 {
-    $start = date('Y-m-d', strtotime($end . ' -6 days'));
+    [$headers, $out] = rekap_weekly_subsls_payload($rows, $dates, $matrix);
+    return [$headers, $out];
+}
+
+function rekap_weekly_detail_html(array $headers, array $rows): string
+{
+    ob_start();
+    ?>
+    <div class="table-responsive weekly-freeze-pane">
+      <table class="table table-sm table-bordered table-striped mb-0 weekly-table">
+        <thead><tr>
+          <?php foreach ($headers as $header): ?>
+            <?php
+              $headerClass = rekap_weekly_xlsx_header_is_numeric((string)$header) ? 'text-right weekly-compact-number' : 'weekly-identity';
+              if (str_starts_with((string)$header, 'Total Assignment') || (string)$header === 'Jumlah SubSLS') {
+                  $headerClass .= ' weekly-head-orange';
+              } elseif (str_starts_with((string)$header, 'Total Draft') || str_starts_with((string)$header, '% Draft')) {
+                  $headerClass .= ' weekly-head-purple';
+              } elseif (str_starts_with((string)$header, 'Total Submit') || str_starts_with((string)$header, '% Submit')) {
+                  $headerClass .= ' weekly-head-blue';
+              } elseif (str_starts_with((string)$header, 'Submit Tanggal')) {
+                  $headerClass .= ' weekly-head-green';
+              }
+            ?>
+            <th class="<?= e($headerClass) ?>"><?= rekap_weekly_header_html((string)$header) ?></th>
+          <?php endforeach; ?>
+        </tr></thead>
+        <tbody>
+          <?php foreach ($rows as $row): ?>
+            <tr>
+              <?php foreach ($row as $i => $value): ?>
+                <?php
+                  $header = strtolower((string)($headers[$i] ?? ''));
+                  $isNumeric = rekap_weekly_xlsx_header_is_numeric($header);
+                  $isPercent = str_contains($header, '% submit') || str_contains($header, '% draft');
+                  $isDraftPercent = str_contains($header, '% draft');
+                ?>
+                <td class="<?= $isNumeric ? 'text-right' : '' ?>">
+                  <?php if ($isPercent): ?>
+                    <span class="<?= e($isDraftPercent ? rekap_weekly_draft_pct_class((float)$value) : rekap_weekly_pct_class((float)$value)) ?>"><?= e(rekap_weekly_pct_web((float)$value)) ?></span>
+                  <?php else: ?>
+                    <?= $isNumeric ? e(number_format((float)$value, 0, ',', '.')) : e((string)$value) ?>
+                  <?php endif; ?>
+                </td>
+              <?php endforeach; ?>
+            </tr>
+          <?php endforeach; ?>
+          <?php if (!$rows): ?>
+            <tr><td colspan="<?= max(1, count($headers)) ?>" class="text-center text-muted">Tidak ada data SubSLS.</td></tr>
+          <?php endif; ?>
+        </tbody>
+      </table>
+    </div>
+    <?php
+    return trim((string)ob_get_clean());
+}
+
+function rekap_weekly_dates(string $end, int $days = 7): array
+{
+    $days = max(1, $days);
+    $start = date('Y-m-d', strtotime($end . ' -' . ($days - 1) . ' days'));
     $dates = [];
     for ($date = $start; $date <= $end; $date = date('Y-m-d', strtotime($date . ' +1 day'))) {
         $dates[] = $date;
@@ -878,7 +1000,7 @@ function rekap_weekly_export(array $headers, array $rows, array $filters, string
 }
 
 $opts = rekap_weekly_filter_options($user, $filters);
-$dates = rekap_weekly_dates($filters['tanggal']);
+$dates = rekap_weekly_dates($filters['tanggal'], in_array($user['role'], ['pengawas', 'pencacah'], true) ? 5 : 7);
 $dateStart = $dates[0];
 $dateEnd = $dates[count($dates) - 1];
 $rows = [];
@@ -886,6 +1008,27 @@ $headers = [];
 $tableRows = [];
 $petugasSummary = ['pcl' => 0, 'pml' => 0];
 $isDirectPclWeekly = $user['role'] === 'pencacah';
+
+if (($_GET['action'] ?? '') === 'weekly_detail') {
+    $type = ($_GET['type'] ?? 'pcl') === 'pml' ? 'pml' : 'pcl';
+    $email = normalize_email((string)($_GET['email'] ?? ''));
+    if ($email === '') {
+        http_response_code(400);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['ok' => false, 'message' => 'Email petugas tidak valid.']);
+        exit;
+    }
+    $detailRows = rekap_weekly_petugas_subsls_rows($user, $filters, $type, $email);
+    $detailMatrix = rekap_weekly_petugas_subsls_values($user, $filters, $type, $email, $dateStart, $dateEnd);
+    [$detailHeaders, $detailTableRows] = rekap_weekly_detail_payload($detailRows, $dates, $detailMatrix);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode([
+        'ok' => true,
+        'html' => rekap_weekly_detail_html($detailHeaders, $detailTableRows),
+    ]);
+    exit;
+}
+
 if ($hasFiltered) {
     if ($isDirectPclWeekly) {
         $rows = rekap_weekly_subsls_rows($user, $filters);
@@ -910,6 +1053,7 @@ $showWeeklyKecamatanBreaks = $hasFiltered
     && $filters['sort_dir'] === ''
     && $filters['search_nama'] === ''
     && $filters['search_pml'] === '';
+$showWeeklyDetailButton = $hasFiltered && !$isDirectPclWeekly;
 
 render_header('Rekap Petugas Weekly');
 ?>
@@ -1195,6 +1339,9 @@ render_header('Rekap Petugas Weekly');
       <table class="table table-sm table-bordered table-striped mb-0 weekly-table weekly-freeze-<?= $filters['petugas_type'] === 'pcl' ? 'pcl' : 'pml' ?>">
         <thead>
           <tr>
+            <?php if ($showWeeklyDetailButton): ?>
+              <th class="weekly-identity"><div class="weekly-header-label">Detail<br>SubSLS</div></th>
+            <?php endif; ?>
             <?php foreach ($headers as $i => $header): ?>
               <?php
                 if ((string)$header === 'Email Petugas') {
@@ -1257,6 +1404,18 @@ render_header('Rekap Petugas Weekly');
               $previousWeeklyKecamatan = $currentWeeklyKecamatan;
             ?>
             <tr class="<?= $hasWeeklyKecamatanBreak ? 'weekly-kecamatan-break' : '' ?>" data-original-index="<?= (int)$rowIndex ?>">
+              <?php if ($showWeeklyDetailButton): ?>
+                <td class="text-center">
+                  <button type="button"
+                          class="btn btn-info btn-xs weekly-detail-btn"
+                          title="Lihat rekap SubSLS"
+                          data-weekly-detail-email="<?= e((string)($row[1] ?? '')) ?>"
+                          data-weekly-detail-name="<?= e((string)($row[0] ?? '')) ?>"
+                          data-weekly-detail-type="<?= e($filters['petugas_type']) ?>">
+                    <i class="fas fa-info"></i>
+                  </button>
+                </td>
+              <?php endif; ?>
               <?php foreach ($row as $i => $value): ?>
                 <?php
                   if ((string)($headers[$i] ?? '') === 'Email Petugas') {
@@ -1281,7 +1440,7 @@ render_header('Rekap Petugas Weekly');
             </tr>
           <?php endforeach; ?>
           <?php if (!$tableRows): ?>
-            <tr><td colspan="<?= max(1, count($headers) - 1) ?>" class="text-center text-muted">Tidak ada data.</td></tr>
+            <tr><td colspan="<?= max(1, count($headers) - 1 + ($showWeeklyDetailButton ? 1 : 0)) ?>" class="text-center text-muted">Tidak ada data.</td></tr>
           <?php endif; ?>
         </tbody>
       </table>
@@ -1293,6 +1452,25 @@ render_header('Rekap Petugas Weekly');
     </div>
   </div>
 <?php endif; ?>
+
+<div class="modal fade" id="weeklyDetailModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+    <div class="modal-content">
+      <div class="modal-header bg-info text-white">
+        <div>
+          <h5 class="modal-title mb-0" id="weeklyDetailTitle">Detail SubSLS Weekly</h5>
+          <div class="small" id="weeklyDetailSubtitle"></div>
+        </div>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body" id="weeklyDetailBody">
+        <div class="text-muted">Memuat data...</div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
 document.querySelectorAll('.weekly-table').forEach(function (table) {
@@ -1385,6 +1563,41 @@ document.querySelectorAll('[data-weekly-server-search]').forEach(function (input
       });
       window.location.search = params.toString();
     }, 600);
+  });
+});
+
+document.querySelectorAll('.weekly-detail-btn').forEach(function (button) {
+  button.addEventListener('click', function () {
+    const email = button.dataset.weeklyDetailEmail || '';
+    const name = button.dataset.weeklyDetailName || email;
+    const type = button.dataset.weeklyDetailType || 'pcl';
+    const title = document.getElementById('weeklyDetailTitle');
+    const subtitle = document.getElementById('weeklyDetailSubtitle');
+    const body = document.getElementById('weeklyDetailBody');
+    if (!email || !body) return;
+    title.textContent = 'Detail SubSLS Weekly - ' + name;
+    subtitle.textContent = email;
+    body.innerHTML = '<div class="text-muted">Memuat data...</div>';
+
+    const params = new URLSearchParams(window.location.search);
+    params.set('action', 'weekly_detail');
+    params.set('type', type);
+    params.set('email', email);
+    params.delete('format');
+    fetch('rekap_petugas_weekly.php?' + params.toString(), { credentials: 'same-origin' })
+      .then(function (response) {
+        if (!response.ok) throw new Error('Gagal memuat detail.');
+        return response.json();
+      })
+      .then(function (payload) {
+        body.innerHTML = payload && payload.ok ? payload.html : '<div class="text-danger">Detail tidak tersedia.</div>';
+      })
+      .catch(function (error) {
+        body.innerHTML = '<div class="text-danger">' + error.message + '</div>';
+      });
+    if (window.jQuery) {
+      window.jQuery('#weeklyDetailModal').modal('show');
+    }
   });
 });
 </script>
