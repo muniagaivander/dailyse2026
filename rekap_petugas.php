@@ -114,6 +114,37 @@ function rekap_petugas_rows(array $user, array $filters): array
     return $stmt->fetchAll();
 }
 
+function rekap_petugas_pcl_detail_rows(array $user, array $filters, string $email): array
+{
+    [$sqlWhere, $params] = rekap_petugas_where($user, $filters);
+    $where = $sqlWhere
+        ? $sqlWhere . " AND ms.pencacah_email=?"
+        : "WHERE ms.pencacah_email=?";
+    $params[] = $email;
+
+    $stmt = db()->prepare("SELECT
+            CONCAT(k.id, kc.kdkec, d.kddesa, sl.kdsls, ms.kdsubsls) kode_subsls,
+            sl.nmsls,
+            ms.kdsubsls,
+            COALESCE(ss.target,0) target,
+            COALESCE(ss.open_count,0) open_count,
+            COALESCE(ss.draft_count,0) draft_count,
+            COALESCE(ss.submitted_by_pencacah,0) submitted_by_pencacah,
+            COALESCE(ss.rejected_by_pengawas,0) rejected_by_pengawas,
+            COALESCE(ss.pending_count,0) pending_count,
+            COALESCE(ss.approved_by_pengawas,0) approved_by_pengawas
+        FROM master_subsls ms
+        JOIN master_sls sl ON sl.id=ms.sls_id
+        JOIN master_desa d ON d.id=sl.desa_id
+        JOIN master_kec kc ON kc.id=d.kec_id
+        JOIN master_kab k ON k.id=kc.kab_id
+        LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
+        $where
+        ORDER BY k.id, kc.kdkec, d.kddesa, sl.kdsls, ms.kdsubsls");
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
 function rekap_petugas_pendataan_count(array $row): int
 {
     return (int)($row['submitted_by_pencacah'] ?? 0)
@@ -186,6 +217,115 @@ function rekap_petugas_progress_count(array $row): int
         + (int)($row['rejected_by_pengawas'] ?? 0)
         + (int)($row['pending_count'] ?? 0)
         + (int)($row['approved_by_pengawas'] ?? 0);
+}
+
+function rekap_petugas_detail_html(array $rows): string
+{
+    ob_start();
+    ?>
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered table-striped mb-0 rekap-detail-table">
+        <thead>
+          <tr>
+            <th>Kode SubSLS</th>
+            <th>Nama SLS</th>
+            <th>SubSLS</th>
+            <th class="text-right rekap-head-orange">Target</th>
+            <th class="text-right rekap-head-light-green">Progress Pendataan<br>Count</th>
+            <th class="text-right rekap-head-light-green">Progress Pendataan<br>(Persen %)</th>
+            <th class="text-right rekap-head-purple">Draft<br>(Count)</th>
+            <th class="text-right rekap-head-purple">Draft<br>(Persen %)</th>
+            <th class="text-right rekap-head-dark-green">Approve<br>(Count)</th>
+            <th class="text-right rekap-head-dark-green">Approve<br>(Persen %)</th>
+            <th class="text-right rekap-head-blue">Open</th>
+            <th class="text-right rekap-head-light-green">Submit</th>
+            <th class="text-right rekap-head-red">Reject</th>
+            <th class="text-right rekap-head-red">Pending</th>
+            <th class="text-right rekap-head-blue">Jumlah<br>SubSLS</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php foreach ($rows as $r): ?>
+            <?php
+              $target = (int)$r['target'];
+              $progressCount = rekap_petugas_progress_count($r);
+              $progressPct = $target > 0 ? $progressCount / $target * 100 : 0;
+              $draftPct = $target > 0 ? (int)$r['draft_count'] / $target * 100 : 0;
+              $approvePct = $target > 0 ? (int)$r['approved_by_pengawas'] / $target * 100 : 0;
+            ?>
+            <tr>
+              <td><?= e($r['kode_subsls']) ?></td>
+              <td><?= e($r['nmsls']) ?></td>
+              <td><?= e($r['kdsubsls']) ?></td>
+              <td class="text-right"><?= number_format($target, 0, ',', '.') ?></td>
+              <td class="text-right"><?= number_format($progressCount, 0, ',', '.') ?></td>
+              <td class="text-right rekap-pct <?= e(rekap_petugas_pct_class($progressPct)) ?>"><?= number_format($progressPct, 2, ',', '.') ?>%</td>
+              <td class="text-right"><?= number_format((int)$r['draft_count'], 0, ',', '.') ?></td>
+              <td class="text-right rekap-pct <?= e(rekap_petugas_draft_pct_class($draftPct)) ?>"><?= number_format($draftPct, 2, ',', '.') ?>%</td>
+              <td class="text-right"><?= number_format((int)$r['approved_by_pengawas'], 0, ',', '.') ?></td>
+              <td class="text-right rekap-pct <?= e(rekap_petugas_pct_class($approvePct)) ?>"><?= number_format($approvePct, 2, ',', '.') ?>%</td>
+              <td class="text-right"><?= number_format((int)$r['open_count'], 0, ',', '.') ?></td>
+              <td class="text-right"><?= number_format((int)$r['submitted_by_pencacah'], 0, ',', '.') ?></td>
+              <td class="text-right"><?= number_format((int)$r['rejected_by_pengawas'], 0, ',', '.') ?></td>
+              <td class="text-right"><?= number_format((int)$r['pending_count'], 0, ',', '.') ?></td>
+              <td class="text-right">1</td>
+            </tr>
+          <?php endforeach; ?>
+          <?php if (!$rows): ?>
+            <tr><td colspan="15" class="text-center text-muted">Tidak ada data SubSLS untuk PCL ini pada filter aktif.</td></tr>
+          <?php endif; ?>
+        </tbody>
+      </table>
+    </div>
+    <?php
+    return trim((string)ob_get_clean());
+}
+
+function rekap_petugas_detail_export_data(array $rows): array
+{
+    $headers = [
+        'Kode SubSLS',
+        'Nama SLS',
+        'SubSLS',
+        'Target',
+        'Progress Pendataan Count',
+        'Progress Pendataan (Persen %)',
+        'Draft (Count)',
+        'Draft (Persen %)',
+        'Approve (Count)',
+        'Approve (Persen %)',
+        'Open',
+        'Submit',
+        'Reject',
+        'Pending',
+        'Jumlah SubSLS',
+    ];
+    $exportRows = [];
+    foreach ($rows as $r) {
+        $target = (int)$r['target'];
+        $progressCount = rekap_petugas_progress_count($r);
+        $progressPct = $target > 0 ? $progressCount / $target * 100 : 0;
+        $draftPct = $target > 0 ? (int)$r['draft_count'] / $target * 100 : 0;
+        $approvePct = $target > 0 ? (int)$r['approved_by_pengawas'] / $target * 100 : 0;
+        $exportRows[] = [
+            $r['kode_subsls'],
+            $r['nmsls'],
+            $r['kdsubsls'],
+            (string)$target,
+            (string)$progressCount,
+            number_format($progressPct, 2, '.', ''),
+            (string)(int)$r['draft_count'],
+            number_format($draftPct, 2, '.', ''),
+            (string)(int)$r['approved_by_pengawas'],
+            number_format($approvePct, 2, '.', ''),
+            (string)(int)$r['open_count'],
+            (string)(int)$r['submitted_by_pencacah'],
+            (string)(int)$r['rejected_by_pengawas'],
+            (string)(int)$r['pending_count'],
+            '1',
+        ];
+    }
+    return [$headers, $exportRows];
 }
 
 function rekap_petugas_sort_rows(array $rows, array $filters): array
@@ -387,7 +527,7 @@ function rekap_petugas_xlsx_cell($value, int $row, int $col, int $style = 0, boo
     return '<c r="' . $ref . '" s="' . $style . '" t="inlineStr"><is><t>' . htmlspecialchars($value, ENT_XML1 | ENT_COMPAT, 'UTF-8') . '</t></is></c>';
 }
 
-function rekap_petugas_export(array $headers, array $rows, string $format, string $type): void
+function rekap_petugas_export(array $headers, array $rows, string $format, string $type, ?string $title = null): void
 {
     $filename = 'rekap_petugas_' . $type . '_' . date('Ymd');
     if ($format === 'csv') {
@@ -494,21 +634,25 @@ function rekap_petugas_export(array $headers, array $rows, string $format, strin
     $sheet = '<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
     $kecamatanIndex = array_search('Wilayah Kerja Kecamatan', $headers, true);
     $previousKecamatan = null;
-    foreach (array_merge([$headers], $rows) as $rIndex => $row) {
+    $sheetRows = $title !== null && trim($title) !== ''
+        ? [[$title], $headers, ...$rows]
+        : [$headers, ...$rows];
+    $headerRowNumber = $title !== null && trim($title) !== '' ? 2 : 1;
+    foreach ($sheetRows as $rIndex => $row) {
         $rowNumber = $rIndex + 1;
         $hasKecamatanBreak = false;
-        if ($rowNumber > 1 && $kecamatanIndex !== false) {
+        if ($rowNumber > $headerRowNumber && $kecamatanIndex !== false) {
             $currentKecamatan = (string)($row[$kecamatanIndex] ?? '');
-            $hasKecamatanBreak = $rIndex > 1 && $previousKecamatan !== null && $currentKecamatan !== $previousKecamatan;
+            $hasKecamatanBreak = $rowNumber > ($headerRowNumber + 1) && $previousKecamatan !== null && $currentKecamatan !== $previousKecamatan;
             $previousKecamatan = $currentKecamatan;
         }
         $sheet .= '<row r="' . $rowNumber . '">';
         foreach ($row as $cIndex => $value) {
             $columnNumber = $cIndex + 1;
-            $style = $rowNumber === 1 ? rekap_petugas_xlsx_header_style((string)($headers[$cIndex] ?? '')) : (in_array($columnNumber, $smallFontColumns, true) ? 1 : 0);
+            $style = $rowNumber === $headerRowNumber ? rekap_petugas_xlsx_header_style((string)($headers[$cIndex] ?? '')) : (in_array($columnNumber, $smallFontColumns, true) ? 1 : 0);
             $header = (string)($headers[$cIndex] ?? '');
-            $numeric = $rowNumber > 1 && rekap_petugas_xlsx_header_is_numeric($header);
-            $style = $rowNumber > 1 ? rekap_petugas_xlsx_pct_style($header, $value, $style) : $style;
+            $numeric = $rowNumber > $headerRowNumber && rekap_petugas_xlsx_header_is_numeric($header);
+            $style = $rowNumber > $headerRowNumber ? rekap_petugas_xlsx_pct_style($header, $value, $style) : $style;
             if ($hasKecamatanBreak) {
                 $style = rekap_petugas_xlsx_kecamatan_break_style($style);
             }
@@ -535,6 +679,41 @@ $fields = [
     'pending_count' => 'Pending',
     'approved_by_pengawas' => 'Approve',
 ];
+
+if (($_GET['action'] ?? '') === 'pcl_detail') {
+    $email = normalize_email((string)($_GET['email'] ?? ''));
+    if ($email === '') {
+        http_response_code(400);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['ok' => false, 'message' => 'Email PCL tidak valid.']);
+        exit;
+    }
+    $detailRows = rekap_petugas_pcl_detail_rows($user, $filters, $email);
+    $petugasName = trim((string)($_GET['name'] ?? ''));
+    if ($petugasName === '') {
+        $stmt = db()->prepare("SELECT name FROM users WHERE email=?");
+        $stmt->execute([$email]);
+        $petugasName = trim((string)($stmt->fetchColumn() ?: $email));
+    }
+    if (($_GET['format'] ?? '') === 'xlsx') {
+        [$headers, $exportRows] = rekap_petugas_detail_export_data($detailRows);
+        rekap_petugas_export(
+            $headers,
+            $exportRows,
+            'xlsx',
+            'detail_pcl_' . preg_replace('/[^a-z0-9]+/i', '_', $email),
+            'Rekap Petugas ' . $petugasName . ' (' . $email . ')'
+        );
+    }
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode([
+        'ok' => true,
+        'subtitle' => $email,
+        'html' => rekap_petugas_detail_html($detailRows),
+    ]);
+    exit;
+}
+
 $rows = rekap_petugas_sort_rows(rekap_petugas_apply_search(rekap_petugas_rows($user, $filters), $filters), $filters);
 $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = $filters['per_page'];
@@ -779,6 +958,43 @@ render_header('Rekap Petugas');
     color: #b91c1c !important;
     font-weight: 900;
   }
+  .rekap-pcl-detail-btn {
+    align-items: center;
+    border-radius: 999px;
+    display: inline-flex;
+    height: 20px;
+    justify-content: center;
+    margin-left: 6px;
+    padding: 0;
+    width: 20px;
+  }
+  .rekap-detail-table {
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: .82rem;
+    white-space: nowrap;
+  }
+  .rekap-detail-table th:first-child,
+  .rekap-detail-table td:first-child {
+    background-clip: border-box;
+    border-right: 3px solid #111827 !important;
+    box-shadow: 4px 0 0 #111827, 8px 0 10px rgba(17, 24, 39, .12);
+    left: 0;
+    min-width: 155px;
+    position: sticky;
+    width: 155px;
+    z-index: 20;
+  }
+  .rekap-detail-table thead th:first-child {
+    background: #dbeafe !important;
+    z-index: 30;
+  }
+  .rekap-detail-table tbody td:first-child {
+    background: #fff;
+  }
+  .rekap-detail-table tbody tr:nth-of-type(odd) td:first-child {
+    background: #f9fafb;
+  }
   .rekap-progress-legend {
     align-items: center;
     display: flex;
@@ -914,6 +1130,7 @@ render_header('Rekap Petugas');
         <tr>
           <th><div class="rekap-header-label">Nama Petugas</div><input class="form-control form-control-sm rekap-search-input" type="search" placeholder="Cari nama" value="<?= e($filters['search_nama']) ?>" data-rekap-server-search="search_nama"></th>
           <?php if ($filters['petugas_type'] === 'pcl'): ?>
+            <th><div class="rekap-header-label">Detail<br>SubSLS</div></th>
             <th><div class="rekap-header-label">Nama PML</div><input class="form-control form-control-sm rekap-search-input" type="search" placeholder="Cari PML" value="<?= e($filters['search_pml']) ?>" data-rekap-server-search="search_pml"></th>
             <th><div class="rekap-header-label">Kabupaten</div><input class="form-control form-control-sm rekap-search-input" type="search" placeholder="Cari kab" value="<?= e($filters['search_kabupaten']) ?>" data-rekap-server-search="search_kabupaten"></th>
             <th><div class="rekap-header-label">Wilayah<br>Kerja<br>Kecamatan</div><input class="form-control form-control-sm rekap-search-input" type="search" placeholder="Cari kec" value="<?= e($filters['search_kecamatan']) ?>" data-rekap-server-search="search_kecamatan"></th>
@@ -967,6 +1184,16 @@ render_header('Rekap Petugas');
           <tr class="<?= $hasKecamatanBreak ? 'rekap-kecamatan-break' : '' ?>" data-original-index="<?= (int)$rowIndex ?>">
             <td><?= e(trim((string)($r['petugas_name'] ?? '')) ?: '-') ?></td>
             <?php if ($filters['petugas_type'] === 'pcl'): ?>
+              <td class="text-center">
+                <button type="button"
+                        class="btn btn-info btn-xs rekap-pcl-detail-btn"
+                        title="Lihat rekap SubSLS"
+                        data-pcl-detail-email="<?= e($r['email']) ?>"
+                        data-pcl-detail-name="<?= e(trim((string)($r['petugas_name'] ?? '')) ?: $r['email']) ?>"
+                        data-pcl-detail-pml="<?= e($r['pml_names'] ?: '-') ?>">
+                  <i class="fas fa-info"></i>
+                </button>
+              </td>
               <td><?= e($r['pml_names'] ?: '-') ?></td>
               <td><?= e($r['kabupaten_nama'] ?: '-') ?></td>
               <td><?= e($r['wilayah_kerja_kecamatan'] ?: '-') ?></td>
@@ -992,7 +1219,7 @@ render_header('Rekap Petugas');
           </tr>
         <?php endforeach; ?>
         <?php if (!$displayRows): ?>
-          <tr><td colspan="<?= 16 + ($filters['petugas_type'] === 'pcl' ? 1 : 0) ?>" class="text-center text-muted">Tidak ada data petugas pada filter ini.</td></tr>
+          <tr><td colspan="<?= 16 + ($filters['petugas_type'] === 'pcl' ? 2 : 0) ?>" class="text-center text-muted">Tidak ada data petugas pada filter ini.</td></tr>
         <?php endif; ?>
       </tbody>
     </table>
@@ -1029,6 +1256,30 @@ render_header('Rekap Petugas');
     </ul>
   </nav>
 <?php endif; ?>
+
+<div class="modal fade" id="rekapPclDetailModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+    <div class="modal-content">
+      <div class="modal-header bg-info text-white">
+        <div>
+          <h5 class="modal-title mb-0" id="rekapPclDetailTitle">Rekap SubSLS PCL</h5>
+          <div class="small" id="rekapPclDetailSubtitle"></div>
+        </div>
+        <div class="d-flex align-items-center">
+          <a class="btn btn-light btn-sm mr-3" id="rekapPclDetailExport" href="#" target="_blank">
+            <i class="fas fa-file-excel mr-1"></i>Export Excel
+          </a>
+          <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+      </div>
+      <div class="modal-body" id="rekapPclDetailBody">
+        <div class="text-muted">Memuat data...</div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
 const petugasType = document.getElementById('petugas_type');
@@ -1101,6 +1352,52 @@ document.querySelectorAll('[data-rekap-server-search]').forEach(function (input)
       });
       window.location.search = params.toString();
     }, 600);
+  });
+});
+
+document.querySelectorAll('[data-pcl-detail-email]').forEach(function (button) {
+  button.addEventListener('click', function () {
+    const email = button.dataset.pclDetailEmail || '';
+    const name = button.dataset.pclDetailName || email;
+    const pml = button.dataset.pclDetailPml || '-';
+    const title = document.getElementById('rekapPclDetailTitle');
+    const subtitle = document.getElementById('rekapPclDetailSubtitle');
+    const body = document.getElementById('rekapPclDetailBody');
+    const exportLink = document.getElementById('rekapPclDetailExport');
+    if (!body || !email) return;
+    title.textContent = 'Rekap SubSLS PCL - ' + name;
+    subtitle.textContent = email + ' (PML - ' + pml + ')';
+    body.innerHTML = '<div class="text-muted">Memuat data...</div>';
+
+    const params = new URLSearchParams(window.location.search);
+    params.set('action', 'pcl_detail');
+    params.set('petugas_type', 'pcl');
+    params.set('email', email);
+    params.set('name', name);
+    params.delete('page');
+    params.delete('format');
+    if (exportLink) {
+      const exportParams = new URLSearchParams(params.toString());
+      exportParams.set('format', 'xlsx');
+      exportLink.href = 'rekap_petugas.php?' + exportParams.toString();
+    }
+
+    fetch('rekap_petugas.php?' + params.toString(), { headers: { 'Accept': 'application/json' } })
+      .then(function (response) {
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        return response.json();
+      })
+      .then(function (payload) {
+        if (!payload.ok) throw new Error(payload.message || 'Gagal memuat detail.');
+        body.innerHTML = payload.html || '<div class="text-muted">Tidak ada data.</div>';
+      })
+      .catch(function (error) {
+        body.innerHTML = '<div class="alert alert-danger mb-0">Gagal memuat detail PCL: ' + error.message + '</div>';
+      });
+
+    if (window.jQuery) {
+      window.jQuery('#rekapPclDetailModal').modal('show');
+    }
   });
 });
 </script>
