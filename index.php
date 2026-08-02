@@ -214,9 +214,18 @@ function dashboard_rows(array $user, array $filters, array $fields): array
     foreach (array_keys($fields) as $f) {
         $selects[] = "COALESCE(SUM(ss.$f),0) $f";
     }
+    $isSubslsGroup = $groupExpr === 'ms.id';
+    $petugasSelect = $isSubslsGroup
+        ? ", MAX(up.name) pengawas_name, MAX(ms.pengawas_email) pengawas_email, MAX(uc.name) pencacah_name, MAX(ms.pencacah_email) pencacah_email"
+        : "";
+    $petugasJoin = $isSubslsGroup
+        ? "LEFT JOIN users up ON up.email=ms.pengawas_email
+        LEFT JOIN users uc ON uc.email=ms.pencacah_email"
+        : "";
     $stmt = db()->prepare("SELECT $labelExpr label, COALESCE(SUM(ss.target),0) target, " . implode(',', $selects) . ",
             COUNT(ms.id) subsls_total,
             COALESCE(SUM(CASE WHEN cs.status_selesai='Selesai' THEN 1 ELSE 0 END),0) selesai_count
+            $petugasSelect
         FROM master_subsls ms
         JOIN master_sls sl ON sl.id=ms.sls_id
         JOIN master_desa d ON d.id=sl.desa_id
@@ -225,6 +234,7 @@ function dashboard_rows(array $user, array $filters, array $fields): array
         JOIN master_prov p ON p.id=k.prov_id
         LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
         LEFT JOIN subsls_completion_status cs ON cs.subsls_id=ms.id
+        $petugasJoin
         $sqlWhere
         GROUP BY $groupExpr, label
         ORDER BY label");
@@ -2140,14 +2150,20 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
       $maxPendataanPct = $pendataanPcts ? max($pendataanPcts) : null;
       $minPendataanPct = $pendataanPcts ? min($pendataanPcts) : null;
       $samePendataanPct = $maxPendataanPct !== null && $minPendataanPct !== null && abs($maxPendataanPct - $minPendataanPct) < 0.001;
+      $isSubslsSummary = !empty($filters['subsls_id']) || !empty($filters['desa_id']) || $user['role'] === 'pencacah';
+      $summaryNumericOffset = $isSubslsSummary ? 3 : 1;
     ?>
     <table class="table table-sm table-bordered table-striped mb-0 dashboard-summary-table" id="dashboardSummaryTable">
       <thead>
         <tr>
           <th>
-            <div>Kelompok</div>
-            <input class="form-control form-control-sm summary-search-input" type="search" placeholder="Cari kelompok" data-summary-search>
+            <div><?= $isSubslsSummary ? 'Kode SubSLS' : 'Kelompok' ?></div>
+            <input class="form-control form-control-sm summary-search-input" type="search" placeholder="<?= $isSubslsSummary ? 'Cari kode' : 'Cari kelompok' ?>" data-summary-search>
           </th>
+          <?php if ($isSubslsSummary): ?>
+            <th><div>Nama PCL</div></th>
+            <th><div>Nama PML</div></th>
+          <?php endif; ?>
           <?php
             $summaryHeaders = [
                 ['label' => 'Target', 'class' => 'summary-head-blue'],
@@ -2168,7 +2184,7 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
           <?php foreach ($summaryHeaders as $index => $header): ?>
             <th class="text-right <?= e($header['class']) ?>">
               <div><?= $header['label'] ?></div>
-              <select class="form-control form-control-sm summary-sort-select" data-summary-sort-col="<?= $index + 1 ?>">
+              <select class="form-control form-control-sm summary-sort-select" data-summary-sort-col="<?= $index + $summaryNumericOffset ?>">
                 <option value="">Sort</option>
                 <option value="asc">Ascending</option>
                 <option value="desc">Descending</option>
@@ -2196,6 +2212,10 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
           ?>
           <tr data-original-index="<?= (int)$rowIndex ?>">
             <td><?= e($row['label']) ?></td>
+            <?php if ($isSubslsSummary): ?>
+              <td><?= e(trim((string)($row['pencacah_name'] ?? '')) ?: '-') ?></td>
+              <td><?= e(trim((string)($row['pengawas_name'] ?? '')) ?: '-') ?></td>
+            <?php endif; ?>
             <td class="text-right" data-sort-value="<?= $rowTarget ?>"><?= number_format($rowTarget, 0, ',', '.') ?></td>
             <td class="text-right" data-sort-value="<?= $submitApproveCount ?>"><?= number_format($submitApproveCount, 0, ',', '.') ?></td>
             <td class="text-right<?= e($pendataanClass) ?>" data-sort-value="<?= e((string)$pendataanPct) ?>"><?= dashboard_table_pct_only_text($pendataanPct) ?></td>
@@ -2219,6 +2239,10 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
         ?>
         <tr>
           <td>Total</td>
+          <?php if ($isSubslsSummary): ?>
+            <td></td>
+            <td></td>
+          <?php endif; ?>
           <td class="text-right"><?= number_format($totalTarget, 0, ',', '.') ?></td>
           <td class="text-right"><?= number_format($totalSubmitApprove, 0, ',', '.') ?></td>
           <td class="text-right"><?= dashboard_table_pct_only_text($totalTarget > 0 ? $totalSubmitApprove / $totalTarget * 100 : 0) ?></td>

@@ -1,6 +1,6 @@
 <?php
 require __DIR__ . '/layout.php';
-$user = require_role(['superadmin', 'admin_kab', 'viewer_prov', 'viewer_kab']);
+$user = require_role(['superadmin', 'admin_kab', 'viewer_prov', 'viewer_kab', 'pengawas', 'pencacah']);
 $requestedPerPage = (int)($_GET['per_page'] ?? 20);
 $filters = [
     'kab_id' => $_GET['kab_id'] ?? '',
@@ -75,6 +75,12 @@ function status_view_build_filter(array $user, array $filters): array
     if (in_array($user['role'], ['admin_kab', 'viewer_kab'], true)) {
         $where[] = 'k.id=?';
         $params[] = $user['kab_id'];
+    } elseif ($user['role'] === 'pengawas') {
+        $where[] = 'ms.pengawas_email=?';
+        $params[] = $user['email'];
+    } elseif ($user['role'] === 'pencacah') {
+        $where[] = 'ms.pencacah_email=?';
+        $params[] = $user['email'];
     } elseif ($filters['kab_id']) {
         $where[] = 'k.id=?';
         $params[] = $filters['kab_id'];
@@ -651,7 +657,8 @@ if ($canShowStatus && $filters['view_mode'] === 'table') {
     $rows = $stmt->fetchAll();
 }
 
-render_header('Status Terupdate');
+render_header('Status Assign. by SubSLS');
+$isPetugasStatusView = in_array($user['role'], ['pengawas', 'pencacah'], true);
 ?>
 <style>
 .status-view-grid {
@@ -932,7 +939,11 @@ render_header('Status Terupdate');
     <input type="hidden" name="<?= e($key) ?>" value="<?= e($filters[$key]) ?>">
   <?php endforeach; ?>
   <div class="form-row align-items-end">
-    <?php if (in_array($user['role'], ['superadmin', 'viewer_prov'], true)): ?>
+    <?php if ($isPetugasStatusView): ?>
+      <input type="hidden" name="kab_id" value="">
+      <input type="hidden" name="kec_id" value="">
+      <input type="hidden" name="desa_id" value="">
+    <?php elseif (in_array($user['role'], ['superadmin', 'viewer_prov'], true)): ?>
       <div class="form-group col-12 col-md-3">
         <label>Kabupaten</label>
         <select class="form-control" name="kab_id" id="kab_id">
@@ -943,28 +954,30 @@ render_header('Status Terupdate');
     <?php else: ?>
       <input type="hidden" name="kab_id" value="<?= e($filters['kab_id']) ?>">
     <?php endif; ?>
-    <div class="form-group col-12 col-md-3">
-      <label>Kecamatan</label>
-      <select class="form-control" name="kec_id" id="kec_id" <?= $filters['kab_id'] ? '' : 'disabled' ?>>
-        <option value=""><?= $filters['kab_id'] ? 'Semua Kecamatan' : 'Pilih kabupaten dulu' ?></option>
-        <?php foreach ($opts['kecamatan'] as $o): ?><option value="<?= e($o['value']) ?>" <?= $filters['kec_id']===$o['value']?'selected':'' ?>><?= e($o['label']) ?></option><?php endforeach; ?>
-      </select>
-    </div>
-    <div class="form-group col-12 col-md-3">
-      <label>Desa</label>
-      <select class="form-control" name="desa_id" id="desa_id" <?= $filters['kec_id'] ? '' : 'disabled' ?>>
-        <option value=""><?= $filters['kec_id'] ? 'Semua Desa' : 'Pilih kecamatan dulu' ?></option>
-        <?php foreach ($opts['desa'] as $o): ?><option value="<?= e($o['value']) ?>" <?= $filters['desa_id']===$o['value']?'selected':'' ?>><?= e($o['label']) ?></option><?php endforeach; ?>
-      </select>
-    </div>
-    <div class="form-group col-12 col-md-2">
+    <?php if (!$isPetugasStatusView): ?>
+      <div class="form-group col-12 col-md-3">
+        <label>Kecamatan</label>
+        <select class="form-control" name="kec_id" id="kec_id" <?= $filters['kab_id'] ? '' : 'disabled' ?>>
+          <option value=""><?= $filters['kab_id'] ? 'Semua Kecamatan' : 'Pilih kabupaten dulu' ?></option>
+          <?php foreach ($opts['kecamatan'] as $o): ?><option value="<?= e($o['value']) ?>" <?= $filters['kec_id']===$o['value']?'selected':'' ?>><?= e($o['label']) ?></option><?php endforeach; ?>
+        </select>
+      </div>
+      <div class="form-group col-12 col-md-3">
+        <label>Desa</label>
+        <select class="form-control" name="desa_id" id="desa_id" <?= $filters['kec_id'] ? '' : 'disabled' ?>>
+          <option value=""><?= $filters['kec_id'] ? 'Semua Desa' : 'Pilih kecamatan dulu' ?></option>
+          <?php foreach ($opts['desa'] as $o): ?><option value="<?= e($o['value']) ?>" <?= $filters['desa_id']===$o['value']?'selected':'' ?>><?= e($o['label']) ?></option><?php endforeach; ?>
+        </select>
+      </div>
+    <?php endif; ?>
+    <div class="form-group col-12 col-md-<?= $isPetugasStatusView ? '4' : '2' ?>">
       <label>Tampilan</label>
       <select class="form-control" name="view_mode" id="view_mode">
         <option value="card" <?= $filters['view_mode']==='card'?'selected':'' ?>>Card View</option>
         <option value="table" <?= $filters['view_mode']==='table'?'selected':'' ?>>Table View</option>
       </select>
     </div>
-    <div class="form-group col-12 col-md-1"><button class="btn btn-primary btn-block" name="filter" value="1">Filter</button></div>
+    <div class="form-group col-12 col-md-<?= $isPetugasStatusView ? '2' : '1' ?>"><button class="btn btn-primary btn-block" name="filter" value="1">Filter</button></div>
   </div>
 </form>
 <div class="status-info-section">
