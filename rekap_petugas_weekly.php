@@ -283,7 +283,7 @@ function rekap_weekly_subsls_payload(array $rows, array $dates, array $matrix): 
     $dateEndLabel = rekap_weekly_date_label($dateEnd);
     $headers = [
         'Kode SubSLS',
-        'Nama SLS',
+        'SLS',
         'SubSLS',
         'Wilayah Kerja Kecamatan',
         'Wilayah Kerja Desa',
@@ -333,22 +333,52 @@ function rekap_weekly_subsls_payload(array $rows, array $dates, array $matrix): 
 
 function rekap_weekly_detail_payload(array $rows, array $dates, array $matrix): array
 {
-    [$headers, $out] = rekap_weekly_subsls_payload($rows, $dates, $matrix);
-    $removeIndexes = [];
-    foreach (['Wilayah Kerja Kecamatan', 'Wilayah Kerja Desa'] as $removeHeader) {
-        $index = array_search($removeHeader, $headers, true);
-        if ($index !== false) {
-            $removeIndexes[] = (int)$index;
-        }
+    $dateEnd = (string)end($dates);
+    $dateEndLabel = rekap_weekly_date_label($dateEnd);
+    $headers = [
+        'Kode SubSLS',
+        'SLS',
+        'SubSLS',
+        'Total Assignment (' . $dateEndLabel . ')',
+        'Total Submit sd ' . $dateEndLabel,
+        '% Submit sd ' . $dateEndLabel,
+        'Total Draft sd ' . $dateEndLabel,
+        '% Draft sd ' . $dateEndLabel,
+    ];
+    foreach ($dates as $date) {
+        $headers[] = 'Submit Tanggal ' . rekap_weekly_date_label($date);
     }
-    rsort($removeIndexes);
-    foreach ($removeIndexes as $index) {
-        array_splice($headers, $index, 1);
-        foreach ($out as &$row) {
-            array_splice($row, $index, 1);
+    $headers[] = 'Jumlah SubSLS';
+
+    $out = [];
+    foreach ($rows as $row) {
+        $key = (string)$row['subsls_id'];
+        $dailyRows = $matrix[$key] ?? [];
+        $endDaily = rekap_weekly_latest_daily($dailyRows, $dateEnd);
+        $target = (int)($endDaily['target'] ?? 0);
+        $rekapCount = (int)($endDaily['count'] ?? 0);
+        $draftCount = (int)($endDaily['draft_count'] ?? 0);
+        $line = [
+            $row['kode_subsls'],
+            $row['nmsls'],
+            $row['kdsubsls'],
+            $target,
+            $rekapCount,
+            rekap_weekly_pct_export(rekap_weekly_pct($rekapCount, $target)),
+            $draftCount,
+            rekap_weekly_pct_export(rekap_weekly_pct($draftCount, $target)),
+        ];
+        foreach ($dates as $date) {
+            $daily = $dailyRows[$date] ?? null;
+            $previous = $dailyRows[date('Y-m-d', strtotime($date . ' -1 day'))] ?? null;
+            $line[] = $daily !== null && $previous !== null
+                ? max(0, (int)$daily['count'] - (int)$previous['count'])
+                : 0;
         }
-        unset($row);
+        $line[] = 1;
+        $out[] = $line;
     }
+
     return [$headers, $out];
 }
 
@@ -360,9 +390,12 @@ function rekap_weekly_detail_html(array $headers, array $rows): string
       <table class="table table-sm table-bordered table-striped mb-0 weekly-table weekly-detail-table">
         <thead><tr>
           <?php foreach ($headers as $header): ?>
-            <?php
-              $headerClass = rekap_weekly_xlsx_header_is_numeric((string)$header) ? 'text-right weekly-compact-number' : 'weekly-identity';
-              if (str_starts_with((string)$header, 'Total Assignment') || (string)$header === 'Jumlah SubSLS') {
+              <?php
+                  $headerClass = rekap_weekly_xlsx_header_is_numeric((string)$header) ? 'text-right weekly-compact-number' : 'weekly-identity';
+                  if (in_array((string)$header, ['SLS', 'SubSLS'], true)) {
+                      $headerClass .= ' weekly-detail-narrow';
+                  }
+                  if (str_starts_with((string)$header, 'Total Assignment') || (string)$header === 'Jumlah SubSLS') {
                   $headerClass .= ' weekly-head-orange';
               } elseif (str_starts_with((string)$header, 'Total Draft') || str_starts_with((string)$header, '% Draft')) {
                   $headerClass .= ' weekly-head-purple';
@@ -652,6 +685,12 @@ function rekap_weekly_header_html(string $header): string
     }
     if ($header === 'Jumlah SubSLS') {
         return 'Jumlah<br>SubSLS';
+    }
+    if ($header === 'Kode SubSLS') {
+        return 'Kode<br>SubSLS';
+    }
+    if ($header === 'SLS' || $header === 'SubSLS') {
+        return e($header);
     }
     if (preg_match('/^Total Assignment \((.+)\)$/', $header, $m)) {
         return 'Total<br>Assignment<br>(' . e($m[1]) . ')';
@@ -1025,22 +1064,31 @@ $petugasSummary = ['pcl' => 0, 'pml' => 0];
 $isDirectPclWeekly = $user['role'] === 'pencacah';
 
 if (($_GET['action'] ?? '') === 'weekly_detail') {
-    $type = ($_GET['type'] ?? 'pcl') === 'pml' ? 'pml' : 'pcl';
-    $email = normalize_email((string)($_GET['email'] ?? ''));
-    if ($email === '') {
-        http_response_code(400);
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['ok' => false, 'message' => 'Email petugas tidak valid.']);
-        exit;
-    }
-    $detailRows = rekap_weekly_petugas_subsls_rows($user, $filters, $type, $email);
-    $detailMatrix = rekap_weekly_petugas_subsls_values($user, $filters, $type, $email, $dateStart, $dateEnd);
-    [$detailHeaders, $detailTableRows] = rekap_weekly_detail_payload($detailRows, $dates, $detailMatrix);
     header('Content-Type: application/json; charset=utf-8');
-    echo json_encode([
-        'ok' => true,
-        'html' => rekap_weekly_detail_html($detailHeaders, $detailTableRows),
-    ]);
+    ob_start();
+    try {
+        $type = ($_GET['type'] ?? 'pcl') === 'pml' ? 'pml' : 'pcl';
+        $email = normalize_email((string)($_GET['email'] ?? ''));
+        if ($email === '') {
+            http_response_code(400);
+            ob_end_clean();
+            echo json_encode(['ok' => false, 'message' => 'Email petugas tidak valid.']);
+            exit;
+        }
+        $detailRows = rekap_weekly_petugas_subsls_rows($user, $filters, $type, $email);
+        $detailMatrix = rekap_weekly_petugas_subsls_values($user, $filters, $type, $email, $dateStart, $dateEnd);
+        [$detailHeaders, $detailTableRows] = rekap_weekly_detail_payload($detailRows, $dates, $detailMatrix);
+        $html = rekap_weekly_detail_html($detailHeaders, $detailTableRows);
+        ob_end_clean();
+        echo json_encode([
+            'ok' => true,
+            'html' => $html,
+        ]);
+    } catch (Throwable $e) {
+        ob_end_clean();
+        http_response_code(500);
+        echo json_encode(['ok' => false, 'message' => 'Detail gagal dimuat: ' . $e->getMessage()]);
+    }
     exit;
 }
 
@@ -1154,6 +1202,13 @@ render_header('Rekap Petugas Weekly');
   }
   .weekly-detail-table tbody tr:hover td:nth-child(1) {
     background: #eef2ff !important;
+  }
+  .weekly-detail-table th.weekly-detail-narrow,
+  .weekly-detail-table td:nth-child(2),
+  .weekly-detail-table td:nth-child(3) {
+    min-width: 76px;
+    white-space: nowrap;
+    width: 76px;
   }
   .weekly-table thead th {
     background: #f8fafc;
@@ -1630,11 +1685,22 @@ document.querySelectorAll('.weekly-detail-btn').forEach(function (button) {
     params.delete('format');
     fetch('rekap_petugas_weekly.php?' + params.toString(), { credentials: 'same-origin' })
       .then(function (response) {
-        if (!response.ok) throw new Error('Gagal memuat detail.');
-        return response.json();
+        return response.text().then(function (text) {
+          let payload = null;
+          try {
+            payload = JSON.parse(text);
+          } catch (error) {
+            const message = text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 180);
+            throw new Error(message || 'Response detail bukan JSON.');
+          }
+          if (!response.ok || !payload.ok) {
+            throw new Error((payload && payload.message) || 'Gagal memuat detail.');
+          }
+          return payload;
+        });
       })
       .then(function (payload) {
-        body.innerHTML = payload && payload.ok ? payload.html : '<div class="text-danger">Detail tidak tersedia.</div>';
+        body.innerHTML = payload.html;
       })
       .catch(function (error) {
         body.innerHTML = '<div class="text-danger">' + error.message + '</div>';
