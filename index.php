@@ -214,18 +214,18 @@ function dashboard_rows(array $user, array $filters, array $fields): array
     foreach (array_keys($fields) as $f) {
         $selects[] = "COALESCE(SUM(ss.$f),0) $f";
     }
-    $isSubslsGroup = $groupExpr === 'ms.id';
-    $petugasSelect = $isSubslsGroup
-        ? ", MAX(up.name) pengawas_name, MAX(ms.pengawas_email) pengawas_email, MAX(uc.name) pencacah_name, MAX(ms.pencacah_email) pencacah_email"
+    $isSubslsSummary = $groupExpr === 'ms.id';
+    $subslsSelect = $isSubslsSummary
+        ? ", MAX(sl.nmsls) sls_name, MAX(ms.kdsubsls) kdsubsls, MAX(uc.name) pencacah_name, MAX(up.name) pengawas_name"
         : "";
-    $petugasJoin = $isSubslsGroup
-        ? "LEFT JOIN users up ON up.email=ms.pengawas_email
-        LEFT JOIN users uc ON uc.email=ms.pencacah_email"
+    $subslsJoin = $isSubslsSummary
+        ? "LEFT JOIN users uc ON uc.email=ms.pencacah_email
+        LEFT JOIN users up ON up.email=ms.pengawas_email"
         : "";
     $stmt = db()->prepare("SELECT $labelExpr label, COALESCE(SUM(ss.target),0) target, " . implode(',', $selects) . ",
             COUNT(ms.id) subsls_total,
             COALESCE(SUM(CASE WHEN cs.status_selesai='Selesai' THEN 1 ELSE 0 END),0) selesai_count
-            $petugasSelect
+            $subslsSelect
         FROM master_subsls ms
         JOIN master_sls sl ON sl.id=ms.sls_id
         JOIN master_desa d ON d.id=sl.desa_id
@@ -234,7 +234,7 @@ function dashboard_rows(array $user, array $filters, array $fields): array
         JOIN master_prov p ON p.id=k.prov_id
         LEFT JOIN subsls_status ss ON ss.subsls_id=ms.id
         LEFT JOIN subsls_completion_status cs ON cs.subsls_id=ms.id
-        $petugasJoin
+        $subslsJoin
         $sqlWhere
         GROUP BY $groupExpr, label
         ORDER BY label");
@@ -2151,7 +2151,7 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
       $minPendataanPct = $pendataanPcts ? min($pendataanPcts) : null;
       $samePendataanPct = $maxPendataanPct !== null && $minPendataanPct !== null && abs($maxPendataanPct - $minPendataanPct) < 0.001;
       $isSubslsSummary = !empty($filters['subsls_id']) || !empty($filters['desa_id']) || $user['role'] === 'pencacah';
-      $summaryNumericOffset = $isSubslsSummary ? 3 : 1;
+      $summaryNumericOffset = $isSubslsSummary ? 4 : 1;
     ?>
     <table class="table table-sm table-bordered table-striped mb-0 dashboard-summary-table" id="dashboardSummaryTable">
       <thead>
@@ -2161,6 +2161,7 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
             <input class="form-control form-control-sm summary-search-input" type="search" placeholder="<?= $isSubslsSummary ? 'Cari kode' : 'Cari kelompok' ?>" data-summary-search>
           </th>
           <?php if ($isSubslsSummary): ?>
+            <th><div>Nama SLS</div></th>
             <th><div>Nama PCL</div></th>
             <th><div>Nama PML</div></th>
           <?php endif; ?>
@@ -2213,6 +2214,7 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
           <tr data-original-index="<?= (int)$rowIndex ?>">
             <td><?= e($row['label']) ?></td>
             <?php if ($isSubslsSummary): ?>
+              <td><?= e((trim((string)($row['sls_name'] ?? '')) ?: '-') . '-' . (trim((string)($row['kdsubsls'] ?? '')) ?: '-')) ?></td>
               <td><?= e(trim((string)($row['pencacah_name'] ?? '')) ?: '-') ?></td>
               <td><?= e(trim((string)($row['pengawas_name'] ?? '')) ?: '-') ?></td>
             <?php endif; ?>
@@ -2240,6 +2242,7 @@ render_header($user['role'] === 'pengawas' ? 'Dashboard Pengawas' : ($user['role
         <tr>
           <td>Total</td>
           <?php if ($isSubslsSummary): ?>
+            <td></td>
             <td></td>
             <td></td>
           <?php endif; ?>
